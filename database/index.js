@@ -13,14 +13,23 @@ import { config } from "../server/config.js";
 
 const { Pool } = pg;
 
+// Nothing in this project can run without a database, and every entry
+// point (the server, the seed script, the migration) reaches this same
+// line. Print the instructions and stop, rather than throwing a stack
+// trace that buries them.
 if (!config.databaseUrl) {
-  throw new Error(
-    "DATABASE_URL is not set.\n" +
-      "  1. Create a free project at https://supabase.com\n" +
-      "  2. Project Settings -> Database -> Connection string -> URI\n" +
-      "  3. Copy .env.example to .env and paste it in as DATABASE_URL\n" +
-      "See database/README.md for the full walkthrough."
-  );
+  console.error("");
+  console.error("  DATABASE_URL is not set, so HireTrack cannot start.");
+  console.error("");
+  console.error("  1. Create a free project at https://supabase.com");
+  console.error("  2. Project Settings -> Database -> Connection string -> URI");
+  console.error("     Tick \"Use connection pooling\" and use the ...pooler.supabase.com host.");
+  console.error("  3. Open the .env file in this folder and paste it in as DATABASE_URL.");
+  console.error("  4. npm run db:migrate    then    npm run seed");
+  console.error("");
+  console.error("  Full walkthrough: database/README.md");
+  console.error("");
+  process.exit(1);
 }
 
 export const pool = new Pool({

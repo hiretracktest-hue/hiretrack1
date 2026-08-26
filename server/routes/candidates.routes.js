@@ -1,11 +1,12 @@
 import path from "node:path";
 import express from "express";
-import { one, many, run, transaction } from "../../database/index.js";
+import { one, many, run } from "../../database/index.js";
 import { config, can } from "../config.js";
 import { asyncHandler, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 import { stagesFor } from "./jobs.routes.js";
 import { UPLOAD_DIR, uploadCv, deleteStoredFile, safeFilename } from "../upload.js";
+import { notifyOutcome } from "../notify.js";
 
 /**
  * Candidates. HR adds them against a position and uploads their CV;
@@ -291,11 +292,13 @@ router.patch(
       }
     }
 
+    let newOutcome = null;
     if (req.body.outcome !== undefined) {
       if (!can(req.user, "candidate:outcome")) {
         throw httpError(403, "Your role cannot record an outcome.");
       }
-      push("outcome", v.oneOf(req.body.outcome, OUTCOMES, { field: "Outcome" }));
+      newOutcome = v.oneOf(req.body.outcome, OUTCOMES, { field: "Outcome" });
+      push("outcome", newOutcome);
     }
 
     if (req.body.currentStage !== undefined) {
@@ -303,7 +306,20 @@ router.patch(
         throw httpError(403, "Your role cannot change a candidate's stage.");
       }
       const stages = await stagesFor(existing.job_id);
-      push("current_stage", v.oneOf(req.body.currentStage, stages, { field: "Stage" }));
+      const wanted = v.oneOf(req.body.currentStage, stages, { field: "Stage" });
+
+      // Moving a candidate FORWARD has to go through /advance, which is
+      // where the "no advancing until this stage's feedback is in" rule
+      // lives. Without this check the rule could simply be skipped by
+      // patching the stage directly. Moving them back is allowed - that
+      // is how a mistake gets corrected.
+      if (stages.indexOf(wanted) > stages.indexOf(existing.current_stage)) {
+        throw httpError(
+          400,
+          "Use the Move to next stage button - it checks that this stage's feedback is in."
+        );
+      }
+      push("current_stage", wanted);
     }
 
     if (!sets.length) throw httpError(400, "Nothing to update.");
@@ -321,6 +337,19 @@ router.patch(
       throw err;
     }
 
+    // A final decision is news the candidate has to be given. They have
+    // no account here, so the letter goes into the outbox for HR to send
+    // - the same route the interview invitation takes.
+    if (newOutcome && newOutcome !== existing.outcome) {
+      const job = await one("SELECT * FROM jobs WHERE id = $1", [existing.job_id]);
+      await notifyOutcome({
+        candidate: existing,
+        job,
+        outcome: newOutcome,
+        decidedBy: req.user,
+      });
+    }
+
     res.json({ candidate: toJson(await loadOr404(id)) });
   })
 );
@@ -336,10 +365,14 @@ router.post(
     const band = v.oneOf(req.body.band, CV_BANDS, { field: "CV band" });
     const note = v.str(req.body.note, { field: "Note", max: 300 });
 
+    // Setting it back to UNRATED means "this still needs screening", so
+    // the whole screening record is cleared rather than left behind with
+    // a date and a note that no longer describe anything.
+    const clearing = band === "UNRATED";
     await run(
       "UPDATE candidates SET cv_band = $1, cv_band_note = $2, cv_banded_by = $3, " +
-        "cv_banded_at = NOW() WHERE id = $4",
-      [band, note, band === "UNRATED" ? null : req.user.id, id]
+        "cv_banded_at = CASE WHEN $4 THEN NOW() ELSE NULL END WHERE id = $5",
+      [band, clearing ? "" : note, clearing ? null : req.user.id, !clearing, id]
     );
 
     res.json({ candidate: toJson(await loadOr404(id)) });
@@ -359,12 +392,15 @@ router.post(
     const clean = ids.map((id) => v.id(id, { field: "candidate id" }));
     const bandedBy = band === "UNRATED" ? null : req.user.id;
 
-    // = ANY($3) takes the whole list as one parameter, so this is a
+    // = ANY($4) takes the whole list as one parameter, so this is a
     // single round trip and still fully parameterised.
+    // The note is cleared too: it was written about the old band, so
+    // leaving it would put "strong React portfolio" next to a LOW band.
     const updated = await run(
-      "UPDATE candidates SET cv_band = $1, cv_banded_by = $2, cv_banded_at = NOW() " +
-        "WHERE id = ANY($3::bigint[])",
-      [band, bandedBy, clean]
+      "UPDATE candidates SET cv_band = $1, cv_band_note = '', cv_banded_by = $2, " +
+        "cv_banded_at = CASE WHEN $3 THEN NOW() ELSE NULL END " +
+        "WHERE id = ANY($4::bigint[])",
+      [band, bandedBy, band !== "UNRATED", clean]
     );
 
     res.json({ updated, band });

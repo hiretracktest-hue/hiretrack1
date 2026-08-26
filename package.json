@@ -2,7 +2,7 @@
   "name": "hiretrack",
   "version": "1.0.0",
   "private": true,
-  "description": "HireTrack - recruitment tracking system (React + Express + SQLite)",
+  "description": "HireTrack - recruitment tracking system (React + Express + PostgreSQL)",
   "type": "module",
   "engines": {
     "node": ">=18.18.0"

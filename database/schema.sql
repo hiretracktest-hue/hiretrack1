@@ -14,8 +14,8 @@
 -- script always produces the same result.
 -- ===================================================================
 
--- CITEXT gives us case-insensitive text, so Ahmed@Gmail.com and
--- ahmed@gmail.com are the same address. Supabase has this available.
+-- CITEXT gives us case-insensitive text, so HR@HireTrack.test and
+-- hr@hiretrack.test are the same address. Supabase has this available.
 CREATE EXTENSION IF NOT EXISTS citext;
 
 -- Drop in reverse dependency order so re-running is clean.

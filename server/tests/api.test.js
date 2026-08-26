@@ -359,6 +359,34 @@ describe("no advancing without feedback", () => {
     assert.match(data.error, /Feedback for "Interview"/);
   });
 
+  test("the gate cannot be side-stepped by patching the stage directly", async () => {
+    // /advance refuses without feedback, so PATCH must refuse too -
+    // otherwise the rule is one HTTP request away from being skipped.
+    const jobId = Number((await one("SELECT job_id FROM candidates WHERE id = $1", [mayaId])).job_id);
+    const stages = (
+      await many("SELECT name FROM job_stages WHERE job_id = $1 ORDER BY position", [jobId])
+    ).map((row) => row.name);
+
+    const forward = await call("PATCH", "/api/candidates/" + mayaId, {
+      currentStage: stages[stages.length - 1],
+    });
+    assert.equal(forward.status, 400);
+    assert.match(forward.data.error, /Move to next stage/);
+
+    const unchanged = await call("GET", "/api/candidates/" + mayaId);
+    assert.equal(unchanged.data.candidate.currentStage, "Interview");
+  });
+
+  test("moving a candidate back a stage is still allowed - that is how a mistake is fixed", async () => {
+    assert.equal(
+      (await call("PATCH", "/api/candidates/" + mayaId, { currentStage: "Applied" })).status,
+      200
+    );
+    // Put her back where the rest of this suite expects her. Feedback is
+    // not in yet for "Applied", but the first stage is exempt.
+    assert.equal((await call("POST", "/api/candidates/" + mayaId + "/advance")).status, 200);
+  });
+
   test("once feedback is in, the candidate moves on", async () => {
     await signIn("interviewer@example.com");
     const feedback = await call("POST", "/api/feedback", {
@@ -538,6 +566,16 @@ describe("who logs in, and what each role can do", () => {
       (await call("PATCH", "/api/candidates/" + mayaId, { outcome: "HIRED" })).status,
       200
     );
+  });
+
+  test("recording HIRED writes the offer letter to the candidate's outbox", async () => {
+    // The candidate has no account here, so a decision has to reach them
+    // the same way an interview invitation does.
+    const { data } = await call("GET", "/api/notifications/outbox?candidate=" + mayaId);
+    const offer = data.messages.find((m) => /^Offer - /.test(m.subject));
+    assert.ok(offer, "an offer letter is prepared");
+    assert.equal(offer.recipientEmail, "maya@example.com");
+    assert.equal(offer.sentAt, null, "nothing is pretended to have been sent");
   });
 
   test("management sees everything and changes nothing", async () => {

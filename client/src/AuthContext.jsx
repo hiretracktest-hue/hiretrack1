@@ -41,11 +41,6 @@ export function AuthProvider({ children }) {
         setUser(signedIn);
         return signedIn;
       },
-      async signUp(details) {
-        const { user: created } = await api.signUp(details);
-        setUser(created);
-        return created;
-      },
       async signOut() {
         await api.signOut();
         setUser(null);

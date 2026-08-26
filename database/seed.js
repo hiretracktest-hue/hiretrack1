@@ -5,37 +5,58 @@
  *   npm run seed          add anything that is missing (safe to re-run)
  *   npm run seed:reset    empty every table first, then seed again
  *
- * TODO for the group: change the names, emails and the demo password
- * below to your own before you hand this in.
+ * The four demo logins it creates are listed in TEAM below and printed
+ * again when the script finishes.
  */
 import bcrypt from "bcryptjs";
-import { one, many, run, transaction, closePool } from "./index.js";
+import { one, run, transaction, closePool } from "./index.js";
 
 const RESET = process.argv.includes("--reset");
 
-// The demo password for every seeded account. It is deliberately short
-// and easy to type for the presentation. Accounts created through the
-// Team page still enforce the proper rules (8+ characters with a letter
-// and a number) - these rows are written straight into the database.
-const DEMO_PASSWORD = "123";
-
-// Our group. Each of us takes one of the four roles so that every access
-// level can be demonstrated in the viva.
+// The four demo accounts, one per role, so every access level can be
+// shown in the viva. Each has its own password rather than one shared
+// one, so a marker can see the roles really are separate logins.
+//
+// These rows are written straight into the database, which is why the
+// short passwords below are accepted. Accounts created through the Team
+// page still go through the proper rule (8+ characters, a letter and a
+// number) - see server/validate.js.
 const TEAM = [
-  { name: "Isuru", email: "isuru@gmail.com", role: "hr", jobTitle: "Talent Acquisition Lead" },
-  { name: "Fazl", email: "fazl@gmail.com", role: "hiring_manager", jobTitle: "Engineering Manager" },
-  { name: "Thariq", email: "thariq@gmail.com", role: "interviewer", jobTitle: "Senior Engineer" },
-  { name: "Ahmed", email: "ahmed@gmail.com", role: "management", jobTitle: "Head of Operations" },
+  {
+    name: "Kevin Fernando",
+    email: "hr@hiretrack.test",
+    password: "hr12345",
+    role: "hr",
+    jobTitle: "HR Manager",
+  },
+  {
+    name: "Arosh Perera",
+    email: "hiringmanager@hiretrack.test",
+    password: "hm12345",
+    role: "hiring_manager",
+    jobTitle: "Engineering / Hiring Manager",
+  },
+  {
+    name: "Sara Salgadu",
+    email: "int@hiretrack.test",
+    password: "int12345",
+    role: "interviewer",
+    jobTitle: "Senior Software Engineer",
+  },
+  {
+    name: "Thusitha Samarasinghe",
+    email: "manag@hiretrack.test",
+    password: "manag12345",
+    role: "management",
+    jobTitle: "Operations Manager",
+  },
 ];
 
-// The personas from the project plan, so the document and the running
-// system line up.
-const PERSONAS = [
-  { name: "Kevin Fernando", email: "kevin.fernando@gmail.com", role: "hr", jobTitle: "HR Manager" },
-  { name: "Arosh Perera", email: "arosh.perera@gmail.com", role: "hiring_manager", jobTitle: "Hiring Manager" },
-  { name: "Sara Salgadu", email: "sara.salgadu@gmail.com", role: "interviewer", jobTitle: "Senior Software Engineer" },
-  { name: "Thusitha Samarasinghe", email: "thusitha.s@gmail.com", role: "management", jobTitle: "Operations Manager" },
-];
+// The addresses the rest of this script refers to, in one place, so a
+// change up there does not have to be chased through the file.
+const HR = "hr@hiretrack.test";
+const HIRING_MANAGER = "hiringmanager@hiretrack.test";
+const INTERVIEWER = "int@hiretrack.test";
 
 const JOBS = [
   {
@@ -148,23 +169,33 @@ async function reset() {
   console.log("  emptied every table");
 }
 
-async function seedUsers(people, label) {
-  const hash = bcrypt.hashSync(DEMO_PASSWORD, 10);
+async function seedUsers(people) {
   const ids = {};
 
   for (const person of people) {
+    // Each account has its own password, so it is hashed per person.
+    const hash = bcrypt.hashSync(person.password, 10);
+
     const existing = await one("SELECT id FROM users WHERE email = $1", [person.email]);
     if (existing) {
+      // Re-running the seed should still leave a working login, in case
+      // the password was changed while testing.
+      await run("UPDATE users SET password_hash = $1, is_active = TRUE WHERE id = $2", [
+        hash,
+        existing.id,
+      ]);
       ids[person.email] = Number(existing.id);
+      console.log("  account   " + person.email.padEnd(30) + person.role + "  (password reset)");
       continue;
     }
+
     const created = await one(
       "INSERT INTO users (name, email, password_hash, role, job_title) " +
         "VALUES ($1, $2, $3, $4, $5) RETURNING id",
       [person.name, person.email, hash, person.role, person.jobTitle || ""]
     );
     ids[person.email] = Number(created.id);
-    console.log("  " + label.padEnd(10) + person.email.padEnd(30) + person.role);
+    console.log("  account   " + person.email.padEnd(30) + person.role);
   }
   return ids;
 }
@@ -251,7 +282,7 @@ async function seedInterviewAndFeedback(userIds) {
   if (!candidate) return;
   if (await one("SELECT id FROM interviews WHERE candidate_id = $1", [candidate.id])) return;
 
-  const interviewerId = userIds["thariq@gmail.com"];
+  const interviewerId = userIds[INTERVIEWER];
   const inThreeDays = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
 
   await run(
@@ -263,11 +294,11 @@ async function seedInterviewAndFeedback(userIds) {
       candidate.current_stage,
       inThreeDays,
       interviewerId,
-      "Thariq",
-      "thariq@gmail.com",
+      "Sara Salgadu",
+      INTERVIEWER,
       "Meeting room 2 / Google Meet",
       "Pair programming exercise, 45 minutes.",
-      userIds["isuru@gmail.com"],
+      userIds[HR],
     ]
   );
   console.log("  interview scheduled for Maya Fernando");
@@ -283,7 +314,7 @@ async function seedInterviewAndFeedback(userIds) {
       "Happy to move her to the technical round.",
     ],
     [
-      userIds["fazl@gmail.com"],
+      userIds[HIRING_MANAGER],
       "Screening",
       5,
       "ADVANCE",
@@ -312,12 +343,10 @@ async function main() {
   // Everything in one transaction: either the whole demo data set is
   // created or none of it is.
   await transaction(async () => {
-    const teamIds = await seedUsers(TEAM, "team");
-    const personaIds = await seedUsers(PERSONAS, "persona");
-    const userIds = { ...teamIds, ...personaIds };
+    const userIds = await seedUsers(TEAM);
 
-    const jobIds = await seedJobs(teamIds["isuru@gmail.com"], teamIds["fazl@gmail.com"]);
-    await seedCandidates(jobIds, teamIds["isuru@gmail.com"]);
+    const jobIds = await seedJobs(userIds[HR], userIds[HIRING_MANAGER]);
+    await seedCandidates(jobIds, userIds[HR]);
     await seedInterviewAndFeedback(userIds);
   });
 
@@ -328,10 +357,10 @@ async function main() {
     management: "Oversight: sees everything, changes nothing, exports reports",
   };
 
-  console.log("\nDone. Every account below uses the password: " + DEMO_PASSWORD + "\n");
-  console.log("  WHO LOGS IN                   WHAT THEY CAN DO");
-  for (const member of [...TEAM, ...PERSONAS]) {
-    console.log("    " + member.email.padEnd(30) + WHAT[member.role]);
+  console.log("\nDone. Sign in with any of these:\n");
+  console.log("  EMAIL                          PASSWORD      WHAT THEY CAN DO");
+  for (const member of TEAM) {
+    console.log("  " + member.email.padEnd(31) + member.password.padEnd(14) + WHAT[member.role]);
   }
   console.log("");
   console.log("  Candidates do NOT log in - HR adds them and uploads their CV.");

@@ -14,7 +14,7 @@ Built for our second year, second semester group project.
 | Back end | Node.js + Express (REST API) |
 | Database | **PostgreSQL on Supabase**, accessed with `pg` (node-postgres) — 8 tables |
 | Auth | Email + password (bcrypt), JWT in an httpOnly cookie, optional Google sign-in |
-| Tests | Node's built-in test runner — 46 API tests |
+| Tests | Node's built-in test runner — 54 API tests |
 
 > **This is an internal system.** The people who log in are HR, hiring managers,
 > interviewers and management. **Job candidates do not have accounts** — HR adds
@@ -47,21 +47,31 @@ npm run dev
 - React app → <http://localhost:5173>
 - Express API → <http://localhost:4000>
 
-### Demo accounts — password `123` for all of them
+### Demo accounts
 
-| Email | Role | What they can do |
-| --- | --- | --- |
-| `isuru@gmail.com` | HR Recruiter | Everything: open positions, add candidates, screen CVs, run the process |
-| `fazl@gmail.com` | Hiring Manager | Candidates, comparison, the hire decision. **Cannot** open or close a position |
-| `thariq@gmail.com` | Interviewer | Sees candidates, leaves feedback at their stage. **Cannot** move anyone forward |
-| `ahmed@gmail.com` | Management | Oversight: sees everything, changes nothing, exports reports |
+`npm run seed` creates one account per role. Each has its own password, so the
+four access levels are genuinely four separate logins. On the sign-in screen
+each row has a **Use** button that fills the form for you.
 
-The four personas from the project plan are seeded too:
-`kevin.fernando@gmail.com` (HR), `arosh.perera@gmail.com` (Hiring Manager),
-`sara.salgadu@gmail.com` (Interviewer), `thusitha.s@gmail.com` (Management).
+| Email | Password | Role | What they can do |
+| --- | --- | --- | --- |
+| `hr@hiretrack.test` | `hr12345` | HR Recruiter | Everything: open positions, add candidates, screen CVs, run the process |
+| `hiringmanager@hiretrack.test` | `hm12345` | Hiring Manager | Candidates, comparison, the hire decision. **Cannot** open or close a position |
+| `int@hiretrack.test` | `int12345` | Interviewer | Sees candidates, leaves feedback at their stage. **Cannot** move anyone forward |
+| `manag@hiretrack.test` | `manag12345` | Management | Oversight: sees everything, changes nothing, exports reports |
 
-> Change these names, emails and the demo password in `database/seed.js` before
-> you hand the project in.
+The names behind them are the four personas from the project plan — Kevin
+Fernando (HR), Arosh Perera (Hiring Manager), Sara Salgadu (Interviewer) and
+Thusitha Samarasinghe (Management) — so the document and the running system
+line up.
+
+> These are demo passwords, short on purpose so they are quick to type in the
+> sprint review. They are written straight into the database by `seed.js`.
+> An account created through the **Team** page still has to meet the real rule:
+> 8+ characters with a letter and a number.
+
+> Already seeded the old accounts? Run `npm run seed:reset` to empty the tables
+> and start again with these four.
 
 ### All the commands
 
@@ -72,7 +82,7 @@ The four personas from the project plan are seeded too:
 | `npm run dev` | Run the API and the React dev server together |
 | `npm run build` | Build the React app into `client/dist` |
 | `npm start` | Run the API, serving the built React app too |
-| `npm test` | Run the 46 automated API tests |
+| `npm test` | Run the 54 automated API tests |
 | `npm run seed` | Add any missing demo data (safe to re-run) |
 | `npm run seed:reset` | Empty every table, then seed from scratch |
 
@@ -118,6 +128,11 @@ Two channels, because the two audiences are different:
 - **Candidates** do not have accounts, so the system writes their invitation
   email into an **Outbox**. HR reads it, sends it (one click opens their mail
   client) and marks it sent.
+
+The outbox carries the whole conversation with the candidate, not just the
+invitation: cancelling an interview writes an apology, and recording **hired**
+or **rejected** writes the offer or the regret letter. A decision nobody tells
+the candidate about is the complaint the brief starts with.
 
 There is no mail server in this project. The outbox records exactly what would
 be sent rather than pretending it was delivered.
@@ -201,7 +216,7 @@ our web/
 │   │   ├── notifications.routes.js in-app notifications + candidate outbox
 │   │   ├── reports.routes.js       management reports + CSV export
 │   │   └── team.routes.js          who logs in, roles, dashboard counts
-│   └── tests/api.test.js   46 automated tests
+│   └── tests/api.test.js   54 automated tests
 │
 └── client/                 React front end
     ├── index.html

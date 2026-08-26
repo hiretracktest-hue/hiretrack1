@@ -11,6 +11,15 @@ const GOOGLE_ERRORS = {
   google_unknown: "That Google account is not registered here. Ask HR to create your account.",
 };
 
+// The seeded demo logins (database/seed.js). Clicking one fills the form
+// so a role can be shown quickly in the sprint review without typing.
+const DEMO_ACCOUNTS = [
+  { role: "HR Recruiter", email: "hr@hiretrack.test", password: "hr12345" },
+  { role: "Hiring Manager", email: "hiringmanager@hiretrack.test", password: "hm12345" },
+  { role: "Interviewer", email: "int@hiretrack.test", password: "int12345" },
+  { role: "Management", email: "manag@hiretrack.test", password: "manag12345" },
+];
+
 export default function SignIn() {
   const { signIn, googleEnabled } = useAuth();
   const navigate = useNavigate();
@@ -109,19 +118,31 @@ export default function SignIn() {
         </p>
 
         <div className="demo-box">
-          <strong>Demo accounts</strong> — password <code>123</code> for all of them.
-          <br />
-          <br />
-          <strong>HR Recruiter</strong> — runs everything: <code>isuru@gmail.com</code>
-          <br />
-          <strong>Hiring Manager</strong> — candidates and the decision:{" "}
-          <code>fazl@gmail.com</code>
-          <br />
-          <strong>Interviewer</strong> — feedback only: <code>thariq@gmail.com</code>
-          <br />
-          <strong>Management</strong> — oversight and reports: <code>ahmed@gmail.com</code>
-          <br />
-          <br />
+          <strong>Demo accounts</strong> — one per role, each with its own password.
+          <table className="demo-table">
+            <tbody>
+              {DEMO_ACCOUNTS.map((account) => (
+                <tr key={account.email}>
+                  <th scope="row">{account.role}</th>
+                  <td>
+                    <code>{account.email}</code>
+                  </td>
+                  <td>
+                    <code>{account.password}</code>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setForm({ email: account.email, password: account.password })}
+                    >
+                      Use
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
           Candidates do not log in — HR adds them.
         </div>
       </div>
