@@ -5,34 +5,41 @@
    =================================================================== */
 
 :root {
-  --purple-50: #f5f3ff;
-  --purple-100: #ede9fe;
-  --purple-200: #ddd6fe;
-  --purple-500: #8b5cf6;
-  --purple-600: #7c3aed;
-  --purple-700: #6d28d9;
+  /* Palette taken from altrium.io - amber accent on a cool grey base.
+     Amber is a FILL colour only: it carries near-black text, never
+     white, because white on #fbb401 is unreadable. --brand-700 is the
+     dark amber used when the brand has to appear as text. */
+  --brand-50: #fff8e8;
+  --brand-100: #fdeec6;
+  --brand-200: #f8dc92;
+  --brand-500: #fbb401;
+  --brand-600: #e0a000;
+  --brand-700: #8a6300;
+  --on-brand: #1e2228;
 
-  --ink: #1b1830;
-  --ink-soft: #4b4763;
-  --muted: #6f6b85;
-  --line: #e6e4f0;
+  --ink: #1e2228;
+  --ink-soft: #343f52;
+  --muted: #60697b;
+  --faint: #aab0bc;
+  --line: #edf0f5;
   --surface: #ffffff;
-  --canvas: #f7f6fb;
+  --canvas: #f6f7f9;
 
-  --green-bg: #e7f7ee;
-  --green-fg: #0f7a45;
-  --amber-bg: #fef3d7;
+  --green-bg: #eaf3ef;
+  --green-fg: #2f6b4f;
+  --amber-bg: #fef3e4;
   --amber-fg: #8a5a00;
-  --red-bg: #fdeaea;
-  --red-fg: #b42318;
-  --blue-bg: #e8effd;
-  --blue-fg: #1a4fbf;
+  --red-bg: #fae6e7;
+  --red-fg: #b03a43;
+  --blue-bg: #eaeef5;
+  --blue-fg: #34506e;
 
   --radius: 12px;
   --radius-lg: 16px;
-  --shadow-sm: 0 1px 2px rgba(27, 24, 48, 0.06);
-  --shadow: 0 4px 16px rgba(27, 24, 48, 0.08);
-  --shadow-lg: 0 12px 40px rgba(27, 24, 48, 0.12);
+  --radius-pill: 999px;
+  --shadow-sm: 0 1px 2px rgba(30, 34, 40, 0.06);
+  --shadow: 0 4px 16px rgba(30, 34, 40, 0.08);
+  --shadow-lg: 0 12px 40px rgba(30, 34, 40, 0.12);
 }
 
 * {
@@ -49,7 +56,7 @@ body {
   margin: 0;
   background: var(--canvas);
   color: var(--ink);
-  font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-family: Cabin, "Segoe UI", system-ui, -apple-system, sans-serif;
   font-size: 15px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
@@ -82,7 +89,7 @@ p {
 }
 
 a {
-  color: var(--purple-700);
+  color: var(--brand-700);
   text-decoration: none;
 }
 a:hover {
@@ -132,8 +139,8 @@ a:hover {
   border-radius: 9px;
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, var(--purple-600), var(--purple-500));
-  color: #fff;
+  background: linear-gradient(135deg, var(--brand-500), #fdc93b);
+  color: var(--on-brand);
   font-size: 0.85rem;
   font-weight: 700;
 }
@@ -154,13 +161,13 @@ a:hover {
   font-size: 0.92rem;
 }
 .nav-link:hover {
-  background: var(--purple-50);
-  color: var(--purple-700);
+  background: var(--brand-50);
+  color: var(--brand-700);
   text-decoration: none;
 }
 .nav-link.active {
-  background: var(--purple-100);
-  color: var(--purple-700);
+  background: var(--brand-100);
+  color: var(--brand-700);
 }
 
 .nav-user {
@@ -173,8 +180,8 @@ a:hover {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: var(--purple-100);
-  color: var(--purple-700);
+  background: var(--brand-100);
+  color: var(--brand-700);
   display: grid;
   place-items: center;
   font-weight: 650;
@@ -306,11 +313,11 @@ a:hover {
   justify-content: center;
   gap: 8px;
   border: 1px solid transparent;
-  border-radius: 10px;
-  padding: 9px 16px;
+  border-radius: var(--radius-pill);
+  padding: 9px 18px;
   font: inherit;
   font-size: 0.9rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
   white-space: nowrap;
@@ -324,11 +331,11 @@ a:hover {
 }
 
 .btn-primary {
-  background: var(--purple-600);
-  color: #fff;
+  background: var(--brand-500);
+  color: var(--on-brand);
 }
 .btn-primary:hover:not(:disabled) {
-  background: var(--purple-700);
+  background: var(--brand-600);
 }
 
 .btn-secondary {
@@ -337,9 +344,9 @@ a:hover {
   color: var(--ink-soft);
 }
 .btn-secondary:hover:not(:disabled) {
-  border-color: var(--purple-200);
-  background: var(--purple-50);
-  color: var(--purple-700);
+  border-color: var(--brand-200);
+  background: var(--brand-50);
+  color: var(--brand-700);
 }
 
 .btn-danger {
@@ -347,7 +354,7 @@ a:hover {
   color: var(--red-fg);
 }
 .btn-danger:hover:not(:disabled) {
-  background: #f9d9d9;
+  background: #f5d7d9;
 }
 
 .btn-ghost {
@@ -355,8 +362,8 @@ a:hover {
   color: var(--muted);
 }
 .btn-ghost:hover:not(:disabled) {
-  background: var(--purple-50);
-  color: var(--purple-700);
+  background: var(--brand-50);
+  color: var(--brand-700);
 }
 
 .btn-block {
@@ -374,7 +381,7 @@ a:hover {
   width: 100%;
 }
 .btn-google:hover {
-  background: #f4f4f8;
+  background: #f0f2f5;
 }
 
 .btn-row {
@@ -421,8 +428,8 @@ a:hover {
 .select:focus,
 .textarea:focus {
   outline: none;
-  border-color: var(--purple-500);
-  box-shadow: 0 0 0 3px var(--purple-100);
+  border-color: var(--brand-500);
+  box-shadow: 0 0 0 3px var(--brand-100);
 }
 
 .textarea {
@@ -457,8 +464,8 @@ a:hover {
   border-radius: 6px;
 }
 .password-toggle:hover {
-  color: var(--purple-700);
-  background: var(--purple-50);
+  color: var(--brand-700);
+  background: var(--brand-50);
 }
 
 .filters {
@@ -489,17 +496,17 @@ a:hover {
 .alert-error {
   background: var(--red-bg);
   color: var(--red-fg);
-  border-color: #f6d2d2;
+  border-color: #f2cdd0;
 }
 .alert-success {
   background: var(--green-bg);
   color: var(--green-fg);
-  border-color: #cbecd9;
+  border-color: #cfe4d9;
 }
 .alert-info {
   background: var(--blue-bg);
   color: var(--blue-fg);
-  border-color: #d3e0fb;
+  border-color: #d5dde8;
 }
 
 /* --- badges -------------------------------------------------------- */
@@ -512,8 +519,8 @@ a:hover {
   font-size: 0.76rem;
   font-weight: 650;
   letter-spacing: 0.01em;
-  background: var(--purple-100);
-  color: var(--purple-700);
+  background: var(--brand-100);
+  color: var(--brand-700);
   white-space: nowrap;
 }
 .badge-green {
@@ -533,7 +540,7 @@ a:hover {
   color: var(--blue-fg);
 }
 .badge-grey {
-  background: #eeedf4;
+  background: #e9ecf1;
   color: var(--muted);
 }
 
@@ -562,7 +569,7 @@ thead th {
   font-weight: 650;
   padding: 12px 18px;
   border-bottom: 1px solid var(--line);
-  background: #fbfaff;
+  background: #fafbfc;
   white-space: nowrap;
 }
 
@@ -577,7 +584,7 @@ tbody tr:last-child td {
 }
 
 tbody tr:hover {
-  background: #fbfaff;
+  background: #fafbfc;
 }
 
 .cell-title {
@@ -604,21 +611,21 @@ tbody tr:hover {
   padding: 5px 12px;
   font-size: 0.8rem;
   font-weight: 600;
-  background: #f0eff7;
+  background: #eef0f4;
   color: var(--muted);
   border: 1px solid transparent;
 }
 .pipeline-step.done {
-  background: var(--purple-50);
-  color: var(--purple-700);
-  border-color: var(--purple-200);
+  background: var(--brand-50);
+  color: var(--brand-700);
+  border-color: var(--brand-200);
 }
 .pipeline-step.current {
-  background: var(--purple-600);
-  color: #fff;
+  background: var(--brand-500);
+  color: var(--on-brand);
 }
 .pipeline-arrow {
-  color: #c9c6db;
+  color: var(--faint);
   font-size: 0.8rem;
 }
 
@@ -633,9 +640,9 @@ tbody tr:hover {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: var(--purple-50);
-  border: 1px solid var(--purple-200);
-  color: var(--purple-700);
+  background: var(--brand-50);
+  border: 1px solid var(--brand-200);
+  color: var(--brand-700);
   border-radius: 999px;
   padding: 5px 8px 5px 13px;
   font-size: 0.84rem;
@@ -644,7 +651,7 @@ tbody tr:hover {
 .chip button {
   border: none;
   background: transparent;
-  color: var(--purple-700);
+  color: var(--brand-700);
   cursor: pointer;
   font-size: 0.95rem;
   line-height: 1;
@@ -697,8 +704,8 @@ tbody tr:hover {
   place-items: center;
   padding: 32px 20px;
   background:
-    radial-gradient(circle at 15% 15%, #ece7ff 0%, transparent 45%),
-    radial-gradient(circle at 85% 80%, #e6f0ff 0%, transparent 45%),
+    radial-gradient(circle at 15% 15%, #fdf0d3 0%, transparent 45%),
+    radial-gradient(circle at 85% 80%, #e9edf3 0%, transparent 45%),
     var(--canvas);
 }
 
@@ -753,8 +760,8 @@ tbody tr:hover {
 
 .auth-note {
   margin-top: 20px;
-  background: var(--purple-50);
-  border: 1px solid var(--purple-200);
+  background: var(--brand-50);
+  border: 1px solid var(--brand-200);
   border-radius: 10px;
   padding: 12px 14px;
   font-size: 0.82rem;
@@ -822,8 +829,8 @@ tbody tr:hover {
   display: flex;
   flex-direction: column;
   background:
-    radial-gradient(circle at 12% 0%, #ece7ff 0%, transparent 42%),
-    radial-gradient(circle at 88% 8%, #e6f0ff 0%, transparent 40%),
+    radial-gradient(circle at 12% 0%, #fdf0d3 0%, transparent 42%),
+    radial-gradient(circle at 88% 8%, #e9edf3 0%, transparent 40%),
     var(--canvas);
 }
 .public-bar {
@@ -863,10 +870,10 @@ tbody tr:hover {
   font-family: Consolas, ui-monospace, monospace;
   font-size: 0.8rem;
   padding: 9px 12px;
-  border: 1px dashed var(--purple-200);
+  border: 1px dashed var(--brand-200);
   border-radius: 9px;
-  background: var(--purple-50);
-  color: var(--purple-700);
+  background: var(--brand-50);
+  color: var(--brand-700);
   overflow-x: auto;
   white-space: nowrap;
 }
@@ -893,13 +900,13 @@ tbody tr:hover {
   gap: 8px;
 }
 .band-chip:hover {
-  border-color: var(--purple-200);
-  background: var(--purple-50);
+  border-color: var(--brand-200);
+  background: var(--brand-50);
 }
 .band-chip.active {
-  background: var(--purple-600);
-  border-color: var(--purple-600);
-  color: #fff;
+  background: var(--brand-500);
+  border-color: var(--brand-500);
+  color: var(--on-brand);
 }
 .band-chip .count {
   font-size: 0.78rem;
@@ -912,8 +919,8 @@ tbody tr:hover {
   padding: 0 5px;
   margin-left: 6px;
   border-radius: 999px;
-  background: var(--purple-600);
-  color: #fff;
+  background: var(--brand-500);
+  color: var(--on-brand);
   font-size: 0.7rem;
   font-weight: 700;
   text-align: center;
@@ -925,7 +932,7 @@ tbody tr:hover {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--purple-600);
+  background: var(--brand-500);
   margin-right: 4px;
 }
 
@@ -933,7 +940,7 @@ tbody tr:hover {
   white-space: pre-wrap;
   font-family: Consolas, ui-monospace, monospace;
   font-size: 0.82rem;
-  background: #fbfaff;
+  background: #fafbfc;
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 14px 16px;
@@ -942,34 +949,34 @@ tbody tr:hover {
 }
 
 .stars {
-  color: #e0a800;
+  color: var(--brand-600);
   letter-spacing: 1px;
   white-space: nowrap;
 }
 .stars-empty {
-  color: #dedbe9;
+  color: #dde1e8;
 }
 
 .status-banner {
   border-radius: var(--radius);
   padding: 18px 20px;
   border: 1px solid var(--line);
-  background: var(--purple-50);
+  background: var(--brand-50);
 }
 .status-banner h2 {
   margin-bottom: 4px;
 }
 .status-banner.is-green {
   background: var(--green-bg);
-  border-color: #cbecd9;
+  border-color: #cfe4d9;
 }
 .status-banner.is-amber {
   background: var(--amber-bg);
-  border-color: #f4e3b8;
+  border-color: #f6dfae;
 }
 .status-banner.is-red {
   background: var(--red-bg);
-  border-color: #f6d2d2;
+  border-color: #f2cdd0;
 }
 
 .feedback-item {
@@ -977,7 +984,7 @@ tbody tr:hover {
   border-radius: var(--radius);
   padding: 14px 16px;
   margin-bottom: 12px;
-  background: #fbfaff;
+  background: #fafbfc;
 }
 .feedback-item:last-child {
   margin-bottom: 0;
@@ -988,5 +995,5 @@ tbody tr:hover {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-weight: 700;
-  color: var(--purple-700);
+  color: var(--brand-700);
 }

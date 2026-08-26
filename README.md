@@ -11,6 +11,7 @@ Built for our second year, second semester group project.
 | Layer | Technology |
 | --- | --- |
 | Front end | React 18 (JSX), React Router, plain CSS, built with Vite |
+| Visual design | Our client's own palette and typeface, taken from [altrium.io](https://www.altrium.io/) |
 | Back end | Node.js + Express (REST API) |
 | Database | **PostgreSQL on Supabase**, accessed with `pg` (node-postgres) — 8 tables |
 | Auth | Email + password (bcrypt), JWT in an httpOnly cookie, optional Google sign-in |
@@ -87,6 +88,32 @@ line up.
 | `npm run seed:reset` | Empty every table, then seed from scratch |
 
 ---
+
+## 1b. Visual design
+
+The system is built for Altrium, so it is styled to look like something
+Altrium would run rather than a generic template. The palette and typeface are
+taken from [altrium.io](https://www.altrium.io/):
+
+| Token | Value | Where it is used |
+| --- | --- | --- |
+| Accent | `#fbb401` | Primary buttons, the current pipeline stage, unread counts |
+| Text on accent | `#1e2228` | Never white — see the note below |
+| Headings | `#1e2228` | |
+| Body text | `#60697b` | |
+| Page background | `#f6f7f9` | |
+| Surface / cards | `#ffffff` | |
+| Borders | `#edf0f5` | |
+| Dark accent | `#8a6300` | The accent when it has to be *text* rather than a fill |
+| Typeface | Cabin | |
+
+Buttons are full pills at weight 700, which is how altrium.io draws them.
+
+**Why the accent never carries white text.** White on `#fbb401` has a contrast
+ratio of 1.8:1, far below the 4.5:1 WCAG AA needs — it is close to unreadable.
+Altrium themselves put black on the amber, and so do we: `#1e2228` on `#fbb401`
+gives 8.9:1. For the same reason the accent is never used as text at full
+strength; `#8a6300` is used instead, which reaches 5.4:1 on white.
 
 ## 2. How the brief is answered
 
