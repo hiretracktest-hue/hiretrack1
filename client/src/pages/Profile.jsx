@@ -167,6 +167,7 @@ export default function Profile() {
               <PasswordInput
                 id="newPassword"
                 autoComplete="new-password"
+                minLength={8}
                 value={passwords.newPassword}
                 onChange={(event) => setPasswords((c) => ({ ...c, newPassword: event.target.value }))}
               />
@@ -177,6 +178,7 @@ export default function Profile() {
                 id="confirmPassword"
                 autoComplete="new-password"
                 placeholder="Type it again"
+                minLength={8}
                 value={passwords.confirm}
                 onChange={(event) => setPasswords((c) => ({ ...c, confirm: event.target.value }))}
               />

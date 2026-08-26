@@ -16,7 +16,21 @@ export function Field({ label, hint, htmlFor, children }) {
   );
 }
 
-export function PasswordInput({ id, value, onChange, placeholder, autoComplete, required = true }) {
+/**
+ * `minLength` is opt-in on purpose. When you are CHOOSING a new password we
+ * want the browser to enforce 8 characters, but when you are TYPING AN
+ * EXISTING one it must accept whatever the account actually has - otherwise
+ * an older or seeded password can never be entered.
+ */
+export function PasswordInput({
+  id,
+  value,
+  onChange,
+  placeholder,
+  autoComplete,
+  required = true,
+  minLength,
+}) {
   const [visible, setVisible] = useState(false);
   return (
     <div className="password-wrap">
@@ -26,10 +40,10 @@ export function PasswordInput({ id, value, onChange, placeholder, autoComplete, 
         type={visible ? "text" : "password"}
         value={value}
         onChange={onChange}
-        placeholder={placeholder || "At least 8 characters"}
+        placeholder={placeholder || (minLength ? "At least " + minLength + " characters" : "")}
         autoComplete={autoComplete}
         required={required}
-        minLength={8}
+        minLength={minLength}
       />
       <button
         type="button"

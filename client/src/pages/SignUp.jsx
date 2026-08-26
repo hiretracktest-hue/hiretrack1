@@ -119,6 +119,7 @@ export default function SignUp() {
             <PasswordInput
               id="password"
               autoComplete="new-password"
+              minLength={8}
               value={form.password}
               onChange={update("password")}
             />
@@ -129,6 +130,7 @@ export default function SignUp() {
               id="confirm"
               autoComplete="new-password"
               placeholder="Type it again"
+              minLength={8}
               value={form.confirm}
               onChange={update("confirm")}
             />
