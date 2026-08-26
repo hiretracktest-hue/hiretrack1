@@ -37,15 +37,15 @@ npm run dev
 
 Sign in with any of the four demo accounts:
 
-| Email | Role | Password |
-| --- | --- | --- |
-| `ahmed.asmi369@gmail.com` | Developer | `Password123` |
-| `scrum.master@example.com` | Scrum Master | `Password123` |
-| `business.analyst@example.com` | Business Analyst | `Password123` |
-| `qa.engineer@example.com` | QA Engineer | `Password123` |
+| Name | Role | Email | Password |
+| --- | --- | --- | --- |
+| Isuru | Developer | `isuru@example.com` | `Password123` |
+| Fazl | Scrum Master | `fazl@example.com` | `Password123` |
+| Thariq | Business Analyst | `thariq@example.com` | `Password123` |
+| Ahmed Asmi | QA Engineer | `ahmed.asmi369@gmail.com` | `Password123` |
 
-> Change these names, emails and the password in `server/seed.js` before you
-> hand the project in.
+> Put everyone's real email address into `server/seed.js` and change the demo
+> password before you hand the project in, then run `npm run seed:reset`.
 
 ### Running it as one server (for a demo or deployment)
 
@@ -107,7 +107,15 @@ Express then serves the built React app as well, so everything is on
 
 ### Team (`/team`)
 
-Our group is four people — Developer, Scrum Master, Business Analyst and QA.
+Our group is four people:
+
+| Name | Role | Responsibility |
+| --- | --- | --- |
+| Isuru | Developer | Builds the React front end and the Express/SQL back end |
+| Fazl | Scrum Master | Runs the sprints, stand-ups and the sprint board |
+| Thariq | Business Analyst | Gathers requirements and writes the user stories |
+| Ahmed | QA Engineer | Writes the test cases and verifies each story before it is done |
+
 The role is stored on the user record as a **label only**: the API checks that a
 request comes from a signed-in user but never checks *which* role, so all four
 of us have exactly the same access, which is what we agreed.

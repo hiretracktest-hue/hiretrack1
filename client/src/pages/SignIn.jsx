@@ -112,8 +112,13 @@ export default function SignIn() {
         <div className="demo-box">
           <strong>Demo accounts</strong> (created by <code>npm run seed</code>):
           <br />
-          <code>ahmed.asmi369@gmail.com</code> · <code>scrum.master@example.com</code> ·{" "}
-          <code>business.analyst@example.com</code> · <code>qa.engineer@example.com</code>
+          Isuru — <code>isuru@example.com</code>
+          <br />
+          Fazl — <code>fazl@example.com</code>
+          <br />
+          Thariq — <code>thariq@example.com</code>
+          <br />
+          Ahmed — <code>ahmed.asmi369@gmail.com</code>
           <br />
           Password for all four: <code>Password123</code>
         </div>

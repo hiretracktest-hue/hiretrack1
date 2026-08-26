@@ -71,8 +71,8 @@ export default function Layout({ children }) {
       {children}
 
       <footer className="footer">
-        HireTrack — group project. Developer · Scrum Master · Business Analyst · QA, all with equal
-        access.
+        HireTrack — group project by Isuru (Developer) · Fazl (Scrum Master) · Thariq (Business
+        Analyst) · Ahmed (QA). All four have equal access.
       </footer>
     </div>
   );

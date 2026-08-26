@@ -14,11 +14,13 @@ import { db, DB_PATH } from "./db/index.js";
 const RESET = process.argv.includes("--reset");
 const DEMO_PASSWORD = "Password123";
 
+// Our group. Replace the example.com addresses with each person's real
+// email before the demo - Ahmed's is already correct.
 const TEAM = [
-  { name: "Ahmed Asmi", email: "ahmed.asmi369@gmail.com", role: "developer" },
-  { name: "Scrum Master", email: "scrum.master@example.com", role: "scrum_master" },
-  { name: "Business Analyst", email: "business.analyst@example.com", role: "business_analyst" },
-  { name: "QA Engineer", email: "qa.engineer@example.com", role: "qa" },
+  { name: "Isuru", email: "isuru@example.com", role: "developer" },
+  { name: "Fazl", email: "fazl@example.com", role: "scrum_master" },
+  { name: "Thariq", email: "thariq@example.com", role: "business_analyst" },
+  { name: "Ahmed Asmi", email: "ahmed.asmi369@gmail.com", role: "qa" },
 ];
 
 const JOBS = [
