@@ -24,7 +24,7 @@ try {
 app.listen(config.port, () => {
   const built = hasClientBuild();
   console.log("");
-  console.log("  HireTrack API  ->  http://localhost:" + config.port);
+  console.log("  Altrium API    ->  http://localhost:" + config.port);
   console.log("  Database       ->  Supabase PostgreSQL");
   console.log(
     "  Google sign-in ->  " +

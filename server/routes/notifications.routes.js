@@ -19,6 +19,8 @@ function toJson(row) {
   return {
     id: Number(row.id),
     channel: row.channel,
+    // What happened - the front end groups and labels by this.
+    kind: row.kind,
     recipientEmail: row.recipient_email,
     recipientName: row.recipient_name,
     subject: row.subject,

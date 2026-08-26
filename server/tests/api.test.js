@@ -497,7 +497,8 @@ describe("telling candidates and interviewers about an interview", () => {
     await signIn("interviewer@example.com");
     const notes = await call("GET", "/api/notifications");
     assert.equal(notes.data.unread, 1);
-    assert.match(notes.data.notifications[0].subject, /You are interviewing/);
+    assert.match(notes.data.notifications[0].subject, /Please confirm/);
+    assert.equal(notes.data.notifications[0].kind, "interview.booked");
   });
 
   test("the candidate's invitation email is written to the outbox", async () => {
@@ -547,6 +548,156 @@ describe("telling candidates and interviewers about an interview", () => {
       scheduledAt: "the day after tomorrow",
     });
     assert.equal(status, 400);
+  });
+});
+
+describe("the interviewer answers the booking", () => {
+  let interviewId;
+  let nimashaId;
+  let jobId;
+
+  const inbox = async (email, password = "Password123") => {
+    await signIn(email, password);
+    const { data } = await call("GET", "/api/notifications");
+    return data.notifications;
+  };
+
+  test("a fresh booking starts as PENDING", async () => {
+    jobId = Number((await one("SELECT id FROM jobs WHERE title = $1", ["Junior Developer"])).id);
+    await signIn("hr@example.com");
+
+    const added = await call("POST", "/api/candidates", {
+      jobId,
+      fullName: "Nimasha Silva",
+      email: "nimasha@example.com",
+    });
+    nimashaId = added.data.candidate.id;
+
+    const { status, data } = await call("POST", "/api/interviews", {
+      candidateId: nimashaId,
+      stage: "Applied",
+      scheduledAt: "2027-03-02T09:00",
+      interviewerId: await userId("interviewer@example.com"),
+      location: "Room 4",
+    });
+    assert.equal(status, 201);
+    assert.equal(data.interview.response, "PENDING", "nobody has agreed to anything yet");
+    interviewId = data.interview.id;
+  });
+
+  test("HR cannot accept on the interviewer's behalf", async () => {
+    // Otherwise asking would be pointless - HR could just answer for them.
+    const { status } = await call("POST", "/api/interviews/" + interviewId + "/respond", {
+      response: "ACCEPTED",
+    });
+    assert.equal(status, 403);
+  });
+
+  test("the interviewer accepts, and it is recorded", async () => {
+    await signIn("interviewer@example.com");
+    const { status, data } = await call("POST", "/api/interviews/" + interviewId + "/respond", {
+      response: "ACCEPTED",
+      note: "Happy to take this one.",
+    });
+    assert.equal(status, 200);
+    assert.equal(data.interview.response, "ACCEPTED");
+    assert.equal(data.interview.responseNote, "Happy to take this one.");
+    assert.ok(data.interview.respondedAt, "the time of the answer is kept");
+  });
+
+  test("answering twice the same way is refused", async () => {
+    const { status } = await call("POST", "/api/interviews/" + interviewId + "/respond", {
+      response: "ACCEPTED",
+    });
+    assert.equal(status, 400);
+  });
+
+  test("accepting tells each role something different", async () => {
+    // This is the point of the whole feature: one event, four audiences,
+    // and nobody gets a message that is not theirs.
+    const mine = (notes) => notes.filter((n) => n.kind === "interview.accepted");
+
+    const interviewer = mine(await inbox("interviewer@example.com"));
+    assert.ok(
+      interviewer.some((n) => /^You accepted/.test(n.subject)),
+      "the interviewer gets their own confirmation"
+    );
+
+    const hr = mine(await inbox("hr@example.com"));
+    assert.ok(
+      hr.some((n) => /Test Interviewer accepted/.test(n.subject)),
+      "HR booked it, so HR hears back"
+    );
+
+    const manager = mine(await inbox("manager@example.com"));
+    assert.ok(
+      manager.some((n) => /Interview confirmed/.test(n.subject)),
+      "the hiring manager is told the position is moving"
+    );
+
+    const management = mine(await inbox("management@example.com", "Password456"));
+    assert.equal(management.length, 0, "management watches hires, not calendar admin");
+  });
+
+  test("the candidate's confirmation letter is written", async () => {
+    await signIn("hr@example.com");
+    const { data } = await call("GET", "/api/notifications/outbox?candidate=" + nimashaId);
+    const confirmation = data.messages.find((m) => m.kind === "interview.confirmed");
+    assert.ok(confirmation, "the candidate is told it is going ahead");
+    assert.equal(confirmation.recipientEmail, "nimasha@example.com");
+    assert.equal(confirmation.sentAt, null);
+  });
+
+  test("declining reaches HR with the reason, and nobody else", async () => {
+    await signIn("hr@example.com");
+    const booked = await call("POST", "/api/interviews", {
+      candidateId: nimashaId,
+      stage: "Applied",
+      scheduledAt: "2027-04-02T09:00",
+      interviewerId: await userId("interviewer@example.com"),
+    });
+
+    await signIn("interviewer@example.com");
+    assert.equal(
+      (await call("POST", "/api/interviews/" + booked.data.interview.id + "/respond", {
+        response: "DECLINED",
+        note: "I am on leave that week.",
+      })).status,
+      200
+    );
+
+    const hr = (await inbox("hr@example.com")).filter((n) => n.kind === "interview.declined");
+    assert.equal(hr.length, 1, "HR is the one who has to rebook");
+    assert.match(hr[0].subject, /Action needed/);
+    assert.match(hr[0].body, /on leave that week/, "the reason travels with it");
+
+    const manager = (await inbox("manager@example.com")).filter(
+      (n) => n.kind === "interview.declined"
+    );
+    assert.equal(manager.length, 0, "a declined booking is not the manager's problem yet");
+  });
+
+  test("feedback tells HR and the hiring manager, but not its own author", async () => {
+    await signIn("interviewer@example.com");
+    assert.equal(
+      (await call("POST", "/api/feedback", {
+        candidateId: nimashaId,
+        stage: "Applied",
+        rating: 4,
+        recommendation: "ADVANCE",
+        strengths: "Clear communicator.",
+      })).status,
+      201
+    );
+
+    const kind = (notes) => notes.filter((n) => n.kind === "feedback.submitted");
+    assert.ok(kind(await inbox("hr@example.com")).length > 0, "HR runs the process");
+    assert.ok(kind(await inbox("manager@example.com")).length > 0, "the manager makes the call");
+    assert.equal(
+      kind(await inbox("interviewer@example.com")).length,
+      0,
+      "being told what you just did yourself is noise"
+    );
   });
 });
 

@@ -1,6 +1,6 @@
-# HireTrack
+# Altrium Recruitment
 
-**Scenario 1 — Recruitment & hiring tracker.** A place where HR opens positions
+**Scenario 1 — Recruitment & hiring tracker, built for Altrium.** A place where HR opens positions
 (with a job description), adds candidates, sets the interview stages for each
 position, and tracks every candidate through to **hired, rejected or on hold** —
 while interviewers log in to leave feedback at their stage, and candidates can be
@@ -15,7 +15,7 @@ Built for our second year, second semester group project.
 | Back end | Node.js + Express (REST API) |
 | Database | **PostgreSQL on Supabase**, accessed with `pg` (node-postgres) — 8 tables |
 | Auth | Email + password (bcrypt), JWT in an httpOnly cookie, optional Google sign-in |
-| Tests | Node's built-in test runner — 54 API tests |
+| Tests | Node's built-in test runner — 62 API tests |
 
 > **This is an internal system.** The people who log in are HR, hiring managers,
 > interviewers and management. **Job candidates do not have accounts** — HR adds
@@ -83,7 +83,7 @@ line up.
 | `npm run dev` | Run the API and the React dev server together |
 | `npm run build` | Build the React app into `client/dist` |
 | `npm start` | Run the API, serving the built React app too |
-| `npm test` | Run the 54 automated API tests |
+| `npm test` | Run the 62 automated API tests |
 | `npm run seed` | Add any missing demo data (safe to re-run) |
 | `npm run seed:reset` | Empty every table, then seed from scratch |
 
@@ -148,21 +148,39 @@ a column per stage and the recommendation split.
 
 ### "How are candidates and interviewers told about a scheduled interview?"
 
-Two channels, because the two audiences are different:
+Being told is not the same as agreeing to come, so the interviewer is **asked**,
+not informed. A booking starts at `PENDING`; the interviewer opens Interviews
+and clicks **Accept** or **Decline**. A booking nobody answered is the thing
+that quietly derails a hiring process, so it is tracked rather than assumed.
 
-- **Interviewers** have accounts, so they get an **in-app notification**, visible
-  on the Interviews page with an unread count in the menu.
-- **Candidates** do not have accounts, so the system writes their invitation
-  email into an **Outbox**. HR reads it, sends it (one click opens their mail
-  client) and marks it sent.
+Only the person actually booked can answer — HR accepting on their behalf would
+defeat the point, and the API returns 403 if they try.
 
-The outbox carries the whole conversation with the candidate, not just the
-invitation: cancelling an interview writes an apology, and recording **hired**
-or **rejected** writes the offer or the regret letter. A decision nobody tells
-the candidate about is the complaint the brief starts with.
+**Every role has a bell in the top bar, and every role sees a different list in
+it.** The same event produces different messages for different people:
 
-There is no mail server in this project. The outbox records exactly what would
-be sent rather than pretending it was delivered.
+| What happened | Interviewer | HR | Hiring manager | Management | Candidate |
+| --- | :-: | :-: | :-: | :-: | :-: |
+| Interview booked | asked to confirm | — | — | — | invitation |
+| Interviewer **accepts** | own confirmation | who accepted, and when | position is moving | — | confirmation |
+| Interviewer **declines** | — | **action needed**, with the reason | — | — | — |
+| Interview cancelled | told | — | — | — | apology |
+| Feedback submitted | — | verdict is in | verdict is in | — | — |
+| Hired / rejected | — | told | — | told | offer / regret letter |
+
+Two things that table is doing deliberately:
+
+- **A decline goes only to HR.** They are the one who has to find somebody else
+  or move the time. It is not the hiring manager's problem yet, and the
+  candidate has not been told anything, so the message says so.
+- **Nobody is notified about their own action.** Being told what you just did
+  yourself is noise, so the person who caused an event is skipped.
+
+Candidates still have no account, so everything addressed to them is written
+into the **Outbox** — invitation, confirmation, apology, offer, regret letter.
+HR reads it, sends it, and marks it sent. There is no mail server in this
+project; the outbox records exactly what would go out rather than pretending it
+was delivered.
 
 ### "Who logs in, and what can each role see and do?"
 
@@ -243,7 +261,7 @@ our web/
 │   │   ├── notifications.routes.js in-app notifications + candidate outbox
 │   │   ├── reports.routes.js       management reports + CSV export
 │   │   └── team.routes.js          who logs in, roles, dashboard counts
-│   └── tests/api.test.js   54 automated tests
+│   └── tests/api.test.js   62 automated tests
 │
 └── client/                 React front end
     ├── index.html

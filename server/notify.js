@@ -1,4 +1,4 @@
-import { run } from "../database/index.js";
+import { run, many } from "../database/index.js";
 import { config } from "./config.js";
 
 /**
@@ -17,8 +17,60 @@ import { config } from "./config.js";
  */
 
 const INSERT =
-  "INSERT INTO notifications (channel, user_id, recipient_email, recipient_name, subject, body, " +
-  "candidate_id, interview_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)";
+  "INSERT INTO notifications (channel, kind, user_id, recipient_email, recipient_name, subject, " +
+  "body, candidate_id, interview_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)";
+
+/** One in-app notification for one person. */
+function toUser(kind, user, subject, body, candidateId = null, interviewId = null) {
+  return run(INSERT, [
+    "IN_APP",
+    kind,
+    user.id,
+    user.email || "",
+    user.name || "",
+    subject,
+    body,
+    candidateId,
+    interviewId,
+  ]);
+}
+
+/** One email written into the outbox for HR to send by hand. */
+function toOutbox(kind, to, subject, body, candidateId = null, interviewId = null) {
+  return run(INSERT, [
+    "EMAIL",
+    kind,
+    null,
+    to.email,
+    to.name,
+    subject,
+    body,
+    candidateId,
+    interviewId,
+  ]);
+}
+
+/**
+ * Notify everyone holding one of these roles.
+ *
+ * This is what makes each role's list its own: HR is told when an
+ * interviewer answers a booking, the hiring manager is told when a
+ * verdict lands on one of their positions, management is told when
+ * somebody is actually hired. Nobody gets the whole firehose.
+ *
+ * `except` keeps a person from being notified about their own action -
+ * being told what you just did yourself is noise.
+ */
+async function toRoles(roles, { kind, subject, body, candidateId = null, interviewId = null, except = null }) {
+  const people = await many(
+    "SELECT id, name, email FROM users WHERE is_active AND role = ANY($1::user_role[])",
+    [roles]
+  );
+  for (const person of people) {
+    if (except && Number(person.id) === Number(except)) continue;
+    await toUser(kind, person, subject, body, candidateId, interviewId);
+  }
+}
 
 function formatWhen(value) {
   const date = new Date(value);
@@ -33,19 +85,22 @@ function formatWhen(value) {
   });
 }
 
-/** Called whenever an interview is booked. */
+/** HR books an interview -> the interviewer is asked to confirm it. */
 export async function notifyInterviewScheduled({ interview, candidate, job, bookedBy }) {
   const when = formatWhen(interview.scheduled_at);
   const where = interview.location || "To be confirmed";
 
-  // 1. The interviewer, in the app.
+  // 1. The interviewer, in the app. They are ASKED, not just told - an
+  //    unanswered booking is what quietly derails a hiring process.
   if (interview.interviewer_id) {
-    await run(INSERT, [
-      "IN_APP",
-      interview.interviewer_id,
-      interview.interviewer_email || "",
-      interview.interviewer_name || "",
-      "You are interviewing " + candidate.full_name,
+    await toUser(
+      "interview.booked",
+      {
+        id: interview.interviewer_id,
+        name: interview.interviewer_name,
+        email: interview.interviewer_email,
+      },
+      "Please confirm: you are interviewing " + candidate.full_name,
       "You have been booked to interview " +
         candidate.full_name +
         " for " +
@@ -60,18 +115,16 @@ export async function notifyInterviewScheduled({ interview, candidate, job, book
         (interview.notes ? " Notes: " + interview.notes : "") +
         " Booked by " +
         (bookedBy?.name || "HR") +
-        ".",
+        ". Open Interviews and accept or decline, so HR knows where they stand.",
       candidate.id,
-      interview.id,
-    ]);
+      interview.id
+    );
   }
 
   // 2. The candidate, by email - written to the outbox for HR to send.
-  await run(INSERT, [
-    "EMAIL",
-    null,
-    candidate.email,
-    candidate.full_name,
+  await toOutbox(
+    "interview.invitation",
+    { email: candidate.email, name: candidate.full_name },
     "Interview invitation - " + job.title,
     "Dear " +
       candidate.full_name +
@@ -100,24 +153,161 @@ export async function notifyInterviewScheduled({ interview, candidate, job, book
       "\n" +
       config.companyName,
     candidate.id,
-    interview.id,
-  ]);
+    interview.id
+  );
 }
 
-/** Called when an interview is cancelled. */
+/**
+ * The interviewer answers the booking.
+ *
+ * Accepting is not just a flag on a row. The interviewer gets their own
+ * confirmation, the person who booked it hears back, the hiring manager
+ * for the position is told it is moving, and the candidate's
+ * confirmation letter is written. Declining goes only to HR, because HR
+ * is the one who has to find somebody else.
+ */
+export async function notifyInterviewResponse({ interview, candidate, job, responder, accepted }) {
+  const when = formatWhen(interview.scheduled_at);
+  const who = responder?.name || interview.interviewer_name || "The interviewer";
+  const note = interview.response_note;
+
+  if (!accepted) {
+    // Declined. Only HR needs this, and it has to read as an action.
+    if (interview.created_by) {
+      await toUser(
+        "interview.declined",
+        { id: interview.created_by, name: "", email: "" },
+        "Action needed: " + who + " declined the interview with " + candidate.full_name,
+        who +
+          " cannot take the " +
+          interview.stage +
+          " stage with " +
+          candidate.full_name +
+          " for " +
+          job.title +
+          " on " +
+          when +
+          "." +
+          (note ? " Reason given: " + note : " No reason was given.") +
+          " Book somebody else, or move the time. The candidate has not been told anything.",
+        candidate.id,
+        interview.id
+      );
+    }
+    return;
+  }
+
+  // The interviewer's own confirmation, so they have it in writing.
+  await toUser(
+    "interview.accepted",
+    { id: responder.id, name: responder.name, email: responder.email },
+    "You accepted the interview with " + candidate.full_name,
+    "You have accepted the " +
+      interview.stage +
+      " stage with " +
+      candidate.full_name +
+      " for " +
+      job.title +
+      ". It is on " +
+      when +
+      ", at " +
+      (interview.location || "a location still to be confirmed") +
+      ". Your feedback is due once it has taken place.",
+    candidate.id,
+    interview.id
+  );
+
+  // HR booked it, so HR hears back.
+  if (interview.created_by && Number(interview.created_by) !== Number(responder?.id)) {
+    await toUser(
+      "interview.accepted",
+      { id: interview.created_by, name: "", email: "" },
+      who + " accepted the interview with " + candidate.full_name,
+      who +
+        " has confirmed the " +
+        interview.stage +
+        " stage with " +
+        candidate.full_name +
+        " for " +
+        job.title +
+        " on " +
+        when +
+        "." +
+        (note ? " They added: " + note : "") +
+        " The candidate's confirmation is waiting in the outbox.",
+      candidate.id,
+      interview.id
+    );
+  }
+
+  // The hiring manager owns the position and wants to know it is moving.
+  await toRoles(["hiring_manager"], {
+    kind: "interview.accepted",
+    subject: "Interview confirmed - " + candidate.full_name,
+    body:
+      who +
+      " will interview " +
+      candidate.full_name +
+      " for " +
+      job.title +
+      " (" +
+      interview.stage +
+      ") on " +
+      when +
+      ".",
+    candidateId: candidate.id,
+    interviewId: interview.id,
+    except: responder?.id,
+  });
+
+  // And the candidate is told it is definitely going ahead.
+  await toOutbox(
+    "interview.confirmed",
+    { email: candidate.email, name: candidate.full_name },
+    "Interview confirmed - " + job.title,
+    "Dear " +
+      candidate.full_name +
+      ",\n\n" +
+      "Your " +
+      interview.stage +
+      " interview for the " +
+      job.title +
+      " position at " +
+      config.companyName +
+      " is now confirmed.\n\n" +
+      "Date and time: " +
+      when +
+      "\n" +
+      "Location: " +
+      (interview.location || "To be confirmed") +
+      "\n" +
+      "Interviewer: " +
+      who +
+      "\n\n" +
+      "We look forward to meeting you. If anything changes, please let us know as soon as you can.\n\n" +
+      "Kind regards,\n" +
+      config.companyName,
+    candidate.id,
+    interview.id
+  );
+}
+
+/** HR cancels an interview. */
 export async function notifyInterviewCancelled({ interview, candidate, job, cancelledBy }) {
   const when = formatWhen(interview.scheduled_at);
 
   if (interview.interviewer_id) {
-    await run(INSERT, [
-      "IN_APP",
-      interview.interviewer_id,
-      interview.interviewer_email || "",
-      interview.interviewer_name || "",
+    await toUser(
+      "interview.cancelled",
+      {
+        id: interview.interviewer_id,
+        name: interview.interviewer_name,
+        email: interview.interviewer_email,
+      },
       "Interview cancelled - " + candidate.full_name,
       "The " +
         interview.stage +
-        " interview with " +
+        " stage with " +
         candidate.full_name +
         " for " +
         job.title +
@@ -127,15 +317,13 @@ export async function notifyInterviewCancelled({ interview, candidate, job, canc
         (cancelledBy?.name || "HR") +
         ".",
       candidate.id,
-      null,
-    ]);
+      null
+    );
   }
 
-  await run(INSERT, [
-    "EMAIL",
-    null,
-    candidate.email,
-    candidate.full_name,
+  await toOutbox(
+    "interview.cancelled",
+    { email: candidate.email, name: candidate.full_name },
     "Interview rescheduling - " + job.title,
     "Dear " +
       candidate.full_name +
@@ -150,20 +338,64 @@ export async function notifyInterviewCancelled({ interview, candidate, job, canc
       "\n" +
       config.companyName,
     candidate.id,
-    null,
-  ]);
+    null
+  );
 }
 
-/** Called when a candidate reaches a final outcome. */
+/**
+ * Feedback lands. HR is running the process and the hiring manager makes
+ * the call, so both hear about it - an interviewer's verdict sitting
+ * unread is exactly what stops a candidate from moving.
+ */
+export async function notifyFeedbackSubmitted({ candidate, job, stage, author, rating, recommendation }) {
+  await toRoles(["hr", "hiring_manager"], {
+    kind: "feedback.submitted",
+    subject: "Feedback in for " + candidate.full_name + " (" + stage + ")",
+    body:
+      (author?.name || "Someone") +
+      " scored " +
+      candidate.full_name +
+      " " +
+      rating +
+      "/5 at " +
+      stage +
+      " for " +
+      job.title +
+      " and recommends " +
+      String(recommendation).toLowerCase() +
+      ". " +
+      candidate.full_name +
+      " can now be moved on.",
+    candidateId: candidate.id,
+    except: author?.id,
+  });
+}
+
+/** A candidate reaches a final outcome. */
 export async function notifyOutcome({ candidate, job, outcome, decidedBy }) {
   if (outcome !== "HIRED" && outcome !== "REJECTED") return;
-
   const hired = outcome === "HIRED";
-  await run(INSERT, [
-    "EMAIL",
-    null,
-    candidate.email,
-    candidate.full_name,
+
+  // Management is oversight, and a hire is the number they actually watch.
+  await toRoles(["management", "hr"], {
+    kind: hired ? "candidate.hired" : "candidate.rejected",
+    subject: (hired ? "Hired: " : "Rejected: ") + candidate.full_name + " - " + job.title,
+    body:
+      (decidedBy?.name || "Someone") +
+      " recorded " +
+      candidate.full_name +
+      " as " +
+      (hired ? "hired" : "rejected") +
+      " for " +
+      job.title +
+      ". The letter to the candidate is waiting in the outbox.",
+    candidateId: candidate.id,
+    except: decidedBy?.id,
+  });
+
+  await toOutbox(
+    hired ? "candidate.hired" : "candidate.rejected",
+    { email: candidate.email, name: candidate.full_name },
     (hired ? "Offer - " : "Your application - ") + job.title,
     "Dear " +
       candidate.full_name +
@@ -184,6 +416,6 @@ export async function notifyOutcome({ candidate, job, outcome, decidedBy }) {
       "\n" +
       config.companyName,
     candidate.id,
-    null,
-  ]);
+    null
+  );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { NavLink, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
 import { api } from "../api.js";
@@ -22,21 +22,46 @@ const LINKS = [
 export default function Layout({ children }) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const [notifications, setNotifications] = useState([]);
   const [unread, setUnread] = useState(0);
+  const [bellOpen, setBellOpen] = useState(false);
 
   const links = LINKS.filter((link) => !link.need || user?.permissions?.[link.need]);
 
-  // An interviewer is told about a new booking here.
-  useEffect(() => {
-    let cancelled = false;
-    api
+  // Every role has a bell, and every role sees a different list in it -
+  // the API only ever returns the notifications addressed to this user.
+  const loadNotifications = useCallback(() => {
+    return api
       .notifications()
-      .then((result) => !cancelled && setUnread(result.unread))
+      .then((result) => {
+        setNotifications(result.notifications);
+        setUnread(result.unread);
+      })
       .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
   }, []);
+
+  useEffect(() => {
+    loadNotifications();
+    // Re-check every half minute so a booking or a verdict shows up
+    // without the person having to reload the page.
+    const timer = setInterval(loadNotifications, 30000);
+    return () => clearInterval(timer);
+  }, [loadNotifications]);
+
+  // Clicking anywhere else closes the panel.
+  useEffect(() => {
+    if (!bellOpen) return undefined;
+    const close = (event) => {
+      if (!event.target.closest?.(".bell")) setBellOpen(false);
+    };
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [bellOpen]);
+
+  async function markAllRead() {
+    await api.markAllNotificationsRead().catch(() => {});
+    await loadNotifications();
+  }
 
   async function handleSignOut() {
     await signOut();
@@ -48,8 +73,8 @@ export default function Layout({ children }) {
       <header className="navbar">
         <div className="navbar-inner">
           <Link to="/dashboard" className="brand">
-            <span className="brand-mark">HT</span>
-            HireTrack
+            <span className="brand-mark">AL</span>
+            Altrium
           </Link>
 
           <nav className="nav-links">
@@ -60,16 +85,61 @@ export default function Layout({ children }) {
                 className={({ isActive }) => "nav-link" + (isActive ? " active" : "")}
               >
                 {link.label}
-                {link.to === "/interviews" && unread > 0 && (
-                  <span className="nav-dot" title={unread + " new"}>
-                    {unread}
-                  </span>
-                )}
               </NavLink>
             ))}
           </nav>
 
           <div className="nav-user">
+            <div className="bell">
+              <button
+                type="button"
+                className="bell-button"
+                aria-label={unread > 0 ? unread + " unread notifications" : "Notifications"}
+                aria-expanded={bellOpen}
+                onClick={() => setBellOpen((open) => !open)}
+              >
+                <BellIcon />
+                {unread > 0 && <span className="nav-dot">{unread}</span>}
+              </button>
+
+              {bellOpen && (
+                <div className="bell-panel">
+                  <div className="bell-head">
+                    <strong>Notifications</strong>
+                    {unread > 0 && (
+                      <button className="btn btn-ghost btn-sm" onClick={markAllRead}>
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+
+                  {notifications.length === 0 ? (
+                    <p className="bell-empty">
+                      Nothing yet. You are told here when something needs you.
+                    </p>
+                  ) : (
+                    <ul className="bell-list">
+                      {notifications.slice(0, 8).map((note) => (
+                        <li key={note.id} className={note.readAt ? "" : "is-unread"}>
+                          {note.candidateId ? (
+                            <Link
+                              to={"/candidates/" + note.candidateId}
+                              onClick={() => setBellOpen(false)}
+                            >
+                              {note.subject}
+                            </Link>
+                          ) : (
+                            <span className="bell-subject">{note.subject}</span>
+                          )}
+                          <span className="bell-body">{note.body}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+
             <Link to="/profile" className="avatar" title="Your profile">
               {user?.avatarUrl ? (
                 <img className="avatar" src={user.avatarUrl} alt="" />
@@ -91,8 +161,22 @@ export default function Layout({ children }) {
       {children}
 
       <footer className="footer">
-        HireTrack — recruitment &amp; hiring tracker. Group project by Isuru, Fazl, Thariq and Ahmed.
+        Altrium — recruitment &amp; hiring tracker. Group project by Isuru, Fazl, Thariq and Ahmed.
       </footer>
     </div>
+  );
+}
+
+function BellIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 3a6 6 0 0 0-6 6v3.6l-1.3 2.6A.8.8 0 0 0 5.4 16h13.2a.8.8 0 0 0 .7-1.2L18 12.6V9a6 6 0 0 0-6-6Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path d="M9.5 19a2.5 2.5 0 0 0 5 0" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
   );
 }

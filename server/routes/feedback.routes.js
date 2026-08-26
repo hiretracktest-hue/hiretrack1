@@ -3,6 +3,7 @@ import { one, many, run } from "../../database/index.js";
 import { asyncHandler, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 import { stagesFor } from "./jobs.routes.js";
+import { notifyFeedbackSubmitted } from "../notify.js";
 
 /**
  * "How do interviewers give feedback so candidates can be compared
@@ -113,6 +114,19 @@ router.post(
       BASE_SELECT + "WHERE f.candidate_id = $1 AND f.stage = $2 AND f.author_id = $3",
       [candidateId, stage, req.user.id]
     );
+
+    // HR runs the process and the hiring manager makes the call, so both
+    // are told a verdict has landed. Without this the score sits in the
+    // database and the candidate waits.
+    const job = await one("SELECT * FROM jobs WHERE id = $1", [candidate.job_id]);
+    await notifyFeedbackSubmitted({
+      candidate,
+      job,
+      stage,
+      author: req.user,
+      rating,
+      recommendation,
+    });
 
     res.status(201).json({ feedback: toJson(row) });
   })

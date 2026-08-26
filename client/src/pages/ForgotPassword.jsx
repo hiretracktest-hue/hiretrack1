@@ -34,8 +34,8 @@ export default function ForgotPassword() {
       <div className="auth-card">
         <div className="auth-head">
           <span className="brand">
-            <span className="brand-mark">HT</span>
-            HireTrack
+            <span className="brand-mark">AL</span>
+            Altrium
           </span>
           <h1>Forgot your password?</h1>
           <p>Enter your email and we will create a reset link for you.</p>

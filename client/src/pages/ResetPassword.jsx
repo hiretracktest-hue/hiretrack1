@@ -41,8 +41,8 @@ export default function ResetPassword() {
       <div className="auth-card">
         <div className="auth-head">
           <span className="brand">
-            <span className="brand-mark">HT</span>
-            HireTrack
+            <span className="brand-mark">AL</span>
+            Altrium
           </span>
           <h1>Choose a new password</h1>
           <p>This link can only be used once.</p>

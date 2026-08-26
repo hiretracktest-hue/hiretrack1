@@ -24,7 +24,7 @@ function Protected({ children, need }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
-  if (loading) return <Loading what="HireTrack" />;
+  if (loading) return <Loading what="Altrium" />;
   if (!user) return <Navigate to="/signin" replace state={{ from: location.pathname }} />;
   // The API checks the same rule again on every request, so this is
   // convenience for the user, not the security boundary.
@@ -35,7 +35,7 @@ function Protected({ children, need }) {
 /** Signed-in users should not see the sign-in screen again. */
 function PublicOnly({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return <Loading what="HireTrack" />;
+  if (loading) return <Loading what="Altrium" />;
   if (user) return <Navigate to="/dashboard" replace />;
   return children;
 }

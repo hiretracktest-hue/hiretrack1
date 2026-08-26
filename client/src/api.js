@@ -74,6 +74,9 @@ export const api = {
   listInterviews: (params = {}) => request("/interviews" + query(params)),
   scheduleInterview: (body) => request("/interviews", { method: "POST", body }),
   cancelInterview: (id) => request("/interviews/" + id, { method: "DELETE" }),
+  // The interviewer answers a booking: ACCEPTED or DECLINED.
+  respondToInterview: (id, response, note) =>
+    request("/interviews/" + id + "/respond", { method: "POST", body: { response, note } }),
 
   // interviewer feedback and side-by-side comparison
   listFeedback: (params = {}) => request("/feedback" + query(params)),

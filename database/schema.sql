@@ -1,5 +1,5 @@
 -- ===================================================================
--- HireTrack - PostgreSQL schema (Supabase)
+-- Altrium - PostgreSQL schema (Supabase)
 -- ===================================================================
 -- Scenario 1 - Recruitment & hiring tracker.
 --
@@ -35,6 +35,7 @@ DROP TYPE IF EXISTS candidate_outcome CASCADE;
 DROP TYPE IF EXISTS cv_band CASCADE;
 DROP TYPE IF EXISTS feedback_recommendation CASCADE;
 DROP TYPE IF EXISTS notification_channel CASCADE;
+DROP TYPE IF EXISTS interview_response CASCADE;
 
 -- -------------------------------------------------------------------
 -- Enumerated types. In SQLite these were CHECK constraints; PostgreSQL
@@ -47,6 +48,8 @@ CREATE TYPE candidate_outcome       AS ENUM ('ACTIVE', 'ON_HOLD', 'HIRED', 'REJE
 CREATE TYPE cv_band                 AS ENUM ('UNRATED', 'HIGH', 'MEDIUM', 'LOW');
 CREATE TYPE feedback_recommendation AS ENUM ('ADVANCE', 'HOLD', 'REJECT');
 CREATE TYPE notification_channel    AS ENUM ('IN_APP', 'EMAIL');
+-- An interviewer answers the booking rather than silently ignoring it.
+CREATE TYPE interview_response      AS ENUM ('PENDING', 'ACCEPTED', 'DECLINED');
 
 -- -------------------------------------------------------------------
 -- users - the staff who log in.
@@ -161,6 +164,12 @@ CREATE TABLE interviews (
   interviewer_email TEXT        NOT NULL DEFAULT '',
   location          TEXT        NOT NULL DEFAULT '',
   notes             TEXT        NOT NULL DEFAULT '',
+  -- Has the interviewer said yes? An unanswered booking is the thing
+  -- that quietly derails a hiring process, so it is tracked explicitly
+  -- rather than assumed.
+  response          interview_response NOT NULL DEFAULT 'PENDING',
+  response_note     TEXT        NOT NULL DEFAULT '',
+  responded_at      TIMESTAMPTZ,
   created_by        BIGINT      REFERENCES users (id) ON DELETE SET NULL,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -200,6 +209,10 @@ CREATE INDEX idx_feedback_candidate ON feedback (candidate_id);
 CREATE TABLE notifications (
   id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   channel         notification_channel NOT NULL,
+  -- What happened, so a role's notifications can be told apart and
+  -- filtered. Free text rather than an ENUM: adding an event should not
+  -- need a migration.
+  kind            TEXT        NOT NULL DEFAULT 'general',
   user_id         BIGINT      REFERENCES users (id) ON DELETE CASCADE,
   recipient_email TEXT        NOT NULL DEFAULT '',
   recipient_name  TEXT        NOT NULL DEFAULT '',

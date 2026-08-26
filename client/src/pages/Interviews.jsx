@@ -59,6 +59,30 @@ export default function Interviews() {
     }
   }
 
+  // The interviewer answers the booking. Declining asks for a reason,
+  // because "no" without a reason leaves HR guessing whether to move the
+  // time or find a different person.
+  async function respond(id, response) {
+    let note = "";
+    if (response === "DECLINED") {
+      const reason = window.prompt(
+        "Why can you not take this interview? HR sees this, so they can rebook."
+      );
+      if (reason === null) return;
+      note = reason;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await api.respondToInterview(id, response, note);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function cancel(id) {
     if (!window.confirm("Cancel this interview? The candidate will be emailed.")) return;
     setBusy(true);
@@ -156,6 +180,7 @@ export default function Interviews() {
                 <th>Stage</th>
                 <th>Interviewer</th>
                 <th>Where</th>
+                <th>Reply</th>
                 <th>Feedback</th>
                 <th />
               </tr>
@@ -178,6 +203,14 @@ export default function Interviews() {
                     )}
                   </td>
                   <td className="cell-sub">{interview.location || "—"}</td>
+                  <td>
+                    <ResponseCell
+                      interview={interview}
+                      isMine={interview.interviewerId === user?.id}
+                      busy={busy}
+                      onRespond={respond}
+                    />
+                  </td>
                   <td>
                     {interview.feedbackGiven ? (
                       <span className="badge badge-green">Given</span>
@@ -210,6 +243,54 @@ export default function Interviews() {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Whether the interviewer has answered the booking.
+ *
+ * The person who was actually booked sees buttons; everyone else sees
+ * the answer. HR cannot accept on somebody's behalf - the API refuses
+ * it too, so this is not the only thing stopping them.
+ */
+function ResponseCell({ interview, isMine, busy, onRespond }) {
+  if (interview.response === "ACCEPTED") {
+    return (
+      <>
+        <span className="badge badge-green">Accepted</span>
+        {interview.responseNote && <div className="cell-sub">{interview.responseNote}</div>}
+      </>
+    );
+  }
+
+  if (interview.response === "DECLINED") {
+    return (
+      <>
+        <span className="badge badge-red">Declined</span>
+        <div className="cell-sub">{interview.responseNote || "No reason given"}</div>
+      </>
+    );
+  }
+
+  if (!isMine) return <span className="badge badge-amber">Awaiting reply</span>;
+
+  return (
+    <div className="btn-row">
+      <button
+        className="btn btn-primary btn-sm"
+        onClick={() => onRespond(interview.id, "ACCEPTED")}
+        disabled={busy}
+      >
+        Accept
+      </button>
+      <button
+        className="btn btn-ghost btn-sm"
+        onClick={() => onRespond(interview.id, "DECLINED")}
+        disabled={busy}
+      >
+        Decline
+      </button>
     </div>
   );
 }

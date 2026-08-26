@@ -19,7 +19,7 @@ const { Pool } = pg;
 // trace that buries them.
 if (!config.databaseUrl) {
   console.error("");
-  console.error("  DATABASE_URL is not set, so HireTrack cannot start.");
+  console.error("  DATABASE_URL is not set, so Altrium cannot start.");
   console.error("");
   console.error("  1. Create a free project at https://supabase.com");
   console.error("  2. Project Settings -> Database -> Connection string -> URI");

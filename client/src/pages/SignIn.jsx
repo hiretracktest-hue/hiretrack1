@@ -46,8 +46,8 @@ export default function SignIn() {
       <div className="auth-card">
         <div className="auth-head">
           <span className="brand">
-            <span className="brand-mark">HT</span>
-            HireTrack
+            <span className="brand-mark">AL</span>
+            Altrium
           </span>
           <h1>Welcome back</h1>
           <p>Sign in to manage positions and candidates.</p>
@@ -105,7 +105,7 @@ export default function SignIn() {
         )}
 
         <div className="auth-note">
-          <strong>There is no sign-up.</strong> HireTrack is an internal system. HR
+          <strong>There is no sign-up.</strong> Altrium Recruitment is an internal system. HR
           creates every account and sets what it can do, so only an email address HR
           has already added can sign in — any other address is turned away.
           <br />

@@ -3,11 +3,17 @@ import { one, many, run } from "../../database/index.js";
 import { asyncHandler, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 import { stagesFor } from "./jobs.routes.js";
-import { notifyInterviewScheduled, notifyInterviewCancelled } from "../notify.js";
+import {
+  notifyInterviewScheduled,
+  notifyInterviewCancelled,
+  notifyInterviewResponse,
+} from "../notify.js";
 
 const router = express.Router();
 
 const num = (value) => (value === null || value === undefined ? null : Number(value));
+
+const RESPONSES = ["PENDING", "ACCEPTED", "DECLINED"];
 
 function toJson(row) {
   if (!row) return null;
@@ -26,6 +32,10 @@ function toJson(row) {
     notes: row.notes,
     createdByName: row.created_by_name ?? null,
     createdAt: row.created_at,
+    // Has the interviewer said yes? PENDING / ACCEPTED / DECLINED.
+    response: row.response,
+    responseNote: row.response_note,
+    respondedAt: row.responded_at,
     // Has this interviewer left their feedback yet? This is what turns
     // the interview list into a to-do list.
     feedbackGiven: Number(row.feedback_given ?? 0) > 0,
@@ -56,6 +66,12 @@ router.get(
     }
     if (req.query.upcoming === "1") {
       where.push("i.scheduled_at >= NOW()");
+    }
+    if (req.query.response) {
+      params.push(
+        v.oneOf(String(req.query.response), RESPONSES, { field: "Response" })
+      );
+      where.push("i.response = $" + params.length);
     }
     // An interviewer's own schedule.
     if (req.query.mine === "1") {
@@ -145,6 +161,58 @@ router.post(
 
     const row = await one(BASE_SELECT + "WHERE i.id = $1", [created.id]);
     res.status(201).json({ interview: toJson(row) });
+  })
+);
+
+// --- The interviewer accepts or declines --------------------------------
+//
+// "How are candidates and interviewers told about a scheduled
+// interview?" only answers half of it. Being told is not the same as
+// agreeing to come, and a booking nobody answered is the thing that
+// quietly derails a hiring process. So the interviewer answers here,
+// and everyone who depends on that answer is told - see notify.js.
+router.post(
+  "/:id/respond",
+  requirePermission("interview:view"),
+  asyncHandler(async (req, res) => {
+    const id = v.id(req.params.id, { field: "interview id" });
+    const interview = await one("SELECT * FROM interviews WHERE id = $1", [id]);
+    if (!interview) throw httpError(404, "That interview does not exist.");
+
+    // Only the person actually being asked can answer. HR cannot accept
+    // on somebody's behalf - that would defeat the point of asking.
+    if (Number(interview.interviewer_id) !== req.user.id) {
+      throw httpError(403, "Only the interviewer booked for this can answer it.");
+    }
+
+    const response = v.oneOf(req.body.response, ["ACCEPTED", "DECLINED"], {
+      field: "Response",
+    });
+    const note = v.str(req.body.note, { field: "Note", max: 300 });
+
+    if (interview.response === response) {
+      throw httpError(400, "You have already " + response.toLowerCase() + " this interview.");
+    }
+
+    await run(
+      "UPDATE interviews SET response = $1, response_note = $2, responded_at = NOW() WHERE id = $3",
+      [response, note, id]
+    );
+
+    const updated = await one("SELECT * FROM interviews WHERE id = $1", [id]);
+    const candidate = await one("SELECT * FROM candidates WHERE id = $1", [interview.candidate_id]);
+    const job = await one("SELECT * FROM jobs WHERE id = $1", [candidate.job_id]);
+
+    await notifyInterviewResponse({
+      interview: updated,
+      candidate,
+      job,
+      responder: req.user,
+      accepted: response === "ACCEPTED",
+    });
+
+    const row = await one(BASE_SELECT + "WHERE i.id = $1", [id]);
+    res.json({ interview: toJson(row) });
   })
 );
 

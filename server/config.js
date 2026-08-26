@@ -31,7 +31,7 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || DEV_SECRET,
   jwtExpiresIn: Number(process.env.JWT_EXPIRES_IN) || 60 * 60 * 24 * 7, // 7 days
   clientUrl: process.env.CLIENT_URL || "http://localhost:5173",
-  companyName: process.env.COMPANY_NAME || "HireTrack",
+  companyName: process.env.COMPANY_NAME || "Altrium",
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID || "",
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",

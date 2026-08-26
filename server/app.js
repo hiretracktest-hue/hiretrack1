@@ -80,7 +80,7 @@ export function createApp({ log = true } = {}) {
     app.get("/", (_req, res) =>
       res.json({
         message:
-          "HireTrack API is running. Start the React app with `npm run dev`, or build it with `npm run build`.",
+          "Altrium API is running. Start the React app with `npm run dev`, or build it with `npm run build`.",
       })
     );
   }
