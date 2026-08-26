@@ -1,5 +1,5 @@
 import express from "express";
-import { db } from "../db/index.js";
+import { one, many, run } from "../../database/index.js";
 import { config, ROLES, ROLE_LABELS, ROLE_DESCRIPTIONS, PERMISSIONS } from "../config.js";
 import { asyncHandler, requireAuth, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
@@ -14,12 +14,11 @@ const router = express.Router();
 
 const memberRow = (row) => ({
   ...publicUser(row),
-  roleLabel: ROLE_LABELS[row.role] || row.role,
   roleDescription: ROLE_DESCRIPTIONS[row.role] || "",
   isActive: Boolean(row.is_active),
-  positionsOpened: row.positions_opened ?? 0,
-  interviewsBooked: row.interviews_booked ?? 0,
-  feedbackGiven: row.feedback_given ?? 0,
+  positionsOpened: Number(row.positions_opened ?? 0),
+  interviewsBooked: Number(row.interviews_booked ?? 0),
+  feedbackGiven: Number(row.feedback_given ?? 0),
 });
 
 const LIST_SQL =
@@ -34,7 +33,7 @@ router.get(
   "/",
   requirePermission("team:view"),
   asyncHandler(async (_req, res) => {
-    const rows = db.prepare(LIST_SQL + "ORDER BY u.is_active DESC, u.name ASC").all();
+    const rows = await many(LIST_SQL + "ORDER BY u.is_active DESC, u.name ASC");
 
     res.json({
       roles: ROLES.map((value) => ({
@@ -53,15 +52,13 @@ router.get(
   "/interviewers",
   requirePermission("interview:view"),
   asyncHandler(async (_req, res) => {
-    const rows = db
-      .prepare(
-        "SELECT id, name, email, role FROM users WHERE is_active = 1 " +
-          "AND role IN ('hr','hiring_manager','interviewer') ORDER BY name ASC"
-      )
-      .all();
+    const rows = await many(
+      "SELECT id, name, email, role FROM users WHERE is_active " +
+        "AND role IN ('hr', 'hiring_manager', 'interviewer') ORDER BY name ASC"
+    );
     res.json({
       interviewers: rows.map((row) => ({
-        id: row.id,
+        id: Number(row.id),
         name: row.name,
         email: row.email,
         role: row.role,
@@ -82,24 +79,25 @@ router.patch(
       throw httpError(403, "Ask HR to change your role.");
     }
 
-    const fields = [];
+    const sets = [];
     const params = [];
+    const push = (column, value) => {
+      params.push(value);
+      sets.push(column + " = $" + params.length);
+    };
+
     if (req.body.name !== undefined) {
-      fields.push("name = ?");
-      params.push(v.str(req.body.name, { field: "Full name", required: true, max: 120, min: 2 }));
+      push("name", v.str(req.body.name, { field: "Full name", required: true, max: 120, min: 2 }));
     }
     if (req.body.jobTitle !== undefined) {
-      fields.push("job_title = ?");
-      params.push(v.str(req.body.jobTitle, { field: "Job title", max: 120 }));
+      push("job_title", v.str(req.body.jobTitle, { field: "Job title", max: 120 }));
     }
-    if (!fields.length) throw httpError(400, "Nothing to update.");
+    if (!sets.length) throw httpError(400, "Nothing to update.");
 
     params.push(req.user.id);
-    db.prepare(
-      "UPDATE users SET " + fields.join(", ") + ", updated_at = datetime('now') WHERE id = ?"
-    ).run(...params);
+    await run("UPDATE users SET " + sets.join(", ") + " WHERE id = $" + params.length, params);
 
-    const row = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+    const row = await one("SELECT * FROM users WHERE id = $1", [req.user.id]);
     res.json({ user: publicUser(row) });
   })
 );
@@ -115,17 +113,17 @@ router.post(
     const jobTitle = v.str(req.body.jobTitle, { field: "Job title", max: 120 });
     const pw = v.password(req.body.password);
 
-    if (db.prepare("SELECT id FROM users WHERE email = ?").get(emailValue)) {
+    if (await one("SELECT id FROM users WHERE email = $1", [emailValue])) {
       throw httpError(409, "An account with this email already exists.");
     }
 
-    const info = db
-      .prepare(
-        "INSERT INTO users (name, email, password_hash, role, job_title) VALUES (?, ?, ?, ?, ?)"
-      )
-      .run(name, emailValue, await hashPassword(pw), role, jobTitle);
+    const created = await one(
+      "INSERT INTO users (name, email, password_hash, role, job_title) " +
+        "VALUES ($1, $2, $3, $4, $5) RETURNING id",
+      [name, emailValue, await hashPassword(pw), role, jobTitle]
+    );
 
-    const row = db.prepare(LIST_SQL + "WHERE u.id = ?").get(info.lastInsertRowid);
+    const row = await one(LIST_SQL + "WHERE u.id = $1", [created.id]);
     res.status(201).json({ member: memberRow(row) });
   })
 );
@@ -136,49 +134,50 @@ router.patch(
   requirePermission("team:manage"),
   asyncHandler(async (req, res) => {
     const id = v.id(req.params.id, { field: "user id" });
-    const target = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
+    const target = await one("SELECT * FROM users WHERE id = $1", [id]);
     if (!target) throw httpError(404, "That person does not exist.");
 
-    const fields = [];
+    const sets = [];
     const params = [];
+    const push = (column, value) => {
+      params.push(value);
+      sets.push(column + " = $" + params.length);
+    };
+
+    const countActiveHr = async () => {
+      const { count } = await one(
+        "SELECT COUNT(*)::int AS count FROM users WHERE role = 'hr' AND is_active"
+      );
+      return count;
+    };
 
     if (req.body.role !== undefined) {
       const role = v.oneOf(req.body.role, ROLES, { field: "Role" });
       // Never leave the system with no HR account - nobody could then
       // open a position or create an account again.
-      if (target.role === "hr" && role !== "hr") {
-        const hrCount = db
-          .prepare("SELECT COUNT(*) AS total FROM users WHERE role = 'hr' AND is_active = 1")
-          .get().total;
-        if (hrCount <= 1) throw httpError(400, "There has to be at least one active HR account.");
+      if (target.role === "hr" && role !== "hr" && (await countActiveHr()) <= 1) {
+        throw httpError(400, "There has to be at least one active HR account.");
       }
-      fields.push("role = ?");
-      params.push(role);
+      push("role", role);
     }
 
     if (req.body.isActive !== undefined) {
-      const active = req.body.isActive ? 1 : 0;
-      if (!active && target.id === req.user.id) {
+      const active = Boolean(req.body.isActive);
+      if (!active && Number(target.id) === req.user.id) {
         throw httpError(400, "You cannot deactivate your own account.");
       }
-      if (!active && target.role === "hr") {
-        const hrCount = db
-          .prepare("SELECT COUNT(*) AS total FROM users WHERE role = 'hr' AND is_active = 1")
-          .get().total;
-        if (hrCount <= 1) throw httpError(400, "There has to be at least one active HR account.");
+      if (!active && target.role === "hr" && (await countActiveHr()) <= 1) {
+        throw httpError(400, "There has to be at least one active HR account.");
       }
-      fields.push("is_active = ?");
-      params.push(active);
+      push("is_active", active);
     }
 
-    if (!fields.length) throw httpError(400, "Nothing to update.");
+    if (!sets.length) throw httpError(400, "Nothing to update.");
 
     params.push(id);
-    db.prepare(
-      "UPDATE users SET " + fields.join(", ") + ", updated_at = datetime('now') WHERE id = ?"
-    ).run(...params);
+    await run("UPDATE users SET " + sets.join(", ") + " WHERE id = $" + params.length, params);
 
-    const row = db.prepare(LIST_SQL + "WHERE u.id = ?").get(id);
+    const row = await one(LIST_SQL + "WHERE u.id = $1", [id]);
     res.json({ member: memberRow(row) });
   })
 );
@@ -188,40 +187,49 @@ router.get(
   "/stats",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const one = (sql, ...params) => db.prepare(sql).get(...params).value;
+    const row = await one(
+      `SELECT
+        (SELECT COUNT(*) FROM jobs WHERE status = 'ACTIVE')                 AS open_positions,
+        (SELECT COUNT(*) FROM jobs WHERE status = 'CLOSED')                 AS closed_positions,
+        (SELECT COUNT(*) FROM candidates)                                   AS total_candidates,
+        (SELECT COUNT(*) FROM candidates WHERE outcome = 'ACTIVE')          AS active_candidates,
+        (SELECT COUNT(*) FROM candidates WHERE outcome = 'ON_HOLD')         AS on_hold,
+        (SELECT COUNT(*) FROM candidates WHERE outcome = 'HIRED')           AS hired,
+        (SELECT COUNT(*) FROM candidates WHERE outcome = 'REJECTED')        AS rejected,
+        (SELECT COUNT(*) FROM candidates WHERE cv_stored_name IS NOT NULL)  AS cvs_on_file,
+        (SELECT COUNT(*) FROM candidates
+          WHERE cv_band = 'UNRATED' AND cv_stored_name IS NOT NULL)         AS awaiting_screening,
+        (SELECT COUNT(*) FROM interviews WHERE scheduled_at >= NOW())       AS upcoming_interviews,
+        (SELECT COUNT(*) FROM interviews
+          WHERE interviewer_id = $1 AND scheduled_at >= NOW())              AS my_upcoming_interviews,
+        (SELECT COUNT(*) FROM interviews i
+          WHERE i.interviewer_id = $1 AND i.scheduled_at < NOW()
+            AND NOT EXISTS (SELECT 1 FROM feedback f WHERE f.candidate_id = i.candidate_id
+                              AND f.stage = i.stage AND f.author_id = i.interviewer_id))
+                                                                            AS my_outstanding_feedback,
+        (SELECT COUNT(*) FROM feedback)                                     AS feedback_submitted,
+        (SELECT COUNT(*) FROM users WHERE is_active)                        AS team_members,
+        (SELECT COUNT(*) FROM notifications
+          WHERE channel = 'EMAIL' AND sent_at IS NULL)                      AS pending_emails`,
+      [req.user.id]
+    );
 
     res.json({
-      openPositions: one("SELECT COUNT(*) AS value FROM jobs WHERE status = 'ACTIVE'"),
-      closedPositions: one("SELECT COUNT(*) AS value FROM jobs WHERE status = 'CLOSED'"),
-      totalCandidates: one("SELECT COUNT(*) AS value FROM candidates"),
-      activeCandidates: one("SELECT COUNT(*) AS value FROM candidates WHERE outcome = 'ACTIVE'"),
-      onHold: one("SELECT COUNT(*) AS value FROM candidates WHERE outcome = 'ON_HOLD'"),
-      hired: one("SELECT COUNT(*) AS value FROM candidates WHERE outcome = 'HIRED'"),
-      rejected: one("SELECT COUNT(*) AS value FROM candidates WHERE outcome = 'REJECTED'"),
-      cvsOnFile: one("SELECT COUNT(*) AS value FROM candidates WHERE cv_stored_name IS NOT NULL"),
-      awaitingScreening: one(
-        "SELECT COUNT(*) AS value FROM candidates WHERE cv_band = 'UNRATED' AND cv_stored_name IS NOT NULL"
-      ),
-      upcomingInterviews: one(
-        "SELECT COUNT(*) AS value FROM interviews WHERE datetime(scheduled_at) >= datetime('now')"
-      ),
-      myUpcomingInterviews: one(
-        "SELECT COUNT(*) AS value FROM interviews WHERE interviewer_id = ? " +
-          "AND datetime(scheduled_at) >= datetime('now')",
-        req.user.id
-      ),
-      myOutstandingFeedback: one(
-        "SELECT COUNT(*) AS value FROM interviews i WHERE i.interviewer_id = ? " +
-          "AND datetime(i.scheduled_at) < datetime('now') " +
-          "AND NOT EXISTS (SELECT 1 FROM feedback f WHERE f.candidate_id = i.candidate_id " +
-          "  AND f.stage = i.stage AND f.author_id = i.interviewer_id)",
-        req.user.id
-      ),
-      feedbackSubmitted: one("SELECT COUNT(*) AS value FROM feedback"),
-      teamMembers: one("SELECT COUNT(*) AS value FROM users WHERE is_active = 1"),
-      pendingEmails: one(
-        "SELECT COUNT(*) AS value FROM notifications WHERE channel = 'EMAIL' AND sent_at IS NULL"
-      ),
+      openPositions: Number(row.open_positions),
+      closedPositions: Number(row.closed_positions),
+      totalCandidates: Number(row.total_candidates),
+      activeCandidates: Number(row.active_candidates),
+      onHold: Number(row.on_hold),
+      hired: Number(row.hired),
+      rejected: Number(row.rejected),
+      cvsOnFile: Number(row.cvs_on_file),
+      awaitingScreening: Number(row.awaiting_screening),
+      upcomingInterviews: Number(row.upcoming_interviews),
+      myUpcomingInterviews: Number(row.my_upcoming_interviews),
+      myOutstandingFeedback: Number(row.my_outstanding_feedback),
+      feedbackSubmitted: Number(row.feedback_submitted),
+      teamMembers: Number(row.team_members),
+      pendingEmails: Number(row.pending_emails),
       googleEnabled: config.google.enabled,
     });
   })

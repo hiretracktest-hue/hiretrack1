@@ -1,4 +1,4 @@
-import { db } from "./db/index.js";
+import { run } from "../database/index.js";
 import { config } from "./config.js";
 
 /**
@@ -16,14 +16,13 @@ import { config } from "./config.js";
  *            records exactly what would go out, and HR marks it sent.
  */
 
-const insert = db.prepare(
+const INSERT =
   "INSERT INTO notifications (channel, user_id, recipient_email, recipient_name, subject, body, " +
-    "candidate_id, interview_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-);
+  "candidate_id, interview_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)";
 
-function formatWhen(iso) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
+function formatWhen(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleString("en-GB", {
     weekday: "long",
     day: "numeric",
@@ -35,13 +34,13 @@ function formatWhen(iso) {
 }
 
 /** Called whenever an interview is booked. */
-export function notifyInterviewScheduled({ interview, candidate, job, bookedBy }) {
+export async function notifyInterviewScheduled({ interview, candidate, job, bookedBy }) {
   const when = formatWhen(interview.scheduled_at);
   const where = interview.location || "To be confirmed";
 
   // 1. The interviewer, in the app.
   if (interview.interviewer_id) {
-    insert.run(
+    await run(INSERT, [
       "IN_APP",
       interview.interviewer_id,
       interview.interviewer_email || "",
@@ -63,12 +62,12 @@ export function notifyInterviewScheduled({ interview, candidate, job, bookedBy }
         (bookedBy?.name || "HR") +
         ".",
       candidate.id,
-      interview.id
-    );
+      interview.id,
+    ]);
   }
 
   // 2. The candidate, by email - written to the outbox for HR to send.
-  insert.run(
+  await run(INSERT, [
     "EMAIL",
     null,
     candidate.email,
@@ -101,16 +100,16 @@ export function notifyInterviewScheduled({ interview, candidate, job, bookedBy }
       "\n" +
       config.companyName,
     candidate.id,
-    interview.id
-  );
+    interview.id,
+  ]);
 }
 
 /** Called when an interview is cancelled. */
-export function notifyInterviewCancelled({ interview, candidate, job, cancelledBy }) {
+export async function notifyInterviewCancelled({ interview, candidate, job, cancelledBy }) {
   const when = formatWhen(interview.scheduled_at);
 
   if (interview.interviewer_id) {
-    insert.run(
+    await run(INSERT, [
       "IN_APP",
       interview.interviewer_id,
       interview.interviewer_email || "",
@@ -128,11 +127,11 @@ export function notifyInterviewCancelled({ interview, candidate, job, cancelledB
         (cancelledBy?.name || "HR") +
         ".",
       candidate.id,
-      null
-    );
+      null,
+    ]);
   }
 
-  insert.run(
+  await run(INSERT, [
     "EMAIL",
     null,
     candidate.email,
@@ -151,16 +150,16 @@ export function notifyInterviewCancelled({ interview, candidate, job, cancelledB
       "\n" +
       config.companyName,
     candidate.id,
-    null
-  );
+    null,
+  ]);
 }
 
 /** Called when a candidate reaches a final outcome. */
-export function notifyOutcome({ candidate, job, outcome, decidedBy }) {
+export async function notifyOutcome({ candidate, job, outcome, decidedBy }) {
   if (outcome !== "HIRED" && outcome !== "REJECTED") return;
 
   const hired = outcome === "HIRED";
-  insert.run(
+  await run(INSERT, [
     "EMAIL",
     null,
     candidate.email,
@@ -185,6 +184,6 @@ export function notifyOutcome({ candidate, job, outcome, decidedBy }) {
       "\n" +
       config.companyName,
     candidate.id,
-    null
-  );
+    null,
+  ]);
 }

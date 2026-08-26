@@ -1,6 +1,6 @@
 import path from "node:path";
 import express from "express";
-import { db } from "../db/index.js";
+import { one, many, run, transaction } from "../../database/index.js";
 import { config, can } from "../config.js";
 import { asyncHandler, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
@@ -15,8 +15,6 @@ import { UPLOAD_DIR, uploadCv, deleteStoredFile, safeFilename } from "../upload.
 const router = express.Router();
 
 const OUTCOMES = ["ACTIVE", "ON_HOLD", "HIRED", "REJECTED"];
-// Screening bands. One advert can return hundreds of CVs, so each is
-// banded once and the list is then filtered rather than re-read.
 const CV_BANDS = ["UNRATED", "HIGH", "MEDIUM", "LOW"];
 const BAND_ORDER =
   "CASE c.cv_band WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 WHEN 'LOW' THEN 2 ELSE 3 END";
@@ -33,13 +31,13 @@ const SELECT_COLUMNS =
   "LEFT JOIN users a ON a.id = c.added_by " +
   "LEFT JOIN users b ON b.id = c.cv_banded_by ";
 
-const selectOne = db.prepare(SELECT_COLUMNS + "WHERE c.id = ?");
+const num = (value) => (value === null || value === undefined ? null : Number(value));
 
 function toJson(row) {
   if (!row) return null;
   return {
-    id: row.id,
-    jobId: row.job_id,
+    id: Number(row.id),
+    jobId: Number(row.job_id),
     jobTitle: row.job_title,
     jobStatus: row.job_status,
     jobDepartment: row.job_department,
@@ -56,14 +54,14 @@ function toJson(row) {
     bandedByName: row.banded_by_name ?? null,
     cvBandedAt: row.cv_banded_at,
     addedByName: row.added_by_name ?? null,
-    feedbackCount: row.feedback_count ?? 0,
-    averageRating: row.average_rating ?? null,
-    stageFeedbackCount: row.stage_feedback_count ?? 0,
+    feedbackCount: Number(row.feedback_count ?? 0),
+    averageRating: num(row.average_rating),
+    stageFeedbackCount: Number(row.stage_feedback_count ?? 0),
     cv: row.cv_filename
       ? {
           filename: row.cv_filename,
           mime: row.cv_mime,
-          size: row.cv_size,
+          size: num(row.cv_size),
           uploadedAt: row.cv_uploaded_at,
         }
       : null,
@@ -72,8 +70,8 @@ function toJson(row) {
   };
 }
 
-function loadOr404(id) {
-  const row = selectOne.get(id);
+async function loadOr404(id) {
+  const row = await one(SELECT_COLUMNS + "WHERE c.id = $1", [id]);
   if (!row) throw httpError(404, "That candidate does not exist.");
   return row;
 }
@@ -85,66 +83,61 @@ router.get(
   asyncHandler(async (req, res) => {
     const where = [];
     const params = [];
+    const add = (clause, value) => {
+      params.push(value);
+      where.push(clause.replace("$?", "$" + params.length));
+    };
 
-    if (req.query.job) {
-      where.push("c.job_id = ?");
-      params.push(v.id(req.query.job, { field: "position id" }));
-    }
+    if (req.query.job) add("c.job_id = $?", v.id(req.query.job, { field: "position id" }));
     if (req.query.outcome) {
-      where.push("c.outcome = ?");
-      params.push(v.oneOf(String(req.query.outcome), OUTCOMES, { field: "Outcome" }));
+      add("c.outcome = $?", v.oneOf(String(req.query.outcome), OUTCOMES, { field: "Outcome" }));
     }
     if (req.query.cvBand) {
-      where.push("c.cv_band = ?");
-      params.push(v.oneOf(String(req.query.cvBand), CV_BANDS, { field: "CV band" }));
+      add("c.cv_band = $?", v.oneOf(String(req.query.cvBand), CV_BANDS, { field: "CV band" }));
     }
-    if (req.query.stage) {
-      where.push("c.current_stage = ?");
-      params.push(String(req.query.stage));
-    }
+    if (req.query.stage) add("c.current_stage = $?", String(req.query.stage));
     if (req.query.hasCv === "1") where.push("c.cv_stored_name IS NOT NULL");
     if (req.query.hasCv === "0") where.push("c.cv_stored_name IS NULL");
 
     const search = String(req.query.q || "").trim();
     if (search) {
-      where.push("(c.full_name LIKE ? OR c.email LIKE ?)");
-      const like = "%" + search + "%";
-      params.push(like, like);
+      params.push("%" + search + "%");
+      const n = params.length;
+      where.push("(c.full_name ILIKE $" + n + " OR c.email::text ILIKE $" + n + ")");
     }
 
     // An interviewer only needs the people they are actually meeting.
     if (req.query.mine === "1") {
-      where.push("EXISTS (SELECT 1 FROM interviews i WHERE i.candidate_id = c.id AND i.interviewer_id = ?)");
-      params.push(req.user.id);
+      add(
+        "EXISTS (SELECT 1 FROM interviews i WHERE i.candidate_id = c.id AND i.interviewer_id = $?)",
+        req.user.id
+      );
     }
 
     const SORTS = {
-      newest: "datetime(c.created_at) DESC",
-      oldest: "datetime(c.created_at) ASC",
-      band: BAND_ORDER + " ASC, datetime(c.created_at) DESC",
-      rating: "average_rating IS NULL, average_rating DESC",
-      name: "c.full_name COLLATE NOCASE ASC",
+      newest: "c.created_at DESC",
+      oldest: "c.created_at ASC",
+      band: BAND_ORDER + " ASC, c.created_at DESC",
+      rating: "average_rating DESC NULLS LAST",
+      name: "c.full_name ASC",
     };
     const sort = SORTS[String(req.query.sort || "")] || SORTS.newest;
 
     const whereSql = where.length ? "WHERE " + where.join(" AND ") + " " : "";
-    const rows = db.prepare(SELECT_COLUMNS + whereSql + "ORDER BY " + sort).all(...params);
+    const rows = await many(SELECT_COLUMNS + whereSql + "ORDER BY " + sort, params);
 
     // Band totals for the whole position, not just the filtered view, so
     // HR can see how much screening is left.
-    const scope = [];
     const scopeParams = [];
+    let scopeSql = "";
     if (req.query.job) {
-      scope.push("job_id = ?");
       scopeParams.push(v.id(req.query.job, { field: "position id" }));
+      scopeSql = "WHERE job_id = $1 ";
     }
-    const counts = db
-      .prepare(
-        "SELECT cv_band, COUNT(*) AS total FROM candidates " +
-          (scope.length ? "WHERE " + scope.join(" AND ") + " " : "") +
-          "GROUP BY cv_band"
-      )
-      .all(...scopeParams);
+    const counts = await many(
+      "SELECT cv_band, COUNT(*)::int AS total FROM candidates " + scopeSql + "GROUP BY cv_band",
+      scopeParams
+    );
 
     const bandCounts = Object.fromEntries(CV_BANDS.map((band) => [band, 0]));
     for (const row of counts) bandCounts[row.cv_band] = row.total;
@@ -163,53 +156,53 @@ router.get(
   requirePermission("candidate:view"),
   asyncHandler(async (req, res) => {
     const id = v.id(req.params.id, { field: "candidate id" });
-    const row = loadOr404(id);
-    const stages = stagesFor(row.job_id);
+    const row = await loadOr404(id);
+    const stages = await stagesFor(row.job_id);
 
     const candidate = toJson(row);
     const index = stages.indexOf(candidate.currentStage);
     candidate.stages = stages;
     candidate.nextStage = index >= 0 && index < stages.length - 1 ? stages[index + 1] : null;
 
-    const interviews = db
-      .prepare(
+    const interviews = (
+      await many(
         "SELECT i.*, u.name AS created_by_name FROM interviews i " +
           "LEFT JOIN users u ON u.id = i.created_by " +
-          "WHERE i.candidate_id = ? ORDER BY datetime(i.scheduled_at) ASC"
+          "WHERE i.candidate_id = $1 ORDER BY i.scheduled_at ASC",
+        [id]
       )
-      .all(id)
-      .map((iv) => ({
-        id: iv.id,
-        stage: iv.stage,
-        scheduledAt: iv.scheduled_at,
-        interviewerId: iv.interviewer_id,
-        interviewerName: iv.interviewer_name,
-        interviewerEmail: iv.interviewer_email,
-        location: iv.location,
-        notes: iv.notes,
-        createdByName: iv.created_by_name,
-      }));
+    ).map((iv) => ({
+      id: Number(iv.id),
+      stage: iv.stage,
+      scheduledAt: iv.scheduled_at,
+      interviewerId: num(iv.interviewer_id),
+      interviewerName: iv.interviewer_name,
+      interviewerEmail: iv.interviewer_email,
+      location: iv.location,
+      notes: iv.notes,
+      createdByName: iv.created_by_name,
+    }));
 
-    const feedback = db
-      .prepare(
+    const feedback = (
+      await many(
         "SELECT f.*, u.name AS author_name, u.role AS author_role FROM feedback f " +
           "LEFT JOIN users u ON u.id = f.author_id " +
-          "WHERE f.candidate_id = ? ORDER BY datetime(f.created_at) DESC"
+          "WHERE f.candidate_id = $1 ORDER BY f.created_at DESC",
+        [id]
       )
-      .all(id)
-      .map((f) => ({
-        id: f.id,
-        stage: f.stage,
-        rating: f.rating,
-        recommendation: f.recommendation,
-        strengths: f.strengths,
-        concerns: f.concerns,
-        comment: f.comment,
-        authorId: f.author_id,
-        authorName: f.author_name,
-        authorRole: f.author_role,
-        createdAt: f.created_at,
-      }));
+    ).map((f) => ({
+      id: Number(f.id),
+      stage: f.stage,
+      rating: f.rating,
+      recommendation: f.recommendation,
+      strengths: f.strengths,
+      concerns: f.concerns,
+      comment: f.comment,
+      authorId: num(f.author_id),
+      authorName: f.author_name,
+      authorRole: f.author_role,
+      createdAt: f.created_at,
+    }));
 
     res.json({ candidate, interviews, feedback });
   })
@@ -221,11 +214,11 @@ router.post(
   requirePermission("candidate:add"),
   asyncHandler(async (req, res) => {
     const jobId = v.id(req.body.jobId, { field: "position id" });
-    const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(jobId);
+    const job = await one("SELECT * FROM jobs WHERE id = $1", [jobId]);
     if (!job) throw httpError(404, "That position does not exist.");
     if (job.status !== "ACTIVE") throw httpError(400, "That position is closed.");
 
-    const stages = stagesFor(jobId);
+    const stages = await stagesFor(jobId);
     if (!stages.length) throw httpError(400, "This position has no interview stages set up yet.");
 
     const fullName = v.str(req.body.fullName, {
@@ -239,37 +232,37 @@ router.post(
     const source = v.str(req.body.source, { field: "Source", max: 80 });
     const notes = v.str(req.body.notes, { field: "Notes", max: 2000 });
 
-    const duplicate = db
-      .prepare("SELECT id FROM candidates WHERE job_id = ? AND email = ?")
-      .get(jobId, emailValue);
+    const duplicate = await one(
+      "SELECT id FROM candidates WHERE job_id = $1 AND email = $2",
+      [jobId, emailValue]
+    );
     if (duplicate) {
       throw httpError(409, "This person has already been added to this position.");
     }
 
-    const info = db
-      .prepare(
-        "INSERT INTO candidates (job_id, full_name, email, phone, source, notes, current_stage, added_by) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-      )
-      .run(jobId, fullName, emailValue, phone, source, notes, stages[0], req.user.id);
+    const created = await one(
+      "INSERT INTO candidates (job_id, full_name, email, phone, source, notes, current_stage, added_by) " +
+        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
+      [jobId, fullName, emailValue, phone, source, notes, stages[0], req.user.id]
+    );
 
-    res.status(201).json({ candidate: toJson(selectOne.get(info.lastInsertRowid)) });
+    res.status(201).json({ candidate: toJson(await loadOr404(created.id)) });
   })
 );
 
-// --- Edit details ------------------------------------------------------
+// --- Edit details / stage / outcome -------------------------------------
 router.patch(
   "/:id",
   requirePermission("candidate:view"),
   asyncHandler(async (req, res) => {
     const id = v.id(req.params.id, { field: "candidate id" });
-    const existing = loadOr404(id);
+    const existing = await loadOr404(id);
 
-    const fields = [];
+    const sets = [];
     const params = [];
     const push = (column, value) => {
-      fields.push(column + " = ?");
       params.push(value);
+      sets.push(column + " = $" + params.length);
     };
 
     const wantsEdit =
@@ -309,25 +302,26 @@ router.patch(
       if (!can(req.user, "candidate:advance")) {
         throw httpError(403, "Your role cannot change a candidate's stage.");
       }
-      const stages = stagesFor(existing.job_id);
+      const stages = await stagesFor(existing.job_id);
       push("current_stage", v.oneOf(req.body.currentStage, stages, { field: "Stage" }));
     }
 
-    if (!fields.length) throw httpError(400, "Nothing to update.");
+    if (!sets.length) throw httpError(400, "Nothing to update.");
 
     params.push(id);
     try {
-      db.prepare(
-        "UPDATE candidates SET " + fields.join(", ") + ", updated_at = datetime('now') WHERE id = ?"
-      ).run(...params);
+      await run(
+        "UPDATE candidates SET " + sets.join(", ") + " WHERE id = $" + params.length,
+        params
+      );
     } catch (err) {
-      if (err.code === "SQLITE_CONSTRAINT_UNIQUE") {
+      if (err.code === "23505") {
         throw httpError(409, "Another candidate for this position already uses that email.");
       }
       throw err;
     }
 
-    res.json({ candidate: toJson(selectOne.get(id)) });
+    res.json({ candidate: toJson(await loadOr404(id)) });
   })
 );
 
@@ -337,17 +331,18 @@ router.post(
   requirePermission("candidate:band"),
   asyncHandler(async (req, res) => {
     const id = v.id(req.params.id, { field: "candidate id" });
-    loadOr404(id);
+    await loadOr404(id);
 
     const band = v.oneOf(req.body.band, CV_BANDS, { field: "CV band" });
     const note = v.str(req.body.note, { field: "Note", max: 300 });
 
-    db.prepare(
-      "UPDATE candidates SET cv_band = ?, cv_band_note = ?, cv_banded_by = ?, " +
-        "cv_banded_at = datetime('now'), updated_at = datetime('now') WHERE id = ?"
-    ).run(band, note, band === "UNRATED" ? null : req.user.id, id);
+    await run(
+      "UPDATE candidates SET cv_band = $1, cv_band_note = $2, cv_banded_by = $3, " +
+        "cv_banded_at = NOW() WHERE id = $4",
+      [band, note, band === "UNRATED" ? null : req.user.id, id]
+    );
 
-    res.json({ candidate: toJson(selectOne.get(id)) });
+    res.json({ candidate: toJson(await loadOr404(id)) });
   })
 );
 
@@ -362,19 +357,17 @@ router.post(
     if (ids.length > 200) throw httpError(400, "Band at most 200 candidates at a time.");
 
     const clean = ids.map((id) => v.id(id, { field: "candidate id" }));
-    const update = db.prepare(
-      "UPDATE candidates SET cv_band = ?, cv_banded_by = ?, cv_banded_at = datetime('now'), " +
-        "updated_at = datetime('now') WHERE id = ?"
-    );
     const bandedBy = band === "UNRATED" ? null : req.user.id;
 
-    const run = db.transaction(() => {
-      let changed = 0;
-      for (const id of clean) changed += update.run(band, bandedBy, id).changes;
-      return changed;
-    });
+    // = ANY($3) takes the whole list as one parameter, so this is a
+    // single round trip and still fully parameterised.
+    const updated = await run(
+      "UPDATE candidates SET cv_band = $1, cv_banded_by = $2, cv_banded_at = NOW() " +
+        "WHERE id = ANY($3::bigint[])",
+      [band, bandedBy, clean]
+    );
 
-    res.json({ updated: run(), band });
+    res.json({ updated, band });
   })
 );
 
@@ -384,9 +377,9 @@ router.post(
   requirePermission("candidate:advance"),
   asyncHandler(async (req, res) => {
     const id = v.id(req.params.id, { field: "candidate id" });
-    const existing = loadOr404(id);
+    const existing = await loadOr404(id);
 
-    const stages = stagesFor(existing.job_id);
+    const stages = await stagesFor(existing.job_id);
     const index = stages.indexOf(existing.current_stage);
     if (index === -1) throw httpError(400, "This candidate's stage is no longer in the pipeline.");
     if (index >= stages.length - 1) {
@@ -395,13 +388,14 @@ router.post(
 
     // "Should a candidate be blocked from advancing until the current
     // stage's feedback is in?" - yes. The first stage is exempt because
-    // nobody has interviewed them yet when they have only just applied.
+    // nobody has interviewed them yet when they have only just been added.
     if (config.requireFeedbackToAdvance && index > 0) {
-      const given = db
-        .prepare("SELECT COUNT(*) AS total FROM feedback WHERE candidate_id = ? AND stage = ?")
-        .get(id, existing.current_stage).total;
+      const { count } = await one(
+        "SELECT COUNT(*)::int AS count FROM feedback WHERE candidate_id = $1 AND stage = $2",
+        [id, existing.current_stage]
+      );
 
-      if (given === 0) {
+      if (count === 0) {
         throw httpError(
           400,
           'Feedback for "' +
@@ -413,11 +407,8 @@ router.post(
       }
     }
 
-    db.prepare(
-      "UPDATE candidates SET current_stage = ?, updated_at = datetime('now') WHERE id = ?"
-    ).run(stages[index + 1], id);
-
-    res.json({ candidate: toJson(selectOne.get(id)), stages });
+    await run("UPDATE candidates SET current_stage = $1 WHERE id = $2", [stages[index + 1], id]);
+    res.json({ candidate: toJson(await loadOr404(id)), stages });
   })
 );
 
@@ -428,7 +419,7 @@ router.post(
   (req, res, next) => uploadCv(req, res, (err) => (err ? next(err) : next())),
   asyncHandler(async (req, res) => {
     const id = v.id(req.params.id, { field: "candidate id" });
-    const existing = selectOne.get(id);
+    const existing = await one("SELECT * FROM candidates WHERE id = $1", [id]);
 
     if (!existing) {
       deleteStoredFile(req.file?.filename); // do not leave an orphan behind
@@ -438,19 +429,14 @@ router.post(
 
     const previous = existing.cv_stored_name;
 
-    db.prepare(
-      "UPDATE candidates SET cv_filename = ?, cv_stored_name = ?, cv_mime = ?, cv_size = ?, " +
-        "cv_uploaded_at = datetime('now'), updated_at = datetime('now') WHERE id = ?"
-    ).run(
-      safeFilename(req.file.originalname),
-      req.file.filename,
-      req.file.mimetype,
-      req.file.size,
-      id
+    await run(
+      "UPDATE candidates SET cv_filename = $1, cv_stored_name = $2, cv_mime = $3, cv_size = $4, " +
+        "cv_uploaded_at = NOW() WHERE id = $5",
+      [safeFilename(req.file.originalname), req.file.filename, req.file.mimetype, req.file.size, id]
     );
 
     deleteStoredFile(previous);
-    res.json({ candidate: toJson(selectOne.get(id)) });
+    res.json({ candidate: toJson(await loadOr404(id)) });
   })
 );
 
@@ -460,7 +446,7 @@ router.get(
   requirePermission("candidate:view"),
   asyncHandler(async (req, res) => {
     const id = v.id(req.params.id, { field: "candidate id" });
-    const row = loadOr404(id);
+    const row = await loadOr404(id);
     if (!row.cv_stored_name) throw httpError(404, "No CV has been uploaded yet.");
 
     const filePath = path.join(UPLOAD_DIR, path.basename(row.cv_stored_name));
@@ -478,16 +464,17 @@ router.delete(
   requirePermission("candidate:uploadCv"),
   asyncHandler(async (req, res) => {
     const id = v.id(req.params.id, { field: "candidate id" });
-    const row = loadOr404(id);
+    const row = await loadOr404(id);
     if (!row.cv_stored_name) throw httpError(404, "No CV has been uploaded yet.");
 
-    db.prepare(
+    await run(
       "UPDATE candidates SET cv_filename = NULL, cv_stored_name = NULL, cv_mime = NULL, " +
-        "cv_size = NULL, cv_uploaded_at = NULL, updated_at = datetime('now') WHERE id = ?"
-    ).run(id);
+        "cv_size = NULL, cv_uploaded_at = NULL WHERE id = $1",
+      [id]
+    );
     deleteStoredFile(row.cv_stored_name);
 
-    res.json({ candidate: toJson(selectOne.get(id)) });
+    res.json({ candidate: toJson(await loadOr404(id)) });
   })
 );
 
@@ -497,9 +484,9 @@ router.delete(
   requirePermission("candidate:delete"),
   asyncHandler(async (req, res) => {
     const id = v.id(req.params.id, { field: "candidate id" });
-    const row = loadOr404(id);
+    const row = await loadOr404(id);
 
-    db.prepare("DELETE FROM candidates WHERE id = ?").run(id);
+    await run("DELETE FROM candidates WHERE id = $1", [id]);
     deleteStoredFile(row.cv_stored_name);
     res.json({ ok: true });
   })

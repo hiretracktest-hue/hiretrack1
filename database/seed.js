@@ -3,13 +3,13 @@
  * few candidates so the app is not empty on first run.
  *
  *   npm run seed          add anything that is missing (safe to re-run)
- *   npm run seed:reset    wipe every table first, then seed again
+ *   npm run seed:reset    empty every table first, then seed again
  *
  * TODO for the group: change the names, emails and the demo password
  * below to your own before you hand this in.
  */
 import bcrypt from "bcryptjs";
-import { db, DB_PATH } from "./db/index.js";
+import { one, many, run, transaction, closePool } from "./index.js";
 
 const RESET = process.argv.includes("--reset");
 
@@ -138,189 +138,210 @@ const CANDIDATES = [
   },
 ];
 
-function reset() {
-  db.exec(
-    "PRAGMA foreign_keys = OFF;" +
-      "DELETE FROM notifications;" +
-      "DELETE FROM feedback;" +
-      "DELETE FROM interviews;" +
-      "DELETE FROM candidates;" +
-      "DELETE FROM job_stages;" +
-      "DELETE FROM jobs;" +
-      "DELETE FROM password_resets;" +
-      "DELETE FROM users;" +
-      "DELETE FROM sqlite_sequence;" +
-      "PRAGMA foreign_keys = ON;"
+async function reset() {
+  // TRUNCATE ... RESTART IDENTITY empties the tables and resets the id
+  // counters; CASCADE follows the foreign keys for us.
+  await run(
+    "TRUNCATE notifications, feedback, interviews, candidates, job_stages, jobs, " +
+      "password_resets, users RESTART IDENTITY CASCADE"
   );
-  console.log("  cleared every table");
+  console.log("  emptied every table");
 }
 
-function seedUsers(people, label) {
+async function seedUsers(people, label) {
   const hash = bcrypt.hashSync(DEMO_PASSWORD, 10);
-  const insert = db.prepare(
-    "INSERT INTO users (name, email, password_hash, role, job_title) VALUES (?, ?, ?, ?, ?)"
-  );
-  const find = db.prepare("SELECT id FROM users WHERE email = ?");
-
   const ids = {};
+
   for (const person of people) {
-    const existing = find.get(person.email);
+    const existing = await one("SELECT id FROM users WHERE email = $1", [person.email]);
     if (existing) {
-      ids[person.email] = existing.id;
+      ids[person.email] = Number(existing.id);
       continue;
     }
-    ids[person.email] = Number(
-      insert.run(person.name, person.email, hash, person.role, person.jobTitle || "").lastInsertRowid
+    const created = await one(
+      "INSERT INTO users (name, email, password_hash, role, job_title) " +
+        "VALUES ($1, $2, $3, $4, $5) RETURNING id",
+      [person.name, person.email, hash, person.role, person.jobTitle || ""]
     );
+    ids[person.email] = Number(created.id);
     console.log("  " + label.padEnd(10) + person.email.padEnd(30) + person.role);
   }
   return ids;
 }
 
-function seedJobs(hrId, managerId) {
-  const insertJob = db.prepare(
-    "INSERT INTO jobs (title, department, location, employment_type, description, salary_range, " +
-      "hiring_manager, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-  );
-  const insertStage = db.prepare(
-    "INSERT INTO job_stages (job_id, name, position) VALUES (?, ?, ?)"
-  );
-  const findJob = db.prepare("SELECT id FROM jobs WHERE title = ?");
-
+async function seedJobs(hrId, managerId) {
   const ids = {};
+
   for (const job of JOBS) {
-    const existing = findJob.get(job.title);
+    const existing = await one("SELECT id FROM jobs WHERE title = $1", [job.title]);
     if (existing) {
-      ids[job.title] = existing.id;
+      ids[job.title] = Number(existing.id);
       continue;
     }
-    const info = insertJob.run(
-      job.title,
-      job.department,
-      job.location,
-      job.employmentType,
-      job.description,
-      job.salaryRange,
-      managerId,
-      hrId
+
+    const created = await one(
+      "INSERT INTO jobs (title, department, location, employment_type, description, " +
+        "salary_range, hiring_manager, created_by) " +
+        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
+      [
+        job.title,
+        job.department,
+        job.location,
+        job.employmentType,
+        job.description,
+        job.salaryRange,
+        managerId,
+        hrId,
+      ]
     );
-    const jobId = Number(info.lastInsertRowid);
-    job.stages.forEach((name, index) => insertStage.run(jobId, name, index));
+
+    const jobId = Number(created.id);
+    for (const [index, name] of job.stages.entries()) {
+      await run("INSERT INTO job_stages (job_id, name, position) VALUES ($1, $2, $3)", [
+        jobId,
+        name,
+        index,
+      ]);
+    }
     ids[job.title] = jobId;
     console.log("  position  " + job.title + "  (" + job.stages.length + " stages)");
   }
   return ids;
 }
 
-function seedCandidates(jobIds, hrId) {
-  const insert = db.prepare(
-    "INSERT INTO candidates (job_id, full_name, email, phone, source, notes, current_stage, " +
-      "outcome, cv_band, cv_banded_by, cv_banded_at, added_by) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  );
-  const find = db.prepare("SELECT id FROM candidates WHERE job_id = ? AND email = ?");
-  const now = new Date().toISOString().slice(0, 19).replace("T", " ");
-
+async function seedCandidates(jobIds, hrId) {
   for (const candidate of CANDIDATES) {
     const jobId = jobIds[candidate.job];
-    if (!jobId || find.get(jobId, candidate.email)) continue;
+    if (!jobId) continue;
+
+    const existing = await one("SELECT id FROM candidates WHERE job_id = $1 AND email = $2", [
+      jobId,
+      candidate.email,
+    ]);
+    if (existing) continue;
 
     const banded = candidate.cvBand !== "UNRATED";
-    insert.run(
-      jobId,
-      candidate.fullName,
-      candidate.email,
-      candidate.phone,
-      candidate.source,
-      candidate.notes,
-      candidate.stage,
-      candidate.outcome,
-      candidate.cvBand,
-      banded ? hrId : null,
-      banded ? now : null,
-      hrId
+    await run(
+      "INSERT INTO candidates (job_id, full_name, email, phone, source, notes, current_stage, " +
+        "outcome, cv_band, cv_banded_by, cv_banded_at, added_by) " +
+        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+      [
+        jobId,
+        candidate.fullName,
+        candidate.email,
+        candidate.phone,
+        candidate.source,
+        candidate.notes,
+        candidate.stage,
+        candidate.outcome,
+        candidate.cvBand,
+        banded ? hrId : null,
+        banded ? new Date().toISOString() : null,
+        hrId,
+      ]
     );
     console.log("  candidate " + candidate.fullName.padEnd(22) + candidate.cvBand);
   }
 }
 
-function seedInterviewAndFeedback(userIds) {
-  const candidate = db
-    .prepare("SELECT * FROM candidates WHERE email = ?")
-    .get("maya.fernando@gmail.com");
+async function seedInterviewAndFeedback(userIds) {
+  const candidate = await one("SELECT * FROM candidates WHERE email = $1", [
+    "maya.fernando@gmail.com",
+  ]);
   if (!candidate) return;
-  if (db.prepare("SELECT id FROM interviews WHERE candidate_id = ?").get(candidate.id)) return;
+  if (await one("SELECT id FROM interviews WHERE candidate_id = $1", [candidate.id])) return;
 
   const interviewerId = userIds["thariq@gmail.com"];
   const inThreeDays = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
 
-  db.prepare(
+  await run(
     "INSERT INTO interviews (candidate_id, stage, scheduled_at, interviewer_id, interviewer_name, " +
-      "interviewer_email, location, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(
-    candidate.id,
-    candidate.current_stage,
-    inThreeDays,
-    interviewerId,
-    "Thariq",
-    "thariq@gmail.com",
-    "Meeting room 2 / Google Meet",
-    "Pair programming exercise, 45 minutes.",
-    userIds["isuru@gmail.com"]
+      "interviewer_email, location, notes, created_by) " +
+      "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+    [
+      candidate.id,
+      candidate.current_stage,
+      inThreeDays,
+      interviewerId,
+      "Thariq",
+      "thariq@gmail.com",
+      "Meeting room 2 / Google Meet",
+      "Pair programming exercise, 45 minutes.",
+      userIds["isuru@gmail.com"],
+    ]
   );
   console.log("  interview scheduled for Maya Fernando");
 
-  const insertFeedback = db.prepare(
-    "INSERT INTO feedback (candidate_id, author_id, stage, rating, recommendation, strengths, " +
-      "concerns, comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-  );
-  insertFeedback.run(
-    candidate.id,
-    interviewerId,
-    "Screening",
-    4,
-    "ADVANCE",
-    "Solid JavaScript, explained her projects clearly.",
-    "Has not used SQL much.",
-    "Happy to move her to the technical round."
-  );
-  insertFeedback.run(
-    candidate.id,
-    userIds["fazl@gmail.com"],
-    "Screening",
-    5,
-    "ADVANCE",
-    "Asked good questions about how we test.",
-    "",
-    "Strong communicator."
-  );
+  const feedback = [
+    [
+      interviewerId,
+      "Screening",
+      4,
+      "ADVANCE",
+      "Solid JavaScript, explained her projects clearly.",
+      "Has not used SQL much.",
+      "Happy to move her to the technical round.",
+    ],
+    [
+      userIds["fazl@gmail.com"],
+      "Screening",
+      5,
+      "ADVANCE",
+      "Asked good questions about how we test.",
+      "",
+      "Strong communicator.",
+    ],
+  ];
+
+  for (const [authorId, stage, rating, recommendation, strengths, concerns, comment] of feedback) {
+    await run(
+      "INSERT INTO feedback (candidate_id, author_id, stage, rating, recommendation, strengths, " +
+        "concerns, comment) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+      [candidate.id, authorId, stage, rating, recommendation, strengths, concerns, comment]
+    );
+  }
   console.log("  feedback  2 entries for Maya Fernando");
 }
 
-console.log("\nSeeding " + DB_PATH + "\n");
-if (RESET) reset();
+async function main() {
+  const info = await one("SELECT current_database() AS db");
+  console.log("\nSeeding " + info.db + "\n");
 
-db.transaction(() => {
-  const teamIds = seedUsers(TEAM, "team");
-  const personaIds = seedUsers(PERSONAS, "persona");
-  const userIds = { ...teamIds, ...personaIds };
+  if (RESET) await reset();
 
-  const jobIds = seedJobs(teamIds["isuru@gmail.com"], teamIds["fazl@gmail.com"]);
-  seedCandidates(jobIds, teamIds["isuru@gmail.com"]);
-  seedInterviewAndFeedback(userIds);
-})();
+  // Everything in one transaction: either the whole demo data set is
+  // created or none of it is.
+  await transaction(async () => {
+    const teamIds = await seedUsers(TEAM, "team");
+    const personaIds = await seedUsers(PERSONAS, "persona");
+    const userIds = { ...teamIds, ...personaIds };
 
-console.log("\nDone. Every account below uses the password: " + DEMO_PASSWORD + "\n");
-console.log("  WHO LOGS IN                                   WHAT THEY CAN DO");
-const WHAT = {
-  hr: "Everything: open positions, add candidates, screen CVs, run the process",
-  hiring_manager: "Candidates, comparison and the hire decision. No position control",
-  interviewer: "Sees their candidates, leaves feedback at their stage",
-  management: "Oversight: sees everything, changes nothing, exports reports",
-};
-for (const member of [...TEAM, ...PERSONAS]) {
-  console.log("    " + member.email.padEnd(30) + (WHAT[member.role] || member.role));
+    const jobIds = await seedJobs(teamIds["isuru@gmail.com"], teamIds["fazl@gmail.com"]);
+    await seedCandidates(jobIds, teamIds["isuru@gmail.com"]);
+    await seedInterviewAndFeedback(userIds);
+  });
+
+  const WHAT = {
+    hr: "Everything: open positions, add candidates, screen CVs, run the process",
+    hiring_manager: "Candidates, comparison and the hire decision. No position control",
+    interviewer: "Sees their candidates, leaves feedback at their stage",
+    management: "Oversight: sees everything, changes nothing, exports reports",
+  };
+
+  console.log("\nDone. Every account below uses the password: " + DEMO_PASSWORD + "\n");
+  console.log("  WHO LOGS IN                   WHAT THEY CAN DO");
+  for (const member of [...TEAM, ...PERSONAS]) {
+    console.log("    " + member.email.padEnd(30) + WHAT[member.role]);
+  }
+  console.log("");
+  console.log("  Candidates do NOT log in - HR adds them and uploads their CV.");
+  console.log("");
 }
-console.log("");
-console.log("  Candidates do NOT log in - HR adds them and uploads their CV.");
-console.log("");
+
+main()
+  .catch((err) => {
+    console.error("\n  Seeding failed: " + err.message);
+    if (err.sql) console.error("  While running:\n" + err.sql.slice(0, 300));
+    process.exitCode = 1;
+  })
+  .finally(closePool);

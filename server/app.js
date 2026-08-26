@@ -13,7 +13,7 @@ import feedbackRoutes from "./routes/feedback.routes.js";
 import teamRoutes from "./routes/team.routes.js";
 import notificationsRoutes from "./routes/notifications.routes.js";
 import reportsRoutes from "./routes/reports.routes.js";
-import { DB_PATH } from "./db/index.js";
+import { ping } from "../database/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -42,8 +42,18 @@ export function createApp({ log = true } = {}) {
     });
   }
 
-  app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, database: path.basename(DB_PATH), time: new Date().toISOString() });
+  app.get("/api/health", async (_req, res) => {
+    try {
+      const info = await ping();
+      res.json({
+        ok: true,
+        database: info.name,
+        server: info.version.split(",")[0],
+        time: new Date().toISOString(),
+      });
+    } catch (err) {
+      res.status(503).json({ ok: false, error: "Cannot reach the database: " + err.message });
+    }
   });
 
   app.use("/api/auth", authRoutes);

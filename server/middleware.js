@@ -1,17 +1,26 @@
 import { COOKIE_NAME, verifyToken, findUserById, publicUser } from "./auth.js";
 import { can, ROLE_LABELS } from "./config.js";
 
-// Reads the login cookie and attaches req.user when it is valid.
-// Never rejects - use requireAuth for routes that must be protected.
-export function attachUser(req, _res, next) {
-  const token = req.cookies?.[COOKIE_NAME];
-  if (token) {
-    const payload = verifyToken(token);
-    if (payload?.sub) {
-      req.user = publicUser(findUserById(payload.sub));
+/**
+ * Reads the login cookie and attaches req.user when it is valid.
+ * Never rejects - use requireAuth for routes that must be protected.
+ *
+ * This is async because the user is fetched from PostgreSQL; any error
+ * is passed to next() rather than left as an unhandled rejection.
+ */
+export async function attachUser(req, _res, next) {
+  try {
+    const token = req.cookies?.[COOKIE_NAME];
+    if (token) {
+      const payload = verifyToken(token);
+      if (payload?.sub) {
+        req.user = publicUser(await findUserById(payload.sub));
+      }
     }
+    next();
+  } catch (err) {
+    next(err);
   }
-  next();
 }
 
 export function requireAuth(req, res, next) {
@@ -52,17 +61,33 @@ export function notFound(_req, res) {
 }
 
 export function errorHandler(err, _req, res, _next) {
-  // Multer and SQLite errors carry codes we can turn into friendly messages.
+  // Multer and PostgreSQL errors carry codes we can turn into friendly
+  // messages instead of a bare 500.
   if (err?.code === "LIMIT_FILE_SIZE") {
     return res.status(400).json({ error: "That file is too large. The limit is 5 MB." });
   }
-  if (err?.code === "SQLITE_CONSTRAINT_UNIQUE") {
+  // 23505 = unique_violation, 23503 = foreign_key_violation,
+  // 23514 = check_violation, 22P02 = invalid_text_representation
+  if (err?.code === "23505") {
     return res.status(409).json({ error: "That record already exists." });
+  }
+  if (err?.code === "23503") {
+    return res.status(400).json({ error: "That refers to something which does not exist." });
+  }
+  if (err?.code === "23514" || err?.code === "22P02") {
+    return res.status(400).json({ error: "One of the values sent is not valid." });
+  }
+  if (err?.code === "ECONNREFUSED" || err?.code === "ENOTFOUND") {
+    return res.status(503).json({
+      error: "Cannot reach the database. Check DATABASE_URL in your .env file.",
+    });
   }
   if (err?.status && err?.expose) {
     return res.status(err.status).json({ error: err.message });
   }
+
   console.error("[error]", err);
+  if (err?.sql) console.error("[error] while running:", err.sql.slice(0, 300));
   res.status(500).json({ error: "Something went wrong on our side. Please try again." });
 }
 

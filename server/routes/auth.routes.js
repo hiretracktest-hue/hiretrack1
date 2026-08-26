@@ -1,6 +1,6 @@
 import express from "express";
 import crypto from "node:crypto";
-import { db } from "../db/index.js";
+import { one, run } from "../../database/index.js";
 import { config, ROLES, ROLE_LABELS } from "../config.js";
 import { asyncHandler, requireAuth, httpError } from "../middleware.js";
 import * as v from "../validate.js";
@@ -18,9 +18,8 @@ import {
 
 const router = express.Router();
 
-const findByEmail = db.prepare("SELECT * FROM users WHERE email = ?");
-const findByGoogleId = db.prepare("SELECT * FROM users WHERE google_id = ?");
-const findById = db.prepare("SELECT * FROM users WHERE id = ?");
+const findByEmail = (email) => one("SELECT * FROM users WHERE email = $1", [email]);
+const findById = (id) => one("SELECT * FROM users WHERE id = $1", [id]);
 
 // Tells the front end which sign-in options are switched on.
 router.get("/config", (_req, res) => {
@@ -42,12 +41,12 @@ router.post(
     const supplied = typeof req.body.password === "string" ? req.body.password : "";
     if (!supplied) throw httpError(400, "Password is required.");
 
-    const user = findByEmail.get(emailValue);
+    const user = await findByEmail(emailValue);
     // Same message either way so the form cannot be used to discover
     // which email addresses are registered.
-    const ok = user && (await checkPassword(supplied, user.password_hash));
+    const ok = user && user.is_active && (await checkPassword(supplied, user.password_hash));
     if (!ok) {
-      if (user && !user.password_hash) {
+      if (user && user.is_active && !user.password_hash) {
         throw httpError(401, "This account uses Google sign-in. Use the Google button instead.");
       }
       throw httpError(401, "Invalid email or password.");
@@ -74,7 +73,7 @@ router.post(
   "/change-password",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const row = findById.get(req.user.id);
+    const row = await findById(req.user.id);
     const current = typeof req.body.currentPassword === "string" ? req.body.currentPassword : "";
 
     if (row.password_hash && !(await checkPassword(current, row.password_hash))) {
@@ -82,10 +81,10 @@ router.post(
     }
     const next = v.password(req.body.newPassword, { field: "New password" });
 
-    db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").run(
+    await run("UPDATE users SET password_hash = $1 WHERE id = $2", [
       await hashPassword(next),
-      req.user.id
-    );
+      req.user.id,
+    ]);
     res.json({ ok: true });
   })
 );
@@ -98,14 +97,14 @@ router.post(
   "/forgot-password",
   asyncHandler(async (req, res) => {
     const emailValue = v.email(req.body.email);
-    const user = findByEmail.get(emailValue);
+    const user = await findByEmail(emailValue);
 
     const payload = {
       message: "If that email is registered, a password reset link has been created.",
     };
 
-    if (user) {
-      const token = createResetToken(user.id);
+    if (user && user.is_active) {
+      const token = await createResetToken(user.id);
       const link = config.clientUrl + "/reset-password?token=" + token;
       console.log("\n[password reset] " + user.email + "\n[password reset] " + link + "\n");
       if (!config.isProduction) {
@@ -124,24 +123,25 @@ router.post(
     const token = v.str(req.body.token, { field: "Reset token", required: true, max: 200 });
     const next = v.password(req.body.password, { field: "New password" });
 
-    const result = consumeResetToken(token);
+    const result = await consumeResetToken(token);
     if (result.error) throw httpError(400, result.error);
 
-    db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").run(
+    await run("UPDATE users SET password_hash = $1 WHERE id = $2", [
       await hashPassword(next),
-      result.userId
-    );
-    markResetUsed(result.resetId);
+      result.userId,
+    ]);
+    await markResetUsed(result.resetId);
 
     res.json({ ok: true, message: "Password updated. You can sign in now." });
   })
 );
 
 // =====================================================================
-// Google sign-in ("log in with your Gmail account") - OAuth 2.0 code
-// flow. Only active when GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are
-// set in .env; otherwise the button is hidden and email + password
-// sign-in is used instead.
+// Google sign-in - OAuth 2.0 code flow. Only active when
+// GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set in .env.
+//
+// It LINKS to an account that already exists; it never creates one,
+// because HR controls who gets in.
 // =====================================================================
 const OAUTH_STATE_COOKIE = "hiretrack_oauth_state";
 
@@ -204,31 +204,31 @@ router.get(
       headers: { Authorization: "Bearer " + tokenJson.access_token },
     });
 
-    if (!profileRes.ok) {
-      return res.redirect(config.clientUrl + "/signin?error=google_profile");
-    }
+    if (!profileRes.ok) return res.redirect(config.clientUrl + "/signin?error=google_profile");
 
     const profile = await profileRes.json();
     if (!profile.email) return res.redirect(config.clientUrl + "/signin?error=google_email");
 
     const emailValue = String(profile.email).toLowerCase();
-    let user = findByGoogleId.get(profile.id) || findByEmail.get(emailValue);
+    const existing =
+      (await one("SELECT * FROM users WHERE google_id = $1", [profile.id])) ||
+      (await findByEmail(emailValue));
 
-    if (user) {
-      // Link the Google identity to the account that already exists.
-      db.prepare(
-        "UPDATE users SET google_id = ?, avatar_url = COALESCE(?, avatar_url), updated_at = datetime('now') WHERE id = ?"
-      ).run(profile.id, profile.picture || null, user.id);
-      user = findById.get(user.id);
-    } else {
+    if (!existing || !existing.is_active) {
       // No account with that address. We do not create one: staff
       // accounts come from HR, so an unknown Google account is turned
       // away rather than silently let in.
       return res.redirect(config.clientUrl + "/signin?error=google_unknown");
     }
 
+    await run(
+      "UPDATE users SET google_id = $1, avatar_url = COALESCE($2, avatar_url) WHERE id = $3",
+      [profile.id, profile.picture || null, existing.id]
+    );
+
+    const user = await findById(existing.id);
     setAuthCookie(res, signToken(user));
-    res.redirect(config.clientUrl + "/jobs");
+    res.redirect(config.clientUrl + "/dashboard");
   })
 );
 

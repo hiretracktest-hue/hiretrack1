@@ -1,5 +1,5 @@
 import express from "express";
-import { db } from "../db/index.js";
+import { one, many, run } from "../../database/index.js";
 import { asyncHandler, requireAuth, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 
@@ -17,15 +17,15 @@ const router = express.Router();
 
 function toJson(row) {
   return {
-    id: row.id,
+    id: Number(row.id),
     channel: row.channel,
     recipientEmail: row.recipient_email,
     recipientName: row.recipient_name,
     subject: row.subject,
     body: row.body,
-    candidateId: row.candidate_id,
+    candidateId: row.candidate_id === null ? null : Number(row.candidate_id),
     candidateName: row.candidate_name ?? null,
-    interviewId: row.interview_id,
+    interviewId: row.interview_id === null ? null : Number(row.interview_id),
     readAt: row.read_at,
     sentAt: row.sent_at,
     createdAt: row.created_at,
@@ -41,22 +41,20 @@ router.get(
   "/",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const rows = db
-      .prepare(
-        BASE +
-          "WHERE n.channel = 'IN_APP' AND n.user_id = ? " +
-          "ORDER BY n.read_at IS NOT NULL, datetime(n.created_at) DESC LIMIT 100"
-      )
-      .all(req.user.id);
+    const rows = await many(
+      BASE +
+        "WHERE n.channel = 'IN_APP' AND n.user_id = $1 " +
+        "ORDER BY (n.read_at IS NOT NULL), n.created_at DESC LIMIT 100",
+      [req.user.id]
+    );
 
-    const unread = db
-      .prepare(
-        "SELECT COUNT(*) AS total FROM notifications " +
-          "WHERE channel = 'IN_APP' AND user_id = ? AND read_at IS NULL"
-      )
-      .get(req.user.id).total;
+    const { count } = await one(
+      "SELECT COUNT(*)::int AS count FROM notifications " +
+        "WHERE channel = 'IN_APP' AND user_id = $1 AND read_at IS NULL",
+      [req.user.id]
+    );
 
-    res.json({ notifications: rows.map(toJson), unread });
+    res.json({ notifications: rows.map(toJson), unread: count });
   })
 );
 
@@ -65,13 +63,12 @@ router.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const id = v.id(req.params.id, { field: "notification id" });
-    const info = db
-      .prepare(
-        "UPDATE notifications SET read_at = datetime('now') " +
-          "WHERE id = ? AND user_id = ? AND read_at IS NULL"
-      )
-      .run(id, req.user.id);
-    if (!info.changes) throw httpError(404, "That notification does not exist.");
+    const changed = await run(
+      "UPDATE notifications SET read_at = NOW() " +
+        "WHERE id = $1 AND user_id = $2 AND read_at IS NULL",
+      [id, req.user.id]
+    );
+    if (!changed) throw httpError(404, "That notification does not exist.");
     res.json({ ok: true });
   })
 );
@@ -80,13 +77,12 @@ router.post(
   "/read-all",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const info = db
-      .prepare(
-        "UPDATE notifications SET read_at = datetime('now') " +
-          "WHERE channel = 'IN_APP' AND user_id = ? AND read_at IS NULL"
-      )
-      .run(req.user.id);
-    res.json({ ok: true, updated: info.changes });
+    const updated = await run(
+      "UPDATE notifications SET read_at = NOW() " +
+        "WHERE channel = 'IN_APP' AND user_id = $1 AND read_at IS NULL",
+      [req.user.id]
+    );
+    res.json({ ok: true, updated });
   })
 );
 
@@ -100,19 +96,20 @@ router.get(
 
     if (req.query.pending === "1") where.push("n.sent_at IS NULL");
     if (req.query.candidate) {
-      where.push("n.candidate_id = ?");
       params.push(v.id(req.query.candidate, { field: "candidate id" }));
+      where.push("n.candidate_id = $" + params.length);
     }
 
-    const rows = db
-      .prepare(BASE + "WHERE " + where.join(" AND ") + " ORDER BY datetime(n.created_at) DESC LIMIT 200")
-      .all(...params);
+    const rows = await many(
+      BASE + "WHERE " + where.join(" AND ") + " ORDER BY n.created_at DESC LIMIT 200",
+      params
+    );
 
-    const pending = db
-      .prepare("SELECT COUNT(*) AS total FROM notifications WHERE channel = 'EMAIL' AND sent_at IS NULL")
-      .get().total;
+    const { count } = await one(
+      "SELECT COUNT(*)::int AS count FROM notifications WHERE channel = 'EMAIL' AND sent_at IS NULL"
+    );
 
-    res.json({ messages: rows.map(toJson), pending });
+    res.json({ messages: rows.map(toJson), pending: count });
   })
 );
 
@@ -122,10 +119,11 @@ router.post(
   requirePermission("outbox:view"),
   asyncHandler(async (req, res) => {
     const id = v.id(req.params.id, { field: "message id" });
-    const info = db
-      .prepare("UPDATE notifications SET sent_at = datetime('now') WHERE id = ? AND channel = 'EMAIL'")
-      .run(id);
-    if (!info.changes) throw httpError(404, "That message does not exist.");
+    const changed = await run(
+      "UPDATE notifications SET sent_at = NOW() WHERE id = $1 AND channel = 'EMAIL'",
+      [id]
+    );
+    if (!changed) throw httpError(404, "That message does not exist.");
     res.json({ ok: true });
   })
 );

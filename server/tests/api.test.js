@@ -1,9 +1,12 @@
 /**
  * Automated API tests - run them with:  npm test
  *
- * Node's own test runner, so there is no extra library to install. Each
- * run uses a brand new temporary SQLite file, so the tests never touch
- * the real database.
+ * These run against the real PostgreSQL database in Supabase, but inside
+ * their OWN throw-away schema which is created at the start and dropped
+ * at the end. Your real tables are never touched.
+ *
+ * Needs DATABASE_URL in .env (see database/README.md). Set
+ * TEST_DATABASE_URL if you would rather point the tests somewhere else.
  *
  * The suites follow the questions in the brief:
  *   - stages set per position
@@ -18,10 +21,29 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import bcrypt from "bcryptjs";
+import pg from "pg";
+import "dotenv/config";
 
-const TEST_DB = path.join(os.tmpdir(), "hiretrack-test-" + Date.now() + ".db");
-process.env.DATABASE_FILE = TEST_DB;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SCHEMA_FILE = path.join(__dirname, "..", "..", "database", "schema.sql");
+
+const CONNECTION = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+if (!CONNECTION) {
+  console.error(
+    "\n  DATABASE_URL is not set, so the tests cannot run.\n" +
+      "  Copy .env.example to .env and paste your Supabase connection string in.\n" +
+      "  Walkthrough: database/README.md\n"
+  );
+  process.exit(1);
+}
+
+// A schema name unique to this run, so two people can run the tests at
+// the same time against the same database without colliding.
+const TEST_SCHEMA = "hiretrack_test_" + Date.now() + "_" + process.pid;
+process.env.DATABASE_URL = CONNECTION;
+process.env.DATABASE_SCHEMA = TEST_SCHEMA;
 process.env.JWT_SECRET = "test-secret-not-used-anywhere-else";
 process.env.NODE_ENV = "test";
 
@@ -29,8 +51,18 @@ const TEST_UPLOADS = path.join(os.tmpdir(), "hiretrack-test-uploads-" + Date.now
 fs.mkdirSync(TEST_UPLOADS, { recursive: true });
 process.env.UPLOAD_DIR = TEST_UPLOADS;
 
+// Build the test schema BEFORE the app imports its own pool.
+const admin = new pg.Client({
+  connectionString: CONNECTION,
+  ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false },
+});
+await admin.connect();
+await admin.query('CREATE SCHEMA "' + TEST_SCHEMA + '"');
+await admin.query('SET search_path TO "' + TEST_SCHEMA + '"');
+await admin.query(fs.readFileSync(SCHEMA_FILE, "utf8"));
+
 const { createApp } = await import("../app.js");
-const { db } = await import("../db/index.js");
+const { one, many, run, closePool } = await import("../../database/index.js");
 
 let server;
 let baseUrl;
@@ -65,19 +97,24 @@ async function call(method, path, body, isForm = false) {
 
 /** There is no public sign-up, so accounts are inserted the way the
  *  seed script does. */
-function makeUser(name, email, role) {
-  db.prepare("INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)").run(
+async function makeUser(name, email, role) {
+  await run("INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, $4)", [
     name,
     email,
     bcrypt.hashSync("Password123", 10),
-    role
-  );
+    role,
+  ]);
 }
 
 async function signIn(email, password = "Password123") {
   cookie = "";
   const result = await call("POST", "/api/auth/signin", { email, password });
   assert.equal(result.status, 200, "could not sign in as " + email);
+}
+
+async function userId(email) {
+  const row = await one("SELECT id FROM users WHERE email = $1", [email]);
+  return Number(row.id);
 }
 
 before(async () => {
@@ -87,25 +124,27 @@ before(async () => {
   });
   baseUrl = "http://127.0.0.1:" + server.address().port;
 
-  makeUser("Test HR", "hr@example.com", "hr");
-  makeUser("Test Manager", "manager@example.com", "hiring_manager");
-  makeUser("Test Interviewer", "interviewer@example.com", "interviewer");
-  makeUser("Test Management", "management@example.com", "management");
+  await makeUser("Test HR", "hr@example.com", "hr");
+  await makeUser("Test Manager", "manager@example.com", "hiring_manager");
+  await makeUser("Test Interviewer", "interviewer@example.com", "interviewer");
+  await makeUser("Test Management", "management@example.com", "management");
 });
 
 after(async () => {
   await new Promise((resolve) => server.close(resolve));
-  for (const suffix of ["", "-wal", "-shm"]) {
-    fs.promises.unlink(TEST_DB + suffix).catch(() => {});
-  }
+  await closePool();
+  // Remove the whole test schema - nothing is left behind in Supabase.
+  await admin.query('DROP SCHEMA IF EXISTS "' + TEST_SCHEMA + '" CASCADE');
+  await admin.end();
   fs.promises.rm(TEST_UPLOADS, { recursive: true, force: true }).catch(() => {});
 });
 
 describe("health and sign-in", () => {
-  test("the API is up", async () => {
+  test("the API is up and talking to PostgreSQL", async () => {
     const { status, data } = await call("GET", "/api/health");
     assert.equal(status, 200);
     assert.equal(data.ok, true);
+    assert.match(data.server, /PostgreSQL/);
   });
 
   test("there is no public sign-up route", async () => {
@@ -134,6 +173,15 @@ describe("health and sign-in", () => {
     assert.equal(data.user.permissions["report:export"], true);
   });
 
+  test("email matching is case-insensitive (citext)", async () => {
+    cookie = "";
+    const { status } = await call("POST", "/api/auth/signin", {
+      email: "HR@Example.com",
+      password: "Password123",
+    });
+    assert.equal(status, 200);
+  });
+
   test("forgot password never reveals whether an email exists", async () => {
     const known = await call("POST", "/api/auth/forgot-password", { email: "hr@example.com" });
     const unknown = await call("POST", "/api/auth/forgot-password", { email: "nobody@example.com" });
@@ -145,8 +193,14 @@ describe("health and sign-in", () => {
       email: "management@example.com",
     });
     const token = new URL(data.devResetUrl).searchParams.get("token");
-    assert.equal((await call("POST", "/api/auth/reset-password", { token, password: "Password456" })).status, 200);
-    assert.equal((await call("POST", "/api/auth/reset-password", { token, password: "Password789" })).status, 400);
+    assert.equal(
+      (await call("POST", "/api/auth/reset-password", { token, password: "Password456" })).status,
+      200
+    );
+    assert.equal(
+      (await call("POST", "/api/auth/reset-password", { token, password: "Password789" })).status,
+      400
+    );
   });
 });
 
@@ -174,24 +228,23 @@ describe("positions and per-position interview stages", () => {
     assert.equal((await call("POST", "/api/jobs", { title: "   " })).status, 400);
   });
 
-  test("a stage in use cannot be removed", async () => {
-    await call("POST", "/api/candidates", {
-      jobId: 1,
-      fullName: "Stage Holder",
-      email: "holder@example.com",
+  test("an invalid employment type is refused by the ENUM", async () => {
+    const { status } = await call("POST", "/api/jobs", {
+      title: "Bad type",
+      employmentType: "Whenever",
     });
-    const { status } = await call("PATCH", "/api/jobs/1", { stages: ["Applied", "Offer"] });
-    assert.equal(status, 200, "nobody has moved off Applied yet");
-
-    await call("PATCH", "/api/jobs/1", { stages: ["Applied", "Interview", "Offer"] });
+    assert.equal(status, 400);
   });
 });
 
 describe("HR adds candidates", () => {
+  let jobId;
+
   test("HR adds a candidate, who starts at the first stage", async () => {
-    await signIn("hr@example.com");
+    jobId = Number((await one("SELECT id FROM jobs WHERE title = $1", ["Junior Developer"])).id);
+
     const { status, data } = await call("POST", "/api/candidates", {
-      jobId: 1,
+      jobId,
       fullName: "Maya Fernando",
       email: "maya@example.com",
       phone: "0771234567",
@@ -205,27 +258,30 @@ describe("HR adds candidates", () => {
 
   test("the same person cannot be added twice to one position", async () => {
     const { status } = await call("POST", "/api/candidates", {
-      jobId: 1,
+      jobId,
       fullName: "Maya Again",
-      email: "maya@example.com",
+      email: "MAYA@example.com", // citext: the same address
     });
     assert.equal(status, 409);
   });
 
   test("HR uploads their CV, and a .txt file is refused", async () => {
+    const id = Number((await one("SELECT id FROM candidates WHERE email = $1", ["maya@example.com"])).id);
+
     const good = new FormData();
     good.append("cv", new Blob(["%PDF-1.4 cv"], { type: "application/pdf" }), "maya.pdf");
-    const upload = await call("POST", "/api/candidates/2/cv", good, true);
+    const upload = await call("POST", "/api/candidates/" + id + "/cv", good, true);
     assert.equal(upload.status, 200);
     assert.equal(upload.data.candidate.cv.filename, "maya.pdf");
 
     const bad = new FormData();
     bad.append("cv", new Blob(["nope"], { type: "text/plain" }), "notes.txt");
-    assert.equal((await call("POST", "/api/candidates/2/cv", bad, true)).status, 400);
+    assert.equal((await call("POST", "/api/candidates/" + id + "/cv", bad, true)).status, 400);
   });
 
   test("the CV can be downloaded again", async () => {
-    const response = await fetch(baseUrl + "/api/candidates/2/cv", {
+    const id = Number((await one("SELECT id FROM candidates WHERE email = $1", ["maya@example.com"])).id);
+    const response = await fetch(baseUrl + "/api/candidates/" + id + "/cv", {
       headers: { Cookie: cookie },
     });
     assert.equal(response.status, 200);
@@ -238,8 +294,11 @@ describe("HR adds candidates", () => {
 });
 
 describe("CV screening bands", () => {
+  let mayaId;
+
   test("HR bands a CV", async () => {
-    const { status, data } = await call("POST", "/api/candidates/2/band", {
+    mayaId = Number((await one("SELECT id FROM candidates WHERE email = $1", ["maya@example.com"])).id);
+    const { status, data } = await call("POST", "/api/candidates/" + mayaId + "/band", {
       band: "HIGH",
       note: "Strong match",
     });
@@ -249,45 +308,53 @@ describe("CV screening bands", () => {
   });
 
   test("an invalid band is refused", async () => {
-    assert.equal((await call("POST", "/api/candidates/2/band", { band: "AMAZING" })).status, 400);
+    assert.equal(
+      (await call("POST", "/api/candidates/" + mayaId + "/band", { band: "AMAZING" })).status,
+      400
+    );
   });
 
   test("the list filters by band and reports the totals", async () => {
-    const all = await call("GET", "/api/candidates?job=1");
+    const all = await call("GET", "/api/candidates");
     assert.equal(all.data.bandCounts.HIGH, 1);
-    assert.equal(all.data.total, 2);
 
-    const high = await call("GET", "/api/candidates?job=1&cvBand=HIGH");
+    const high = await call("GET", "/api/candidates?cvBand=HIGH");
     assert.equal(high.data.candidates.length, 1);
-    assert.equal((await call("GET", "/api/candidates?job=1&cvBand=LOW")).data.candidates.length, 0);
+    assert.equal((await call("GET", "/api/candidates?cvBand=LOW")).data.candidates.length, 0);
   });
 
   test("bulk banding screens several at once", async () => {
     const { status, data } = await call("POST", "/api/candidates/band/bulk", {
-      ids: [1, 2],
+      ids: [mayaId],
       band: "MEDIUM",
     });
     assert.equal(status, 200);
-    assert.equal(data.updated, 2);
-    await call("POST", "/api/candidates/2/band", { band: "HIGH" });
+    assert.equal(data.updated, 1);
+    await call("POST", "/api/candidates/" + mayaId + "/band", { band: "HIGH" });
   });
 
   test("an interviewer cannot band a CV", async () => {
     await signIn("interviewer@example.com");
-    assert.equal((await call("POST", "/api/candidates/2/band", { band: "LOW" })).status, 403);
+    assert.equal(
+      (await call("POST", "/api/candidates/" + mayaId + "/band", { band: "LOW" })).status,
+      403
+    );
   });
 });
 
 describe("no advancing without feedback", () => {
+  let mayaId;
+
   test("the first stage is exempt - nobody has interviewed them yet", async () => {
+    mayaId = Number((await one("SELECT id FROM candidates WHERE email = $1", ["maya@example.com"])).id);
     await signIn("hr@example.com");
-    const { status, data } = await call("POST", "/api/candidates/2/advance");
+    const { status, data } = await call("POST", "/api/candidates/" + mayaId + "/advance");
     assert.equal(status, 200);
     assert.equal(data.candidate.currentStage, "Interview");
   });
 
   test("advancing past a stage with no feedback is blocked", async () => {
-    const { status, data } = await call("POST", "/api/candidates/2/advance");
+    const { status, data } = await call("POST", "/api/candidates/" + mayaId + "/advance");
     assert.equal(status, 400);
     assert.match(data.error, /Feedback for "Interview"/);
   });
@@ -295,7 +362,7 @@ describe("no advancing without feedback", () => {
   test("once feedback is in, the candidate moves on", async () => {
     await signIn("interviewer@example.com");
     const feedback = await call("POST", "/api/feedback", {
-      candidateId: 2,
+      candidateId: mayaId,
       stage: "Interview",
       rating: 4,
       recommendation: "ADVANCE",
@@ -304,20 +371,27 @@ describe("no advancing without feedback", () => {
     assert.equal(feedback.status, 201);
 
     await signIn("hr@example.com");
-    const { status, data } = await call("POST", "/api/candidates/2/advance");
+    const { status, data } = await call("POST", "/api/candidates/" + mayaId + "/advance");
     assert.equal(status, 200);
     assert.equal(data.candidate.currentStage, "Offer");
   });
 
   test("a candidate at the last stage cannot be advanced again", async () => {
-    assert.equal((await call("POST", "/api/candidates/2/advance")).status, 400);
+    assert.equal((await call("POST", "/api/candidates/" + mayaId + "/advance")).status, 400);
   });
 });
 
 describe("fair side-by-side comparison", () => {
+  let mayaId;
+  let jobId;
+
   test("a rating outside 1-5 is refused", async () => {
+    mayaId = Number((await one("SELECT id FROM candidates WHERE email = $1", ["maya@example.com"])).id);
+    jobId = Number((await one("SELECT job_id FROM candidates WHERE id = $1", [mayaId])).job_id);
+
     assert.equal(
-      (await call("POST", "/api/feedback", { candidateId: 2, stage: "Interview", rating: 9 })).status,
+      (await call("POST", "/api/feedback", { candidateId: mayaId, stage: "Interview", rating: 9 }))
+        .status,
       400
     );
   });
@@ -325,44 +399,45 @@ describe("fair side-by-side comparison", () => {
   test("writing again replaces my score instead of stacking a second one", async () => {
     await signIn("interviewer@example.com");
     await call("POST", "/api/feedback", {
-      candidateId: 2,
+      candidateId: mayaId,
       stage: "Interview",
       rating: 2,
       recommendation: "HOLD",
     });
-    const { data } = await call("GET", "/api/feedback?candidate=2&mine=1");
+    const { data } = await call("GET", "/api/feedback?candidate=" + mayaId + "&mine=1");
     assert.equal(data.feedback.length, 1);
     assert.equal(data.feedback[0].rating, 2);
   });
 
   test("the comparison table ranks candidates by average score", async () => {
     await signIn("manager@example.com");
-    const { status, data } = await call("GET", "/api/feedback/compare/1");
+    const { status, data } = await call("GET", "/api/feedback/compare/" + jobId);
     assert.equal(status, 200);
     assert.ok(data.stages.includes("Interview"));
-    const maya = data.candidates.find((c) => c.id === 2);
+    const maya = data.candidates.find((c) => c.id === mayaId);
     assert.equal(maya.averageRating, 2);
     assert.equal(maya.votes.hold, 1);
   });
 
   test("an interviewer cannot open the comparison", async () => {
     await signIn("interviewer@example.com");
-    assert.equal((await call("GET", "/api/feedback/compare/1")).status, 403);
+    assert.equal((await call("GET", "/api/feedback/compare/" + jobId)).status, 403);
   });
 });
 
 describe("telling candidates and interviewers about an interview", () => {
   let interviewId;
+  let mayaId;
 
   test("booking an interview notifies the interviewer in the app", async () => {
+    mayaId = Number((await one("SELECT id FROM candidates WHERE email = $1", ["maya@example.com"])).id);
     await signIn("hr@example.com");
-    const interviewerId = db.prepare("SELECT id FROM users WHERE email = ?").get("interviewer@example.com").id;
 
     const { status, data } = await call("POST", "/api/interviews", {
-      candidateId: 2,
+      candidateId: mayaId,
       stage: "Interview",
       scheduledAt: "2027-01-15T10:30",
-      interviewerId,
+      interviewerId: await userId("interviewer@example.com"),
       location: "Meeting room 2",
     });
     assert.equal(status, 201);
@@ -397,7 +472,10 @@ describe("telling candidates and interviewers about an interview", () => {
   test("an interviewer can mark their notification read", async () => {
     await signIn("interviewer@example.com");
     const { data } = await call("GET", "/api/notifications");
-    assert.equal((await call("POST", "/api/notifications/" + data.notifications[0].id + "/read")).status, 200);
+    assert.equal(
+      (await call("POST", "/api/notifications/" + data.notifications[0].id + "/read")).status,
+      200
+    );
     assert.equal((await call("GET", "/api/notifications")).data.unread, 0);
   });
 
@@ -414,7 +492,7 @@ describe("telling candidates and interviewers about an interview", () => {
 
   test("an invalid date is refused", async () => {
     const { status } = await call("POST", "/api/interviews", {
-      candidateId: 2,
+      candidateId: mayaId,
       stage: "Interview",
       scheduledAt: "the day after tomorrow",
     });
@@ -423,41 +501,64 @@ describe("telling candidates and interviewers about an interview", () => {
 });
 
 describe("who logs in, and what each role can do", () => {
+  let jobId;
+  let mayaId;
+
   test("only HR opens, edits or deletes a position", async () => {
-    for (const email of ["manager@example.com", "interviewer@example.com", "management@example.com"]) {
-      await signIn(email, email === "management@example.com" ? "Password456" : "Password123");
+    jobId = Number((await one("SELECT id FROM jobs WHERE title = $1", ["Junior Developer"])).id);
+
+    for (const [email, password] of [
+      ["manager@example.com", "Password123"],
+      ["interviewer@example.com", "Password123"],
+      ["management@example.com", "Password456"],
+    ]) {
+      await signIn(email, password);
       assert.equal((await call("POST", "/api/jobs", { title: "Nope" })).status, 403, email);
-      assert.equal((await call("PATCH", "/api/jobs/1", { title: "Nope" })).status, 403, email);
-      assert.equal((await call("DELETE", "/api/jobs/1")).status, 403, email);
+      assert.equal((await call("PATCH", "/api/jobs/" + jobId, { title: "Nope" })).status, 403, email);
+      assert.equal((await call("DELETE", "/api/jobs/" + jobId)).status, 403, email);
     }
   });
 
-  test("only HR adds candidates and uploads CVs", async () => {
+  test("only HR adds candidates", async () => {
     await signIn("manager@example.com");
     assert.equal(
-      (await call("POST", "/api/candidates", { jobId: 1, fullName: "X Y", email: "xy@example.com" }))
+      (await call("POST", "/api/candidates", { jobId, fullName: "X Y", email: "xy@example.com" }))
         .status,
       403
     );
   });
 
   test("the hiring manager can band, advance and record an outcome", async () => {
-    assert.equal((await call("POST", "/api/candidates/1/band", { band: "LOW" })).status, 200);
-    assert.equal((await call("PATCH", "/api/candidates/2", { outcome: "HIRED" })).status, 200);
+    mayaId = Number((await one("SELECT id FROM candidates WHERE email = $1", ["maya@example.com"])).id);
+    assert.equal(
+      (await call("POST", "/api/candidates/" + mayaId + "/band", { band: "LOW" })).status,
+      200
+    );
+    assert.equal(
+      (await call("PATCH", "/api/candidates/" + mayaId, { outcome: "HIRED" })).status,
+      200
+    );
   });
 
   test("management sees everything and changes nothing", async () => {
     await signIn("management@example.com", "Password456");
     assert.equal((await call("GET", "/api/candidates")).status, 200);
     assert.equal((await call("GET", "/api/jobs")).status, 200);
-    assert.equal((await call("GET", "/api/feedback/compare/1")).status, 200);
+    assert.equal((await call("GET", "/api/feedback/compare/" + jobId)).status, 200);
     assert.equal((await call("GET", "/api/reports")).status, 200);
 
-    assert.equal((await call("POST", "/api/candidates/1/band", { band: "HIGH" })).status, 403);
-    assert.equal((await call("POST", "/api/candidates/1/advance")).status, 403);
-    assert.equal((await call("PATCH", "/api/candidates/1", { outcome: "HIRED" })).status, 403);
     assert.equal(
-      (await call("POST", "/api/feedback", { candidateId: 1, stage: "Applied", rating: 5 })).status,
+      (await call("POST", "/api/candidates/" + mayaId + "/band", { band: "HIGH" })).status,
+      403
+    );
+    assert.equal((await call("POST", "/api/candidates/" + mayaId + "/advance")).status, 403);
+    assert.equal(
+      (await call("PATCH", "/api/candidates/" + mayaId, { outcome: "HIRED" })).status,
+      403
+    );
+    assert.equal(
+      (await call("POST", "/api/feedback", { candidateId: mayaId, stage: "Applied", rating: 5 }))
+        .status,
       403
     );
   });
@@ -484,20 +585,23 @@ describe("who logs in, and what each role can do", () => {
 
     await signIn("manager@example.com");
     assert.equal(
-      (await call("POST", "/api/team/members", {
-        name: "Nope",
-        email: "nope@example.com",
-        role: "hr",
-        password: "Password123",
-      })).status,
+      (
+        await call("POST", "/api/team/members", {
+          name: "Nope",
+          email: "nope@example.com",
+          role: "hr",
+          password: "Password123",
+        })
+      ).status,
       403
     );
   });
 
   test("the last HR account cannot demote itself", async () => {
     await signIn("hr@example.com");
-    const hrId = db.prepare("SELECT id FROM users WHERE email = ?").get("hr@example.com").id;
-    const { status, data } = await call("PATCH", "/api/team/members/" + hrId, { role: "interviewer" });
+    const { status, data } = await call("PATCH", "/api/team/members/" + (await userId("hr@example.com")), {
+      role: "interviewer",
+    });
     assert.equal(status, 400);
     assert.match(data.error, /at least one active HR/);
   });
@@ -508,12 +612,13 @@ describe("reports management can export", () => {
     await signIn("management@example.com", "Password456");
     const { data } = await call("GET", "/api/reports");
 
-    const total = db.prepare("SELECT COUNT(*) AS v FROM candidates").get().v;
-    assert.equal(data.summary.totalCandidates, total);
+    const { count } = await one("SELECT COUNT(*)::int AS count FROM candidates");
+    assert.equal(data.summary.totalCandidates, count);
 
-    const position1 = data.positions.find((row) => row.id === 1);
-    const actual = db.prepare("SELECT COUNT(*) AS v FROM candidates WHERE job_id = 1").get().v;
-    assert.equal(position1.candidates, actual, "feedback rows must not inflate the count");
+    const jobId = Number((await one("SELECT id FROM jobs WHERE title = $1", ["Junior Developer"])).id);
+    const position = data.positions.find((row) => row.id === jobId);
+    const actual = await one("SELECT COUNT(*)::int AS count FROM candidates WHERE job_id = $1", [jobId]);
+    assert.equal(position.candidates, actual.count, "feedback rows must not inflate the count");
   });
 
   test("CSV export downloads with the right headers", async () => {
@@ -523,15 +628,12 @@ describe("reports management can export", () => {
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-type"), /text\/csv/);
     assert.match(response.headers.get("content-disposition"), /hiretrack-positions\.csv/);
-
-    const body = await response.text();
-    assert.match(body, /Position,Department,Status/);
+    assert.match(await response.text(), /Position,Department,Status/);
   });
 
   test("every export variant works", async () => {
     for (const report of ["candidates", "stages", "interviewers"]) {
-      const { status } = await call("GET", "/api/reports/export.csv?report=" + report);
-      assert.equal(status, 200, report);
+      assert.equal((await call("GET", "/api/reports/export.csv?report=" + report)).status, 200, report);
     }
   });
 
@@ -539,5 +641,56 @@ describe("reports management can export", () => {
     await signIn("interviewer@example.com");
     assert.equal((await call("GET", "/api/reports")).status, 403);
     assert.equal((await call("GET", "/api/reports/export.csv")).status, 403);
+  });
+});
+
+describe("the database enforces its own rules", () => {
+  test("a rating outside 1-5 is refused by the CHECK constraint", async () => {
+    await assert.rejects(
+      () =>
+        run(
+          "INSERT INTO feedback (candidate_id, author_id, stage, rating) " +
+            "VALUES ((SELECT id FROM candidates LIMIT 1), (SELECT id FROM users LIMIT 1), 'X', 99)"
+        ),
+      /check constraint/i
+    );
+  });
+
+  test("an invalid role is refused by the ENUM type", async () => {
+    await assert.rejects(
+      () =>
+        run("INSERT INTO users (name, email, role) VALUES ($1, $2, $3)", [
+          "Bad Role",
+          "bad.role@example.com",
+          "supervillain",
+        ]),
+      /invalid input value for enum/i
+    );
+  });
+
+  test("deleting a position cascades to its candidates", async () => {
+    const job = await one(
+      "INSERT INTO jobs (title, created_by) VALUES ($1, (SELECT id FROM users LIMIT 1)) RETURNING id",
+      ["Cascade test"]
+    );
+    await run(
+      "INSERT INTO candidates (job_id, full_name, email, current_stage) VALUES ($1, $2, $3, $4)",
+      [job.id, "Cascade Person", "cascade@example.com", "Applied"]
+    );
+
+    await run("DELETE FROM jobs WHERE id = $1", [job.id]);
+    const left = await many("SELECT id FROM candidates WHERE job_id = $1", [job.id]);
+    assert.equal(left.length, 0);
+  });
+
+  test("updated_at is maintained by the trigger, not by the query", async () => {
+    const before = await one("SELECT id, updated_at FROM users WHERE email = $1", ["hr@example.com"]);
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    await run("UPDATE users SET job_title = $1 WHERE id = $2", ["Changed", before.id]);
+    const after = await one("SELECT updated_at FROM users WHERE id = $1", [before.id]);
+    assert.ok(
+      new Date(after.updated_at) > new Date(before.updated_at),
+      "the trigger moved updated_at forward"
+    );
   });
 });

@@ -12,7 +12,7 @@ Built for our second year, second semester group project.
 | --- | --- |
 | Front end | React 18 (JSX), React Router, plain CSS, built with Vite |
 | Back end | Node.js + Express (REST API) |
-| Database | SQLite (SQL) accessed with `better-sqlite3` — 8 tables |
+| Database | **PostgreSQL on Supabase**, accessed with `pg` (node-postgres) — 8 tables |
 | Auth | Email + password (bcrypt), JWT in an httpOnly cookie, optional Google sign-in |
 | Tests | Node's built-in test runner — 46 API tests |
 
@@ -26,12 +26,19 @@ Built for our second year, second semester group project.
 
 You need [Node.js](https://nodejs.org) 18.18 or newer (`node -v` to check).
 
+**First set up the database.** It takes about five minutes and you only do it
+once — the full walkthrough is in **[database/README.md](database/README.md)**:
+create a free Supabase project, copy the connection string, and paste it into
+`.env` as `DATABASE_URL`.
+
+Then:
+
 ```bash
 npm run setup
 ```
 
-That installs the back end, installs the front end and fills the database with
-demo data. Then:
+That installs the back end and the front end, creates every table in Supabase
+and fills it with demo data. Then:
 
 ```bash
 npm run dev
@@ -53,14 +60,15 @@ The four personas from the project plan are seeded too:
 `kevin.fernando@gmail.com` (HR), `arosh.perera@gmail.com` (Hiring Manager),
 `sara.salgadu@gmail.com` (Interviewer), `thusitha.s@gmail.com` (Management).
 
-> Change these names, emails and the demo password in `server/seed.js` before
+> Change these names, emails and the demo password in `database/seed.js` before
 > you hand the project in.
 
 ### All the commands
 
 | Command | What it does |
 | --- | --- |
-| `npm run setup` | Install everything and seed the database |
+| `npm run setup` | Install everything, create the tables and seed the database |
+| `npm run db:migrate` | Create/recreate the tables in Supabase from `database/schema.sql` |
 | `npm run dev` | Run the API and the React dev server together |
 | `npm run build` | Build the React app into `client/dist` |
 | `npm start` | Run the API, serving the built React app too |
@@ -165,7 +173,14 @@ from the checkboxes.
 ```
 our web/
 ├── package.json            back end dependencies + every npm script
-├── .env.example            copy to .env for your own settings
+├── .env.example            copy to .env and add your Supabase connection string
+│
+├── database/               everything to do with the database
+│   ├── schema.sql          the PostgreSQL schema (8 tables, types, triggers)
+│   ├── index.js            connection pool + query helpers
+│   ├── migrate.js          creates the tables in Supabase
+│   ├── seed.js             demo data
+│   └── README.md           step-by-step Supabase setup
 │
 ├── server/                 Express REST API
 │   ├── index.js            starts the server
@@ -176,11 +191,6 @@ our web/
 │   ├── validate.js         input validation helpers
 │   ├── upload.js           CV upload rules (type, size, safe filenames)
 │   ├── notify.js           in-app + outbox messages for interviews
-│   ├── seed.js             demo data
-│   ├── db/
-│   │   ├── schema.sql      the SQL schema (all eight tables)
-│   │   ├── index.js        opens SQLite and applies the schema
-│   │   └── app.db          created on first run - not committed
 │   ├── uploads/            uploaded CV files - not committed
 │   ├── routes/
 │   │   ├── auth.routes.js          sign in / out, forgot + reset, Google
@@ -210,7 +220,7 @@ our web/
 
 ## 5. The database
 
-Eight tables, defined in [`server/db/schema.sql`](server/db/schema.sql):
+Eight tables, defined in [`database/schema.sql`](database/schema.sql):
 
 ```
 users ──< jobs ──< job_stages
@@ -223,17 +233,20 @@ users ──< jobs ──< job_stages
 
 Worth mentioning in the report:
 
-- **Foreign keys are enforced** (`PRAGMA foreign_keys = ON`) with
-  `ON DELETE CASCADE`, so deleting a position cleans up its stages, candidates,
-  interviews and feedback.
-- **`CHECK` constraints** keep `role`, `status`, `outcome`, `cv_band`,
-  `employment_type` and `rating` valid at the database level, not only in code.
+- **Foreign keys** with `ON DELETE CASCADE`, so deleting a position cleans up
+  its stages, candidates, interviews and feedback.
+- **`ENUM` types** for `role`, `status`, `outcome`, `cv_band` and
+  `employment_type` — an invalid value cannot even be written to the table.
+- **A `CHECK` constraint** keeps a feedback rating between 1 and 5.
+- **A trigger** maintains `updated_at`, so no query can forget to set it.
 - **`UNIQUE (candidate_id, stage, author_id)`** on feedback is what makes the
   comparison fair.
 - **Every query is parameterised**, so SQL injection is not possible.
 - Report figures use **separate subqueries** rather than one big join — joining
   candidates to feedback would count a candidate once per review and silently
   inflate every total.
+- **`citext`** makes email comparison case-insensitive, so `Maya@gmail.com` and
+  `maya@gmail.com` are one person.
 
 ---
 
@@ -274,7 +287,9 @@ is turned away, because HR controls who gets in.
 npm test
 ```
 
-46 tests against a temporary throw-away database, grouped by the questions in
+Tests run against the real PostgreSQL database but inside their own throw-away
+schema, which is created at the start and dropped at the end — your real tables
+are never touched. They are grouped by the questions in
 the brief: per-position stages, the feedback gate before advancing, fair
 comparison, interview notifications, the four roles, CV screening, and the
 reports (including a test that the totals are not double-counted).

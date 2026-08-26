@@ -1,5 +1,5 @@
 import express from "express";
-import { db } from "../db/index.js";
+import { one, many, run } from "../../database/index.js";
 import { asyncHandler, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 import { stagesFor } from "./jobs.routes.js";
@@ -7,17 +7,19 @@ import { notifyInterviewScheduled, notifyInterviewCancelled } from "../notify.js
 
 const router = express.Router();
 
+const num = (value) => (value === null || value === undefined ? null : Number(value));
+
 function toJson(row) {
   if (!row) return null;
   return {
-    id: row.id,
-    candidateId: row.candidate_id,
+    id: Number(row.id),
+    candidateId: Number(row.candidate_id),
     candidateName: row.candidate_name ?? null,
     candidateEmail: row.candidate_email ?? null,
     jobTitle: row.job_title ?? null,
     stage: row.stage,
     scheduledAt: row.scheduled_at,
-    interviewerId: row.interviewer_id,
+    interviewerId: num(row.interviewer_id),
     interviewerName: row.interviewer_name,
     interviewerEmail: row.interviewer_email,
     location: row.location,
@@ -26,7 +28,7 @@ function toJson(row) {
     createdAt: row.created_at,
     // Has this interviewer left their feedback yet? This is what turns
     // the interview list into a to-do list.
-    feedbackGiven: Boolean(row.feedback_given),
+    feedbackGiven: Number(row.feedback_given ?? 0) > 0,
   };
 }
 
@@ -49,25 +51,24 @@ router.get(
     const params = [];
 
     if (req.query.candidate) {
-      where.push("i.candidate_id = ?");
       params.push(v.id(req.query.candidate, { field: "candidate id" }));
+      where.push("i.candidate_id = $" + params.length);
     }
     if (req.query.upcoming === "1") {
-      where.push("datetime(i.scheduled_at) >= datetime('now')");
+      where.push("i.scheduled_at >= NOW()");
     }
     // An interviewer's own schedule.
     if (req.query.mine === "1") {
-      where.push("i.interviewer_id = ?");
       params.push(req.user.id);
+      where.push("i.interviewer_id = $" + params.length);
     }
 
-    const rows = db
-      .prepare(
-        BASE_SELECT +
-          (where.length ? "WHERE " + where.join(" AND ") + " " : "") +
-          "ORDER BY datetime(i.scheduled_at) ASC"
-      )
-      .all(...params);
+    const rows = await many(
+      BASE_SELECT +
+        (where.length ? "WHERE " + where.join(" AND ") + " " : "") +
+        "ORDER BY i.scheduled_at ASC",
+      params
+    );
 
     res.json({ interviews: rows.map(toJson) });
   })
@@ -79,11 +80,11 @@ router.post(
   requirePermission("interview:schedule"),
   asyncHandler(async (req, res) => {
     const candidateId = v.id(req.body.candidateId, { field: "candidate id" });
-    const candidate = db.prepare("SELECT * FROM candidates WHERE id = ?").get(candidateId);
+    const candidate = await one("SELECT * FROM candidates WHERE id = $1", [candidateId]);
     if (!candidate) throw httpError(404, "That candidate does not exist.");
 
-    const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(candidate.job_id);
-    const stages = stagesFor(candidate.job_id);
+    const job = await one("SELECT * FROM jobs WHERE id = $1", [candidate.job_id]);
+    const stages = await stagesFor(candidate.job_id);
     const stage = v.oneOf(req.body.stage, stages, {
       field: "Stage",
       fallback: candidate.current_stage,
@@ -107,9 +108,10 @@ router.post(
 
     if (req.body.interviewerId) {
       interviewerId = v.id(req.body.interviewerId, { field: "interviewer" });
-      const person = db
-        .prepare("SELECT id, name, email FROM users WHERE id = ? AND is_active = 1")
-        .get(interviewerId);
+      const person = await one(
+        "SELECT id, name, email FROM users WHERE id = $1 AND is_active",
+        [interviewerId]
+      );
       if (!person) throw httpError(404, "That interviewer does not exist.");
       interviewerName = person.name;
       interviewerEmail = person.email;
@@ -118,13 +120,11 @@ router.post(
     const location = v.str(req.body.location, { field: "Location", max: 200 });
     const notes = v.str(req.body.notes, { field: "Notes", max: 1000 });
 
-    const info = db
-      .prepare(
-        "INSERT INTO interviews (candidate_id, stage, scheduled_at, interviewer_id, " +
-          "interviewer_name, interviewer_email, location, notes, created_by) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      )
-      .run(
+    const created = await one(
+      "INSERT INTO interviews (candidate_id, stage, scheduled_at, interviewer_id, " +
+        "interviewer_name, interviewer_email, location, notes, created_by) " +
+        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
+      [
         candidateId,
         stage,
         when.toISOString(),
@@ -133,16 +133,17 @@ router.post(
         interviewerEmail,
         location,
         notes,
-        req.user.id
-      );
+        req.user.id,
+      ]
+    );
 
-    const interview = db.prepare("SELECT * FROM interviews WHERE id = ?").get(info.lastInsertRowid);
+    const interview = await one("SELECT * FROM interviews WHERE id = $1", [created.id]);
 
     // Tell the interviewer in the app, and write the candidate's email
     // into the outbox.
-    notifyInterviewScheduled({ interview, candidate, job, bookedBy: req.user });
+    await notifyInterviewScheduled({ interview, candidate, job, bookedBy: req.user });
 
-    const row = db.prepare(BASE_SELECT + "WHERE i.id = ?").get(info.lastInsertRowid);
+    const row = await one(BASE_SELECT + "WHERE i.id = $1", [created.id]);
     res.status(201).json({ interview: toJson(row) });
   })
 );
@@ -153,16 +154,14 @@ router.delete(
   requirePermission("interview:schedule"),
   asyncHandler(async (req, res) => {
     const id = v.id(req.params.id, { field: "interview id" });
-    const interview = db.prepare("SELECT * FROM interviews WHERE id = ?").get(id);
+    const interview = await one("SELECT * FROM interviews WHERE id = $1", [id]);
     if (!interview) throw httpError(404, "That interview does not exist.");
 
-    const candidate = db
-      .prepare("SELECT * FROM candidates WHERE id = ?")
-      .get(interview.candidate_id);
-    const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(candidate.job_id);
+    const candidate = await one("SELECT * FROM candidates WHERE id = $1", [interview.candidate_id]);
+    const job = await one("SELECT * FROM jobs WHERE id = $1", [candidate.job_id]);
 
-    notifyInterviewCancelled({ interview, candidate, job, cancelledBy: req.user });
-    db.prepare("DELETE FROM interviews WHERE id = ?").run(id);
+    await notifyInterviewCancelled({ interview, candidate, job, cancelledBy: req.user });
+    await run("DELETE FROM interviews WHERE id = $1", [id]);
 
     res.json({ ok: true });
   })

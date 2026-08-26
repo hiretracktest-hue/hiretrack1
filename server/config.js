@@ -20,6 +20,14 @@ if (!process.env.JWT_SECRET) {
 export const config = {
   isProduction,
   port: Number(process.env.PORT) || 4000,
+
+  // Supabase PostgreSQL. Project Settings -> Database -> Connection
+  // string -> URI, then paste it into .env as DATABASE_URL.
+  databaseUrl: process.env.DATABASE_URL || "",
+  // Supabase always uses TLS. Set DATABASE_SSL=false only if you point
+  // this at a plain local PostgreSQL server.
+  databaseSsl: process.env.DATABASE_SSL !== "false",
+  logSlowQueries: process.env.LOG_SLOW_QUERIES === "true",
   jwtSecret: process.env.JWT_SECRET || DEV_SECRET,
   jwtExpiresIn: Number(process.env.JWT_EXPIRES_IN) || 60 * 60 * 24 * 7, // 7 days
   clientUrl: process.env.CLIENT_URL || "http://localhost:5173",

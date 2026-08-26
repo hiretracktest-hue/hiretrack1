@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { config, permissionsFor, ROLE_LABELS } from "./config.js";
-import { db } from "./db/index.js";
+import { one, run } from "../database/index.js";
 
 export const COOKIE_NAME = "hiretrack_token";
 
@@ -50,19 +50,18 @@ export function clearAuthCookie(res) {
   });
 }
 
-const selectUser = db.prepare(
-  "SELECT id, name, email, role, job_title, avatar_url, google_id, created_at " +
-    "FROM users WHERE id = ? AND is_active = 1"
-);
-
 export function findUserById(id) {
-  return selectUser.get(id);
+  return one(
+    "SELECT id, name, email, role, job_title, avatar_url, google_id, created_at " +
+      "FROM users WHERE id = $1 AND is_active",
+    [id]
+  );
 }
 
 export function publicUser(row) {
   if (!row) return null;
   return {
-    id: row.id,
+    id: Number(row.id),
     name: row.name,
     email: row.email,
     role: row.role,
@@ -81,23 +80,22 @@ export function publicUser(row) {
 // --- password reset tokens -----------------------------------------
 // The raw token goes to the user; only its SHA-256 hash is stored, so a
 // leaked database still cannot be used to reset anyone's password.
-export function createResetToken(userId) {
+export async function createResetToken(userId) {
   const token = crypto.randomBytes(32).toString("hex");
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
 
-  db.prepare(
-    "INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES (?, ?, ?)"
-  ).run(userId, tokenHash, expiresAt);
+  await run(
+    "INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES ($1, $2, $3)",
+    [userId, tokenHash, expiresAt]
+  );
 
   return token;
 }
 
-export function consumeResetToken(token) {
+export async function consumeResetToken(token) {
   const tokenHash = crypto.createHash("sha256").update(String(token)).digest("hex");
-  const row = db
-    .prepare("SELECT * FROM password_resets WHERE token_hash = ?")
-    .get(tokenHash);
+  const row = await one("SELECT * FROM password_resets WHERE token_hash = $1", [tokenHash]);
 
   if (!row) return { error: "This reset link is not valid." };
   if (row.used_at) return { error: "This reset link has already been used." };
@@ -108,5 +106,5 @@ export function consumeResetToken(token) {
 }
 
 export function markResetUsed(resetId) {
-  db.prepare("UPDATE password_resets SET used_at = datetime('now') WHERE id = ?").run(resetId);
+  return run("UPDATE password_resets SET used_at = NOW() WHERE id = $1", [resetId]);
 }

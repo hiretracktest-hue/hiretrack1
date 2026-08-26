@@ -1,5 +1,5 @@
 import express from "express";
-import { db } from "../db/index.js";
+import { one, many, run, transaction } from "../../database/index.js";
 import { asyncHandler, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 
@@ -9,28 +9,32 @@ const router = express.Router();
 export const DEFAULT_STAGES = ["Applied", "Screening", "Interview", "Offer", "Hired"];
 const EMPLOYMENT_TYPES = ["Full-time", "Part-time", "Contract", "Internship"];
 
-const selectStages = db.prepare(
-  "SELECT name FROM job_stages WHERE job_id = ? ORDER BY position ASC"
-);
-const selectJob = db.prepare("SELECT * FROM jobs WHERE id = ?");
-const countCandidates = db.prepare("SELECT COUNT(*) AS total FROM candidates WHERE job_id = ?");
-
-export function stagesFor(jobId) {
-  return selectStages.all(jobId).map((row) => row.name);
+export async function stagesFor(jobId) {
+  const rows = await many(
+    "SELECT name FROM job_stages WHERE job_id = $1 ORDER BY position ASC",
+    [jobId]
+  );
+  return rows.map((row) => row.name);
 }
 
-// Replaces the whole pipeline for a position in one transaction, so the
-// table can never be left half-updated if something fails.
-const replaceStages = db.transaction((jobId, stages) => {
-  db.prepare("DELETE FROM job_stages WHERE job_id = ?").run(jobId);
-  const insert = db.prepare("INSERT INTO job_stages (job_id, name, position) VALUES (?, ?, ?)");
-  stages.forEach((name, index) => insert.run(jobId, name, index));
-});
+/**
+ * Replaces the whole pipeline for a position. Runs inside the caller's
+ * transaction so the table can never be left half-updated.
+ */
+async function replaceStages(client, jobId, stages) {
+  await client.query("DELETE FROM job_stages WHERE job_id = $1", [jobId]);
+  for (const [index, name] of stages.entries()) {
+    await client.query(
+      "INSERT INTO job_stages (job_id, name, position) VALUES ($1, $2, $3)",
+      [jobId, name, index]
+    );
+  }
+}
 
-export function jobToJson(row, { includeStages = true } = {}) {
+export async function jobToJson(row, { includeStages = true } = {}) {
   if (!row) return null;
   return {
-    id: row.id,
+    id: Number(row.id),
     title: row.title,
     department: row.department,
     location: row.location,
@@ -39,14 +43,14 @@ export function jobToJson(row, { includeStages = true } = {}) {
     salaryRange: row.salary_range,
     closingDate: row.closing_date,
     status: row.status,
-    hiringManagerId: row.hiring_manager,
+    hiringManagerId: row.hiring_manager ? Number(row.hiring_manager) : null,
     hiringManagerName: row.hiring_manager_name ?? null,
-    createdBy: row.created_by,
+    createdBy: row.created_by ? Number(row.created_by) : null,
     createdByName: row.created_by_name ?? null,
-    candidateCount: row.candidate_count ?? undefined,
+    candidateCount: row.candidate_count === undefined ? undefined : Number(row.candidate_count),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    stages: includeStages ? stagesFor(row.id) : undefined,
+    stages: includeStages ? await stagesFor(row.id) : undefined,
   };
 }
 
@@ -67,26 +71,25 @@ router.get(
 
     const status = req.query.status ? String(req.query.status).toUpperCase() : "";
     if (status === "ACTIVE" || status === "CLOSED") {
-      where.push("j.status = ?");
       params.push(status);
+      where.push("j.status = $" + params.length);
     }
 
     const search = String(req.query.q || "").trim();
     if (search) {
-      where.push("(j.title LIKE ? OR j.department LIKE ? OR j.location LIKE ?)");
-      const like = "%" + search + "%";
-      params.push(like, like, like);
+      params.push("%" + search + "%");
+      const n = params.length;
+      where.push("(j.title ILIKE $" + n + " OR j.department ILIKE $" + n + " OR j.location ILIKE $" + n + ")");
     }
 
-    const rows = db
-      .prepare(
-        BASE_SELECT +
-          (where.length ? "WHERE " + where.join(" AND ") + " " : "") +
-          "ORDER BY j.status ASC, datetime(j.created_at) DESC"
-      )
-      .all(...params);
+    const rows = await many(
+      BASE_SELECT +
+        (where.length ? "WHERE " + where.join(" AND ") + " " : "") +
+        "ORDER BY j.status ASC, j.created_at DESC",
+      params
+    );
 
-    res.json({ jobs: rows.map((row) => jobToJson(row)) });
+    res.json({ jobs: await Promise.all(rows.map((row) => jobToJson(row))) });
   })
 );
 
@@ -96,9 +99,9 @@ router.get(
   requirePermission("position:view"),
   asyncHandler(async (req, res) => {
     const jobId = v.id(req.params.id, { field: "position id" });
-    const row = db.prepare(BASE_SELECT + "WHERE j.id = ?").get(jobId);
+    const row = await one(BASE_SELECT + "WHERE j.id = $1", [jobId]);
     if (!row) throw httpError(404, "That position does not exist.");
-    res.json({ job: jobToJson(row) });
+    res.json({ job: await jobToJson(row) });
   })
 );
 
@@ -122,14 +125,12 @@ router.post(
       ? v.id(req.body.hiringManagerId, { field: "hiring manager" })
       : null;
 
-    const created = db.transaction(() => {
-      const info = db
-        .prepare(
-          "INSERT INTO jobs (title, department, location, employment_type, description, " +
-            "salary_range, closing_date, hiring_manager, created_by) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        )
-        .run(
+    const jobId = await transaction(async (client) => {
+      const result = await client.query(
+        "INSERT INTO jobs (title, department, location, employment_type, description, " +
+          "salary_range, closing_date, hiring_manager, created_by) " +
+          "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
+        [
           title,
           department,
           location,
@@ -138,14 +139,16 @@ router.post(
           salaryRange,
           closingDate,
           hiringManager,
-          req.user.id
-        );
-      const jobId = Number(info.lastInsertRowid);
-      replaceStages(jobId, stages);
-      return jobId;
-    })();
+          req.user.id,
+        ]
+      );
+      const id = result.rows[0].id;
+      await replaceStages(client, id, stages);
+      return id;
+    });
 
-    res.status(201).json({ job: jobToJson(db.prepare(BASE_SELECT + "WHERE j.id = ?").get(created)) });
+    const row = await one(BASE_SELECT + "WHERE j.id = $1", [jobId]);
+    res.status(201).json({ job: await jobToJson(row) });
   })
 );
 
@@ -155,13 +158,15 @@ router.patch(
   requirePermission("position:edit"),
   asyncHandler(async (req, res) => {
     const jobId = v.id(req.params.id, { field: "position id" });
-    if (!selectJob.get(jobId)) throw httpError(404, "That position does not exist.");
+    if (!(await one("SELECT id FROM jobs WHERE id = $1", [jobId]))) {
+      throw httpError(404, "That position does not exist.");
+    }
 
-    const fields = [];
+    const sets = [];
     const params = [];
     const push = (column, value) => {
-      fields.push(column + " = ?");
       params.push(value);
+      sets.push(column + " = $" + params.length);
     };
 
     if (req.body.title !== undefined) {
@@ -200,13 +205,12 @@ router.patch(
 
     const stages = v.stageList(req.body.stages, { fallback: undefined });
 
-    // A stage that candidates are currently sitting on cannot be removed,
+    // A stage that candidates are standing on cannot be removed,
     // otherwise their current_stage would point at nothing.
     if (stages) {
-      const inUse = db
-        .prepare("SELECT DISTINCT current_stage FROM candidates WHERE job_id = ?")
-        .all(jobId)
-        .map((row) => row.current_stage);
+      const inUse = (
+        await many("SELECT DISTINCT current_stage FROM candidates WHERE job_id = $1", [jobId])
+      ).map((row) => row.current_stage);
       const orphaned = inUse.filter((stage) => !stages.includes(stage));
       if (orphaned.length) {
         throw httpError(
@@ -216,17 +220,19 @@ router.patch(
       }
     }
 
-    db.transaction(() => {
-      if (fields.length) {
+    await transaction(async (client) => {
+      if (sets.length) {
         params.push(jobId);
-        db.prepare(
-          "UPDATE jobs SET " + fields.join(", ") + ", updated_at = datetime('now') WHERE id = ?"
-        ).run(...params);
+        await client.query(
+          "UPDATE jobs SET " + sets.join(", ") + " WHERE id = $" + params.length,
+          params
+        );
       }
-      if (stages) replaceStages(jobId, stages);
-    })();
+      if (stages) await replaceStages(client, jobId, stages);
+    });
 
-    res.json({ job: jobToJson(db.prepare(BASE_SELECT + "WHERE j.id = ?").get(jobId)) });
+    const row = await one(BASE_SELECT + "WHERE j.id = $1", [jobId]);
+    res.json({ job: await jobToJson(row) });
   })
 );
 
@@ -236,17 +242,22 @@ router.delete(
   requirePermission("position:delete"),
   asyncHandler(async (req, res) => {
     const jobId = v.id(req.params.id, { field: "position id" });
-    if (!selectJob.get(jobId)) throw httpError(404, "That position does not exist.");
+    if (!(await one("SELECT id FROM jobs WHERE id = $1", [jobId]))) {
+      throw httpError(404, "That position does not exist.");
+    }
 
-    const total = countCandidates.get(jobId).total;
-    if (total > 0) {
+    const { count } = await one(
+      "SELECT COUNT(*)::int AS count FROM candidates WHERE job_id = $1",
+      [jobId]
+    );
+    if (count > 0) {
       throw httpError(
         400,
-        "This position has " + total + " candidate(s). Close it instead of deleting it."
+        "This position has " + count + " candidate(s). Close it instead of deleting it."
       );
     }
 
-    db.prepare("DELETE FROM jobs WHERE id = ?").run(jobId);
+    await run("DELETE FROM jobs WHERE id = $1", [jobId]);
     res.json({ ok: true });
   })
 );
