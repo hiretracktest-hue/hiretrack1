@@ -1,6 +1,6 @@
 import express from "express";
 import { db } from "../db/index.js";
-import { asyncHandler, requireAuth, httpError } from "../middleware.js";
+import { asyncHandler, requireStaff, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 
 const router = express.Router();
@@ -111,7 +111,7 @@ router.get(
 // --- Create -----------------------------------------------------------
 router.post(
   "/",
-  requireAuth,
+  requireStaff,
   asyncHandler(async (req, res) => {
     const title = v.str(req.body.title, { field: "Job title", required: true, max: 120 });
     const department = v.str(req.body.department, { field: "Department", max: 80 });
@@ -153,7 +153,7 @@ router.post(
 // --- Update / close / reopen -----------------------------------------
 router.patch(
   "/:id",
-  requireAuth,
+  requireStaff,
   asyncHandler(async (req, res) => {
     const jobId = v.id(req.params.id, { field: "vacancy id" });
     const existing = selectJob.get(jobId);
@@ -230,7 +230,7 @@ router.patch(
 // --- Delete -----------------------------------------------------------
 router.delete(
   "/:id",
-  requireAuth,
+  requireStaff,
   asyncHandler(async (req, res) => {
     const jobId = v.id(req.params.id, { field: "vacancy id" });
     const existing = selectJob.get(jobId);

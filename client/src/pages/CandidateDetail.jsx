@@ -3,24 +3,31 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api.js";
 import {
   Alert,
+  CvStatusBadge,
   Field,
   Loading,
   OUTCOME_LABEL,
   OutcomeBadge,
   Pipeline,
+  RecommendationBadge,
+  Stars,
   formatBytes,
   formatDate,
   formatDateTime,
 } from "../components/ui.jsx";
+import { useAuth } from "../AuthContext.jsx";
 
 const OUTCOMES = ["ACTIVE", "ON_HOLD", "HIRED", "REJECTED"];
+const RECOMMENDATIONS = ["ADVANCE", "HOLD", "REJECT"];
 
 export default function CandidateDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
 
+  const { user } = useAuth();
   const [application, setApplication] = useState(null);
   const [interviews, setInterviews] = useState([]);
+  const [feedback, setFeedback] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -37,6 +44,14 @@ export default function CandidateDetail() {
     interviewerEmail: "",
     notes: "",
   });
+  const [feedbackForm, setFeedbackForm] = useState({
+    stage: "",
+    rating: 4,
+    recommendation: "ADVANCE",
+    strengths: "",
+    concerns: "",
+    comment: "",
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -44,6 +59,7 @@ export default function CandidateDetail() {
       const result = await api.getApplication(id);
       setApplication(result.application);
       setInterviews(result.interviews);
+      setFeedback(result.feedback || []);
       setOutcome(result.application.outcome);
       setEditForm({
         fullName: result.application.fullName,
@@ -54,6 +70,10 @@ export default function CandidateDetail() {
         notes: result.application.notes || "",
       });
       setInterviewForm((current) => ({
+        ...current,
+        stage: current.stage || result.application.currentStage,
+      }));
+      setFeedbackForm((current) => ({
         ...current,
         stage: current.stage || result.application.currentStage,
       }));
@@ -108,6 +128,42 @@ export default function CandidateDetail() {
       () => api.updateApplication(id, { outcome }),
       "Outcome recorded as " + OUTCOME_LABEL[outcome] + "."
     );
+  }
+
+  async function reviewCv(status) {
+    await run(
+      () => api.reviewCv(id, status),
+      status === "ACCEPTED"
+        ? "CV accepted - the candidate can see this on their own page."
+        : "CV rejected - the candidate has been marked as not successful."
+    );
+  }
+
+  async function submitFeedback(event) {
+    event.preventDefault();
+    const result = await run(
+      () =>
+        api.leaveFeedback({
+          applicationId: Number(id),
+          ...feedbackForm,
+          rating: Number(feedbackForm.rating),
+        }),
+      "Your feedback was saved."
+    );
+    if (result?.feedback) {
+      // One entry per person per stage: replace mine if it is already there.
+      setFeedback((current) => [
+        result.feedback,
+        ...current.filter((item) => item.id !== result.feedback.id),
+      ]);
+      setFeedbackForm((current) => ({ ...current, strengths: "", concerns: "", comment: "" }));
+    }
+  }
+
+  async function removeFeedback(feedbackId) {
+    if (!window.confirm("Delete your feedback?")) return;
+    const result = await run(() => api.deleteFeedback(feedbackId), "Feedback deleted.");
+    if (result) setFeedback((current) => current.filter((item) => item.id !== feedbackId));
   }
 
   async function uploadCv(event) {
@@ -167,6 +223,9 @@ export default function CandidateDetail() {
   function updateInterview(key) {
     return (event) => setInterviewForm((current) => ({ ...current, [key]: event.target.value }));
   }
+  function updateFeedback(key) {
+    return (event) => setFeedbackForm((current) => ({ ...current, [key]: event.target.value }));
+  }
 
   if (loading) return <Loading what="this candidate" />;
   if (!application) {
@@ -181,6 +240,9 @@ export default function CandidateDetail() {
   }
 
   const stages = application.stages || [];
+  const averageRating = feedback.length
+    ? Math.round((feedback.reduce((sum, item) => sum + item.rating, 0) / feedback.length) * 10) / 10
+    : null;
   const stageIndex = stages.indexOf(application.currentStage);
   const nextStage = stageIndex >= 0 && stageIndex < stages.length - 1 ? stages[stageIndex + 1] : null;
 
@@ -368,6 +430,147 @@ export default function CandidateDetail() {
 
           <div className="card">
             <div className="card-title">
+              <h2>Interview feedback</h2>
+              <span className="muted small">
+                {feedback.length} review{feedback.length === 1 ? "" : "s"}
+                {averageRating !== null ? " · average " + averageRating + " / 5" : ""}
+              </span>
+            </div>
+
+            {feedback.length > 0 && (
+              <div className="mb-2">
+                {feedback.map((item) => (
+                  <div className="feedback-item" key={item.id}>
+                    <div className="row-between">
+                      <div>
+                        <strong>{item.authorName || "Unknown"}</strong>{" "}
+                        <span className="small muted">· {item.stage}</span>
+                      </div>
+                      <div className="btn-row">
+                        <Stars value={item.rating} />
+                        <RecommendationBadge value={item.recommendation} />
+                      </div>
+                    </div>
+
+                    {item.strengths && (
+                      <p className="small mt-1">
+                        <strong>Strengths:</strong> {item.strengths}
+                      </p>
+                    )}
+                    {item.concerns && (
+                      <p className="small">
+                        <strong>Concerns:</strong> {item.concerns}
+                      </p>
+                    )}
+                    {item.comment && <p className="small mt-1">{item.comment}</p>}
+
+                    <div className="row-between mt-1">
+                      <span className="cell-sub">{formatDateTime(item.createdAt)}</span>
+                      {item.authorId === user?.id && (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => removeFeedback(item.id)}
+                          disabled={busy}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <form onSubmit={submitFeedback}>
+              <div className="grid grid-3">
+                <Field label="Stage" htmlFor="feedbackStage">
+                  <select
+                    id="feedbackStage"
+                    className="select"
+                    value={feedbackForm.stage}
+                    onChange={updateFeedback("stage")}
+                  >
+                    {stages.map((stage) => (
+                      <option key={stage} value={stage}>
+                        {stage}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Rating (1-5)" htmlFor="rating">
+                  <select
+                    id="rating"
+                    className="select"
+                    value={feedbackForm.rating}
+                    onChange={updateFeedback("rating")}
+                  >
+                    {[1, 2, 3, 4, 5].map((value) => (
+                      <option key={value} value={value}>
+                        {value} / 5
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Recommendation" htmlFor="recommendation">
+                  <select
+                    id="recommendation"
+                    className="select"
+                    value={feedbackForm.recommendation}
+                    onChange={updateFeedback("recommendation")}
+                  >
+                    {RECOMMENDATIONS.map((value) => (
+                      <option key={value} value={value}>
+                        {value.charAt(0) + value.slice(1).toLowerCase()}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+
+              <div className="grid grid-2">
+                <Field label="Strengths" htmlFor="strengths">
+                  <textarea
+                    id="strengths"
+                    className="textarea"
+                    rows={2}
+                    placeholder="What went well?"
+                    value={feedbackForm.strengths}
+                    onChange={updateFeedback("strengths")}
+                  />
+                </Field>
+                <Field label="Concerns" htmlFor="concerns">
+                  <textarea
+                    id="concerns"
+                    className="textarea"
+                    rows={2}
+                    placeholder="Anything that worried you?"
+                    value={feedbackForm.concerns}
+                    onChange={updateFeedback("concerns")}
+                  />
+                </Field>
+              </div>
+
+              <Field label="Overall comment" htmlFor="comment">
+                <textarea
+                  id="comment"
+                  className="textarea"
+                  rows={2}
+                  value={feedbackForm.comment}
+                  onChange={updateFeedback("comment")}
+                />
+              </Field>
+
+              <button className="btn btn-primary" disabled={busy}>
+                Save my feedback
+              </button>
+              <p className="field-hint">
+                You get one score per stage — saving again updates the one you already left.
+              </p>
+            </form>
+          </div>
+
+          <div className="card">
+            <div className="card-title">
               <h2>Interviews</h2>
               <span className="muted small">{interviews.length} scheduled</span>
             </div>
@@ -465,7 +668,10 @@ export default function CandidateDetail() {
 
         <div>
           <div className="card">
-            <h2>CV</h2>
+            <div className="card-title">
+              <h2>CV</h2>
+              <CvStatusBadge status={application.cvStatus} hasCv={Boolean(application.cv)} />
+            </div>
 
             {application.cv ? (
               <div className="mt-2">
@@ -485,6 +691,27 @@ export default function CandidateDetail() {
                     Remove
                   </button>
                 </div>
+
+                {/* This is the decision the client is waiting on. */}
+                <div className="btn-row mt-3">
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => reviewCv("ACCEPTED")}
+                    disabled={busy || application.cvStatus === "ACCEPTED"}
+                  >
+                    Accept CV
+                  </button>
+                  <button
+                    className="btn btn-danger btn-sm"
+                    onClick={() => reviewCv("REJECTED")}
+                    disabled={busy || application.cvStatus === "REJECTED"}
+                  >
+                    Reject CV
+                  </button>
+                </div>
+                <p className="field-hint">
+                  The candidate sees this decision on their own “My applications” page.
+                </p>
               </div>
             ) : (
               <p className="muted small mt-1">No CV has been uploaded yet.</p>

@@ -89,6 +89,65 @@ export function StatusBadge({ status }) {
   );
 }
 
+const CLIENT_STATUS_STYLE = {
+  NO_CV: "badge-grey",
+  PENDING: "badge-amber",
+  ACCEPTED: "badge-green",
+  REJECTED: "badge-red",
+  HIRED: "badge-green",
+};
+
+/** What a client sees about their own application while they wait. */
+export function ClientStatusBadge({ status }) {
+  if (!status) return null;
+  return (
+    <span className={"badge " + (CLIENT_STATUS_STYLE[status.key] || "badge-grey")}>
+      {status.label}
+    </span>
+  );
+}
+
+const CV_STATUS_STYLE = { PENDING: "badge-amber", ACCEPTED: "badge-green", REJECTED: "badge-red" };
+const CV_STATUS_LABEL = {
+  PENDING: "CV not reviewed",
+  ACCEPTED: "CV accepted",
+  REJECTED: "CV rejected",
+};
+
+/** The same thing from the hiring team's side. */
+export function CvStatusBadge({ status, hasCv = true }) {
+  if (!hasCv) return <span className="badge badge-grey">No CV</span>;
+  return (
+    <span className={"badge " + (CV_STATUS_STYLE[status] || "badge-grey")}>
+      {CV_STATUS_LABEL[status] || status}
+    </span>
+  );
+}
+
+const RECOMMENDATION_STYLE = { ADVANCE: "badge-green", HOLD: "badge-amber", REJECT: "badge-red" };
+export const RECOMMENDATION_LABEL = { ADVANCE: "Advance", HOLD: "Hold", REJECT: "Reject" };
+
+export function RecommendationBadge({ value }) {
+  return (
+    <span className={"badge " + (RECOMMENDATION_STYLE[value] || "badge-grey")}>
+      {RECOMMENDATION_LABEL[value] || value}
+    </span>
+  );
+}
+
+/** Rating out of 5, drawn as stars so it reads at a glance. */
+export function Stars({ value, max = 5 }) {
+  if (value === null || value === undefined) return <span className="muted">—</span>;
+  const rounded = Math.round(value);
+  return (
+    <span title={value + " out of " + max} className="stars">
+      {"★".repeat(rounded)}
+      <span className="stars-empty">{"★".repeat(max - rounded)}</span>{" "}
+      <span className="small muted">{value}</span>
+    </span>
+  );
+}
+
 export function Stat({ label, value }) {
   return (
     <div className="stat">

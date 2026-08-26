@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { config } from "./config.js";
+import { config, isStaff } from "./config.js";
 import { db } from "./db/index.js";
 
 export const COOKIE_NAME = "hiretrack_token";
@@ -65,6 +65,7 @@ export function publicUser(row) {
     name: row.name,
     email: row.email,
     role: row.role,
+    isStaff: isStaff(row),
     avatarUrl: row.avatar_url || null,
     signedInWithGoogle: Boolean(row.google_id),
     createdAt: row.created_at,

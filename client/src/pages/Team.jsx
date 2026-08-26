@@ -91,9 +91,11 @@ export default function Team() {
         <h2>Access model</h2>
         <p className="mt-1 small muted">
           The <code>users.role</code> column stores one of{" "}
-          {roles.map((role) => role.value).join(", ")}. The API checks that a request comes from a
-          signed-in user, but never checks which role that user has, so all four of us can create
-          vacancies, review candidates, upload CVs and schedule interviews.
+          {roles.map((role) => role.value).join(", ")} for the hiring team, or <code>client</code>{" "}
+          for someone applying from outside. The API only ever checks <em>staff versus client</em>,
+          never which of the four team roles you have — so all four of us can create vacancies,
+          accept or reject CVs, leave interview feedback and schedule interviews, while a client
+          only sees the open vacancies and their own application.
         </p>
       </div>
     </div>

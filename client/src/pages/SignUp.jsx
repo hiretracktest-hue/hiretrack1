@@ -5,11 +5,11 @@ import { Alert, Field, PasswordInput } from "../components/ui.jsx";
 import { GoogleMark } from "./SignIn.jsx";
 
 const ROLES = [
-  { value: "applicant", label: "Applicant (applying for a job)" },
-  { value: "developer", label: "Developer" },
-  { value: "scrum_master", label: "Scrum Master" },
-  { value: "business_analyst", label: "Business Analyst" },
-  { value: "qa", label: "QA Engineer" },
+  { value: "client", label: "Client - I want to apply for a job" },
+  { value: "developer", label: "Hiring team - Developer" },
+  { value: "scrum_master", label: "Hiring team - Scrum Master" },
+  { value: "business_analyst", label: "Hiring team - Business Analyst" },
+  { value: "qa", label: "Hiring team - QA Engineer" },
 ];
 
 export default function SignUp() {
@@ -21,7 +21,7 @@ export default function SignUp() {
     email: "",
     password: "",
     confirm: "",
-    role: "applicant",
+    role: "client",
   });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -47,7 +47,7 @@ export default function SignUp() {
         password: form.password,
         role: form.role,
       });
-      navigate("/dashboard", { replace: true });
+      navigate(form.role === "client" ? "/jobs" : "/dashboard", { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -64,7 +64,7 @@ export default function SignUp() {
             HireTrack
           </span>
           <h1>Create your account</h1>
-          <p>Team members and applicants both sign up here.</p>
+          <p>Job applicants and the hiring team both sign up here.</p>
         </div>
 
         <Alert kind="error">{error}</Alert>
@@ -97,7 +97,11 @@ export default function SignUp() {
             />
           </Field>
 
-          <Field label="I am joining as" htmlFor="role" hint="Every team role has the same access.">
+          <Field
+            label="I am joining as"
+            htmlFor="role"
+            hint="A client can apply for jobs and follow their own application. The four hiring team roles all have the same full access."
+          >
             <select id="role" className="select" value={form.role} onChange={update("role")}>
               {ROLES.map((role) => (
                 <option key={role.value} value={role.value}>

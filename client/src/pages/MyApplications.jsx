@@ -4,14 +4,17 @@ import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
 import {
   Alert,
+  ClientStatusBadge,
   Empty,
   Loading,
-  OutcomeBadge,
-  Pipeline,
   formatDate,
 } from "../components/ui.jsx";
 
-/** The applicant's own view: the jobs I applied for and my CV. */
+/**
+ * A client's home page: the jobs they applied for and, for each one,
+ * whether their CV is still being reviewed, was accepted, or was not
+ * successful.
+ */
 export default function MyApplications() {
   const { user } = useAuth();
   const [applications, setApplications] = useState([]);
@@ -34,12 +37,12 @@ export default function MyApplications() {
         <div>
           <h1>My applications</h1>
           <p className="subtitle">
-            Applications submitted from your account ({user?.email}). Open one to upload or replace
-            your CV.
+            Everything you have applied for with {user?.email}. Open one to upload or replace your
+            CV and see where it stands.
           </p>
         </div>
         <Link className="btn btn-primary" to="/jobs">
-          Browse vacancies
+          Browse open vacancies
         </Link>
       </div>
 
@@ -49,10 +52,10 @@ export default function MyApplications() {
 
       {applications.length === 0 ? (
         <div className="card">
-          <Empty title="You have not applied to anything yet">
-            <p>Open a vacancy and use “Apply / add candidate” to submit an application.</p>
+          <Empty title="You have not applied for anything yet">
+            <p>Open a vacancy and press “Apply for this job” to send your first application.</p>
             <Link className="btn btn-primary mt-2" to="/jobs">
-              Browse vacancies
+              Browse open vacancies
             </Link>
           </Empty>
         </div>
@@ -62,26 +65,37 @@ export default function MyApplications() {
             <div className="card" key={application.id}>
               <div className="card-title">
                 <div>
-                  <Link className="cell-title" to={"/jobs/" + application.jobId}>
-                    {application.jobTitle}
-                  </Link>
+                  <h2>{application.jobTitle}</h2>
                   <div className="cell-sub">
-                    Applied {formatDate(application.createdAt)} · as {application.fullName}
+                    {[application.jobDepartment, application.jobLocation]
+                      .filter(Boolean)
+                      .join(" · ") || "—"}
                   </div>
                 </div>
-                <OutcomeBadge outcome={application.outcome} />
+                <ClientStatusBadge status={application.clientStatus} />
               </div>
 
-              <Pipeline stages={[application.currentStage]} currentStage={application.currentStage} />
+              <p className="small muted">{application.clientStatus?.detail}</p>
 
-              <div className="row-between mt-3">
-                <span className="small muted">
-                  {application.cv ? "CV: " + application.cv.filename : "No CV uploaded yet"}
-                </span>
-                <Link className="btn btn-secondary btn-sm" to={"/candidates/" + application.id}>
-                  {application.cv ? "Update CV" : "Upload CV"}
-                </Link>
+              <div className="detail-grid mt-3">
+                <div>
+                  <div className="detail-label">Applied on</div>
+                  <div className="detail-value small">{formatDate(application.createdAt)}</div>
+                </div>
+                <div>
+                  <div className="detail-label">Your CV</div>
+                  <div className="detail-value small">
+                    {application.cv ? application.cv.filename : "Not uploaded yet"}
+                  </div>
+                </div>
               </div>
+
+              <Link
+                className="btn btn-secondary btn-block mt-3"
+                to={"/my-applications/" + application.id}
+              >
+                {application.cv ? "View / update my CV" : "Upload my CV"}
+              </Link>
             </div>
           ))}
         </div>

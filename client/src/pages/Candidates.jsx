@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import {
   Alert,
+  CvStatusBadge,
   Empty,
   Loading,
   OUTCOME_LABEL,
@@ -156,10 +157,11 @@ export default function Candidates() {
                     <OutcomeBadge outcome={application.outcome} />
                   </td>
                   <td>
-                    {application.cv ? (
-                      <a href={api.cvDownloadUrl(application.id)}>Download</a>
-                    ) : (
-                      <span className="muted small">None</span>
+                    <CvStatusBadge status={application.cvStatus} hasCv={Boolean(application.cv)} />
+                    {application.cv && (
+                      <div className="cell-sub">
+                        <a href={api.cvDownloadUrl(application.id)}>Download</a>
+                      </div>
                     )}
                   </td>
                   <td className="cell-sub">{formatDate(application.createdAt)}</td>

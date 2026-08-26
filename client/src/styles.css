@@ -822,6 +822,48 @@ tbody tr:hover {
   word-break: break-all;
 }
 
+.stars {
+  color: #e0a800;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+.stars-empty {
+  color: #dedbe9;
+}
+
+.status-banner {
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  background: var(--purple-50);
+}
+.status-banner h2 {
+  margin-bottom: 4px;
+}
+.status-banner.is-green {
+  background: var(--green-bg);
+  border-color: #cbecd9;
+}
+.status-banner.is-amber {
+  background: var(--amber-bg);
+  border-color: #f4e3b8;
+}
+.status-banner.is-red {
+  background: var(--red-bg);
+  border-color: #f6d2d2;
+}
+
+.feedback-item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  background: #fbfaff;
+}
+.feedback-item:last-child {
+  margin-bottom: 0;
+}
+
 .role-tag {
   font-size: 0.72rem;
   text-transform: uppercase;

@@ -43,14 +43,21 @@ export const config = {
   },
 };
 
-// Role is a label only - every team role has identical permissions.
+// Two access levels.
+//   TEAM_ROLES - our four group members. The role is a label only; all
+//                four have identical permissions inside the system.
+//   CLIENT_ROLE - someone from outside applying for a job. They only
+//                ever see open vacancies and their own application.
 export const TEAM_ROLES = ["developer", "scrum_master", "business_analyst", "qa"];
-export const ALL_ROLES = [...TEAM_ROLES, "applicant"];
+export const CLIENT_ROLE = "client";
+export const ALL_ROLES = [...TEAM_ROLES, CLIENT_ROLE];
 
 export const ROLE_LABELS = {
   developer: "Developer",
   scrum_master: "Scrum Master",
   business_analyst: "Business Analyst",
   qa: "QA Engineer",
-  applicant: "Applicant",
+  client: "Client",
 };
+
+export const isStaff = (user) => Boolean(user) && user.role !== CLIENT_ROLE;

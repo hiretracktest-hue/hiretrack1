@@ -1,12 +1,17 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api.js";
+import { useAuth } from "../AuthContext.jsx";
 import { Alert, Empty, Loading, StatusBadge, formatDate } from "../components/ui.jsx";
 
 export default function Jobs() {
+  const { user } = useAuth();
+  const isStaff = Boolean(user?.isStaff);
+
   const [jobs, setJobs] = useState([]);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
+  // A client is only ever shown vacancies that are still open.
+  const [status, setStatus] = useState(isStaff ? "" : "ACTIVE");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -15,28 +20,36 @@ export default function Jobs() {
     const timer = setTimeout(() => {
       setLoading(true);
       api
-        .listJobs({ q: search, status })
+        .listJobs({ q: search, status: isStaff ? status : "ACTIVE" })
         .then((result) => setJobs(result.jobs))
         .catch((err) => setError(err.message))
         .finally(() => setLoading(false));
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [search, status]);
+  }, [search, status, isStaff]);
 
   return (
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>Vacancies</h1>
-          <p className="subtitle">Every job we are recruiting for, and how many people applied.</p>
+          <h1>{isStaff ? "Vacancies" : "Open vacancies"}</h1>
+          <p className="subtitle">
+            {isStaff
+              ? "Every job we are recruiting for, and how many people applied."
+              : "Roles we are hiring for right now. Open one to apply and upload your CV."}
+          </p>
         </div>
-        <Link className="btn btn-primary" to="/jobs/new">
-          + New vacancy
-        </Link>
+        {isStaff && (
+          <Link className="btn btn-primary" to="/jobs/new">
+            + New vacancy
+          </Link>
+        )}
       </div>
 
-      <Alert kind="error">{error}</Alert>
+      <Alert kind="error" onDismiss={() => setError("")}>
+        {error}
+      </Alert>
 
       <div className="filters">
         <input
@@ -45,16 +58,18 @@ export default function Jobs() {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
-        <select
-          className="select"
-          value={status}
-          onChange={(event) => setStatus(event.target.value)}
-          aria-label="Filter by status"
-        >
-          <option value="">All statuses</option>
-          <option value="ACTIVE">Open only</option>
-          <option value="CLOSED">Closed only</option>
-        </select>
+        {isStaff && (
+          <select
+            className="select"
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
+            aria-label="Filter by status"
+          >
+            <option value="">All statuses</option>
+            <option value="ACTIVE">Open only</option>
+            <option value="CLOSED">Closed only</option>
+          </select>
+        )}
       </div>
 
       {loading ? (
@@ -62,13 +77,19 @@ export default function Jobs() {
       ) : jobs.length === 0 ? (
         <div className="table-wrap">
           <Empty title="No vacancies found">
-            <p>Try a different search, or create your first vacancy.</p>
-            <Link className="btn btn-primary mt-2" to="/jobs/new">
-              + New vacancy
-            </Link>
+            {isStaff ? (
+              <>
+                <p>Try a different search, or create your first vacancy.</p>
+                <Link className="btn btn-primary mt-2" to="/jobs/new">
+                  + New vacancy
+                </Link>
+              </>
+            ) : (
+              <p>There are no open vacancies at the moment. Please check back soon.</p>
+            )}
           </Empty>
         </div>
-      ) : (
+      ) : isStaff ? (
         <div className="table-wrap">
           <table>
             <thead>
@@ -109,6 +130,41 @@ export default function Jobs() {
               ))}
             </tbody>
           </table>
+        </div>
+      ) : (
+        // Clients get job cards rather than a management table.
+        <div className="grid grid-2">
+          {jobs.map((job) => (
+            <div className="card" key={job.id}>
+              <div className="card-title">
+                <div>
+                  <h2>{job.title}</h2>
+                  <div className="cell-sub">
+                    {[job.department, job.location, job.employmentType]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </div>
+                </div>
+                <StatusBadge status={job.status} />
+              </div>
+
+              <p className="small muted">
+                {job.description
+                  ? job.description.slice(0, 180) + (job.description.length > 180 ? "…" : "")
+                  : "No description was added for this role."}
+              </p>
+
+              {job.salaryRange && (
+                <p className="small mt-2">
+                  <strong>Salary:</strong> {job.salaryRange}
+                </p>
+              )}
+
+              <Link className="btn btn-primary btn-block mt-3" to={"/jobs/" + job.id}>
+                View and apply
+              </Link>
+            </div>
+          ))}
         </div>
       )}
     </div>

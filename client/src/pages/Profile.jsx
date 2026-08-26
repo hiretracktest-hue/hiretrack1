@@ -3,18 +3,20 @@ import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
 import { Alert, Field, PasswordInput, formatDate, initials } from "../components/ui.jsx";
 
-const ROLES = [
+const TEAM_ROLES = [
   { value: "developer", label: "Developer" },
   { value: "scrum_master", label: "Scrum Master" },
   { value: "business_analyst", label: "Business Analyst" },
   { value: "qa", label: "QA Engineer" },
-  { value: "applicant", label: "Applicant" },
 ];
+const CLIENT_ROLES = [{ value: "client", label: "Client" }];
 
 export default function Profile() {
   const { user, setUser } = useAuth();
 
-  const [profile, setProfile] = useState({ name: user?.name || "", role: user?.role || "developer" });
+  const [profile, setProfile] = useState({ name: user?.name || "", role: user?.role || "client" });
+  // A client cannot promote themselves onto the hiring team.
+  const roles = user?.isStaff ? TEAM_ROLES : CLIENT_ROLES;
   const [passwords, setPasswords] = useState({ currentPassword: "", newPassword: "", confirm: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -108,7 +110,11 @@ export default function Profile() {
             <Field
               label="Project role"
               htmlFor="role"
-              hint="A label for the report — it does not change what you can do."
+              hint={
+                user?.isStaff
+                  ? "A label for the report - all four hiring team roles can do exactly the same things."
+                  : "Clients apply for jobs and follow their own application."
+              }
             >
               <select
                 id="role"
@@ -116,7 +122,7 @@ export default function Profile() {
                 value={profile.role}
                 onChange={(event) => setProfile((c) => ({ ...c, role: event.target.value }))}
               >
-                {ROLES.map((role) => (
+                {roles.map((role) => (
                   <option key={role.value} value={role.value}>
                     {role.label}
                   </option>

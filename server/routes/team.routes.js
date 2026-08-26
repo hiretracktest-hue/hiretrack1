@@ -1,7 +1,7 @@
 import express from "express";
 import { db } from "../db/index.js";
-import { config, TEAM_ROLES, ROLE_LABELS } from "../config.js";
-import { asyncHandler, requireAuth, httpError } from "../middleware.js";
+import { config, TEAM_ROLES, CLIENT_ROLE, ROLE_LABELS } from "../config.js";
+import { asyncHandler, requireAuth, requireStaff, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 import { publicUser } from "../auth.js";
 
@@ -13,13 +13,13 @@ const router = express.Router();
 // same permissions in the system.
 router.get(
   "/",
-  requireAuth,
+  requireStaff,
   asyncHandler(async (_req, res) => {
     const rows = db
       .prepare(
         "SELECT u.id, u.name, u.email, u.role, u.avatar_url, u.google_id, u.created_at, " +
           "(SELECT COUNT(*) FROM jobs j WHERE j.created_by = u.id) AS jobs_created " +
-          "FROM users u WHERE u.role != 'applicant' ORDER BY u.name ASC"
+          "FROM users u WHERE u.role != 'client' ORDER BY u.name ASC"
       )
       .all();
 
@@ -48,7 +48,10 @@ router.patch(
     }
     if (req.body.role !== undefined) {
       fields.push("role = ?");
-      params.push(v.oneOf(req.body.role, [...TEAM_ROLES, "applicant"], { field: "Role" }));
+      // Nobody can promote themselves from client to staff, or demote
+      // themselves out of the team, through this endpoint.
+      const allowed = req.user.isStaff ? TEAM_ROLES : [CLIENT_ROLE];
+      params.push(v.oneOf(req.body.role, allowed, { field: "Role" }));
     }
     if (!fields.length) throw httpError(400, "Nothing to update.");
 
@@ -65,7 +68,7 @@ router.patch(
 // --- Dashboard numbers --------------------------------------------------
 router.get(
   "/stats",
-  requireAuth,
+  requireStaff,
   asyncHandler(async (_req, res) => {
     const one = (sql, ...params) => db.prepare(sql).get(...params).value;
 
@@ -80,7 +83,12 @@ router.get(
       upcomingInterviews: one(
         "SELECT COUNT(*) AS value FROM interviews WHERE datetime(scheduled_at) >= datetime('now')"
       ),
-      teamMembers: one("SELECT COUNT(*) AS value FROM users WHERE role != 'applicant'"),
+      teamMembers: one("SELECT COUNT(*) AS value FROM users WHERE role != 'client'"),
+      clients: one("SELECT COUNT(*) AS value FROM users WHERE role = 'client'"),
+      cvsAwaitingReview: one(
+        "SELECT COUNT(*) AS value FROM applications WHERE cv_stored_name IS NOT NULL AND cv_status = 'PENDING'"
+      ),
+      feedbackLeft: one("SELECT COUNT(*) AS value FROM feedback"),
       googleEnabled: config.google.enabled,
     });
   })

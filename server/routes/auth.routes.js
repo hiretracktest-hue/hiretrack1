@@ -1,7 +1,7 @@
 import express from "express";
 import crypto from "node:crypto";
 import { db } from "../db/index.js";
-import { config, TEAM_ROLES } from "../config.js";
+import { config, TEAM_ROLES, CLIENT_ROLE } from "../config.js";
 import { asyncHandler, requireAuth, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 import {
@@ -24,7 +24,11 @@ const findById = db.prepare("SELECT * FROM users WHERE id = ?");
 
 // Tells the front end which sign-in options are switched on.
 router.get("/config", (_req, res) => {
-  res.json({ googleEnabled: config.google.enabled, roles: TEAM_ROLES });
+  res.json({
+    googleEnabled: config.google.enabled,
+    teamRoles: TEAM_ROLES,
+    clientRole: CLIENT_ROLE,
+  });
 });
 
 // --- Sign up ---------------------------------------------------------
@@ -34,9 +38,9 @@ router.post(
     const name = v.str(req.body.name, { field: "Full name", required: true, max: 120, min: 2 });
     const emailValue = v.email(req.body.email);
     const pw = v.password(req.body.password);
-    const role = v.oneOf(req.body.role, [...TEAM_ROLES, "applicant"], {
+    const role = v.oneOf(req.body.role, [...TEAM_ROLES, CLIENT_ROLE], {
       field: "Role",
-      fallback: "applicant",
+      fallback: CLIENT_ROLE,
     });
 
     if (findByEmail.get(emailValue)) {
@@ -244,7 +248,7 @@ router.get(
       const fallbackName = profile.name || emailValue.split("@")[0];
       const info = db
         .prepare(
-          "INSERT INTO users (name, email, password_hash, role, google_id, avatar_url) VALUES (?, ?, NULL, 'applicant', ?, ?)"
+          "INSERT INTO users (name, email, password_hash, role, google_id, avatar_url) VALUES (?, ?, NULL, 'client', ?, ?)"
         )
         .run(fallbackName, emailValue, profile.id, profile.picture || null);
       user = findById.get(info.lastInsertRowid);

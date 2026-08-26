@@ -1,11 +1,15 @@
 # HireTrack
 
-A recruitment and candidate tracking web application built for our second year,
-second semester group project.
+Our answer to **Scenario 1 — Recruitment & hiring tracker** from the COMP50074
+project scenarios, built for our second year, second semester group project.
 
-Recruiters post **vacancies**, applicants **apply**, and the team moves each
-candidate through a configurable **interview pipeline**, uploads and updates
-their **CV**, records an **outcome**, and schedules **interviews**.
+> *"Open positions, add candidates, and move them through a configurable
+> interview process to a hire decision."*
+
+The hiring team posts **vacancies**, clients **apply and upload a CV**, the team
+**accepts or rejects each CV**, moves candidates through a configurable
+**interview pipeline**, leaves **interview feedback** at each stage, **compares
+candidates side by side**, and records the final **outcome**.
 
 | Layer | Technology |
 | --- | --- |
@@ -13,7 +17,7 @@ their **CV**, records an **outcome**, and schedules **interviews**.
 | Back end | Node.js + Express (REST API) |
 | Database | SQLite (SQL) accessed with `better-sqlite3` |
 | Auth | Email + password (bcrypt hashing) with a JWT in an httpOnly cookie, plus optional "Sign in with Google" |
-| Tests | Node's built-in test runner (`node:test`) — 26 API tests |
+| Tests | Node's built-in test runner (`node:test`) — 41 API tests |
 
 ---
 
@@ -35,17 +39,32 @@ npm run dev
 - React app → <http://localhost:5173>
 - Express API → <http://localhost:4000>
 
-Sign in with any of the four demo accounts:
+Sign in with any of these demo accounts:
+
+**The hiring team** — all four have exactly the same, full access:
 
 | Name | Role | Email | Password |
 | --- | --- | --- | --- |
-| Isuru | Developer | `isuru@example.com` | `Password123` |
-| Fazl | Scrum Master | `fazl@example.com` | `Password123` |
-| Thariq | Business Analyst | `thariq@example.com` | `Password123` |
-| Ahmed Asmi | QA Engineer | `ahmed.asmi369@gmail.com` | `Password123` |
+| Isuru | Developer | `isuru@gmail.com` | `123` |
+| Fazl | Scrum Master | `fazl@gmail.com` | `123` |
+| Thariq | Business Analyst | `thariq@gmail.com` | `123` |
+| Ahmed | QA Engineer | `ahmed@gmail.com` | `123` |
 
-> Put everyone's real email address into `server/seed.js` and change the demo
-> password before you hand the project in, then run `npm run seed:reset`.
+**Clients** — people from outside who apply for a job. They only ever see the
+open vacancies and their own application:
+
+| Name | Email | Password |
+| --- | --- | --- |
+| Maya Fernando | `maya.fernando@gmail.com` | `123` |
+| Dinuka Perera | `dinuka.perera@gmail.com` | `123` |
+| Nimasha Silva | `nimasha.silva@gmail.com` | `123` |
+| Rashmi Jayawardena | `rashmi.jayawardena@gmail.com` | `123` |
+
+> `123` is a demo password so it is quick to type in the presentation. These
+> rows are written straight into the database by the seed script, so they skip
+> the sign-up rules — anyone registering through the **sign-up form** still
+> needs 8+ characters with a letter and a number. Edit `server/seed.js` and run
+> `npm run seed:reset` to change them.
 
 ### Running it as one server (for a demo or deployment)
 
@@ -71,7 +90,53 @@ Express then serves the built React app as well, so everything is on
 
 ---
 
-## 2. What the app does
+## 2. How this matches Scenario 1
+
+| Scenario 1 asks for | Where it is in our app |
+| --- | --- |
+| HR opens positions with a job description | `/jobs/new` — title, department, location, type, salary, closing date, description |
+| Sets the interview stages **for each position** | Stage chips on the vacancy form; stored in the `job_stages` table, one row per stage with its `position` |
+| Adds candidates | "Add candidate" on a vacancy, or the client applies themselves |
+| Tracks every candidate to hired / rejected / on hold | Outcome on the candidate page, kept separate from the pipeline stage |
+| Interviewers log in to leave feedback **at their stage** | "Interview feedback" on the candidate page — score out of 5, advance/hold/reject, strengths, concerns |
+| Candidates compared **fairly, side by side** | "Compare candidates" on a vacancy — average score per stage, ranked, one score per interviewer per stage |
+| Candidates and interviewers told about a scheduled interview | Interview scheduling with date, interviewer and notes (email sending is out of scope — see section 10) |
+| **Who logs in, and what can each role see and do?** | Two access levels — see below |
+
+### Who logs in
+
+| | Hiring team (Developer, Scrum Master, BA, QA) | Client |
+| --- | --- | --- |
+| Browse open vacancies | ✅ | ✅ |
+| Apply for a job | ✅ (for anyone) | ✅ (as themselves only) |
+| Upload / replace their CV | ✅ (any candidate) | ✅ (their own only) |
+| See whether their CV was accepted | ✅ | ✅ |
+| See **other** candidates | ✅ | ❌ |
+| Create, edit, close, delete vacancies | ✅ | ❌ |
+| Move candidates through the pipeline | ✅ | ❌ |
+| Accept or reject a CV | ✅ | ❌ |
+| Leave interview feedback, compare candidates | ✅ | ❌ |
+| Schedule interviews | ✅ | ❌ |
+| See the team list and the dashboard | ✅ | ❌ |
+
+All four of us have **identical** permissions — the API checks *staff versus
+client*, never which of the four roles you are. The role is a label that says
+who did what on the coursework.
+
+### What a client actually experiences
+
+1. Signs up (or signs in with Google), lands on **Open vacancies**.
+2. Opens a job, presses **Apply for this job** — name and email come from their
+   account, so nobody can apply as somebody else.
+3. Uploads their CV (PDF/DOC/DOCX, max 5 MB) and sees **"Under review"**.
+4. Waits. When a team member presses **Accept CV** or **Reject CV** on the
+   candidate page, the client's own page changes to **"CV accepted"** or
+   **"Not successful"** with a short explanation.
+5. Replacing the CV puts them back to "Under review" automatically.
+
+---
+
+## 3. What the app does
 
 ### Accounts
 
@@ -82,7 +147,7 @@ Express then serves the built React app as well, so everything is on
   screen and printed in the API console. Only a SHA-256 *hash* of the token is
   stored in the database.
 - **Change password** from your profile page.
-- **Sign in with Google** (optional, see section 6).
+- **Sign in with Google** (optional, see section 7).
 
 ### Vacancies (`/jobs`)
 
@@ -102,8 +167,17 @@ Express then serves the built React app as well, so everything is on
   - **Record an outcome** (Active / On hold / Hired / Rejected) — kept separate
     from the stage, so someone can be at "Interview" *and* on hold,
   - **Upload, replace, download or remove their CV** (PDF, DOC, DOCX, max 5 MB),
+  - **Accept or reject the CV** — this is the decision the client is waiting on,
+  - **Leave interview feedback** — a score out of 5, an advance/hold/reject
+    recommendation, strengths and concerns, one per interviewer per stage,
   - **Schedule and cancel interviews**,
   - edit their details and internal notes.
+
+### Comparing candidates (`/jobs/:id/compare`)
+
+Every candidate for one vacancy in a single table: their average score overall
+and at each stage, how many advance / hold / reject recommendations they have,
+their CV status and their outcome — ranked best first.
 
 ### Team (`/team`)
 
@@ -122,7 +196,7 @@ of us have exactly the same access, which is what we agreed.
 
 ---
 
-## 3. Project structure
+## 4. Project structure
 
 ```
 our web/
@@ -166,9 +240,9 @@ our web/
 
 ---
 
-## 4. The database
+## 5. The database
 
-Six tables, defined in [`server/db/schema.sql`](server/db/schema.sql):
+Seven tables, defined in [`server/db/schema.sql`](server/db/schema.sql):
 
 ```
 users ──────< jobs ──────< job_stages
@@ -180,11 +254,12 @@ users ──────< jobs ──────< job_stages
 
 | Table | Holds |
 | --- | --- |
-| `users` | Team members and applicants. `role` is a label; `password_hash` is `NULL` for Google-only accounts. |
+| `users` | The hiring team and the clients. `role` is `developer` / `scrum_master` / `business_analyst` / `qa` (staff) or `client`; `password_hash` is `NULL` for Google-only accounts. |
 | `jobs` | The vacancies. `status` is `ACTIVE` or `CLOSED`. |
 | `job_stages` | The ordered pipeline for one vacancy (`position` 0, 1, 2 …). |
-| `applications` | One candidate applying to one vacancy, plus their CV details. `UNIQUE (job_id, email)` stops duplicate applications. |
+| `applications` | One candidate applying to one vacancy, plus their CV details and `cv_status` (`PENDING` / `ACCEPTED` / `REJECTED`). `UNIQUE (job_id, email)` stops duplicate applications. |
 | `interviews` | Interviews booked against an application. |
+| `feedback` | One interviewer's score (1-5), recommendation, strengths and concerns for one candidate at one stage. `UNIQUE (application_id, stage, author_id)` means nobody can vote twice. |
 | `password_resets` | One-time reset tokens (hashed) with an expiry. |
 
 Points worth mentioning in the report:
@@ -201,7 +276,7 @@ Points worth mentioning in the report:
 
 ---
 
-## 5. API reference
+## 6. API reference
 
 All responses are JSON. Everything except the public vacancy list needs the
 login cookie, which the browser sends automatically.
@@ -238,7 +313,8 @@ login cookie, which the browser sends automatically.
 | `GET` | `/:id` | One candidate, their pipeline and interviews |
 | `POST` | `/` | Apply to a vacancy |
 | `PATCH` | `/:id` | Edit details, stage or outcome |
-| `POST` | `/:id/advance` | Move to the next stage |
+| `POST` | `/:id/advance` | Move to the next stage (team only) |
+| `POST` | `/:id/cv-review` | Accept or reject the CV (team only) |
 | `POST` | `/:id/cv` | Upload or replace the CV |
 | `GET` | `/:id/cv` | Download the CV |
 | `DELETE` | `/:id/cv` | Remove the CV |
@@ -252,6 +328,15 @@ login cookie, which the browser sends automatically.
 | `POST` | `/` | Schedule |
 | `DELETE` | `/:id` | Cancel |
 
+### Feedback and comparison — `/api/feedback` (team only)
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/` | List feedback (`?application=`, `?mine=1`) |
+| `POST` | `/` | Leave or update my score for one stage |
+| `DELETE` | `/:id` | Delete feedback I wrote |
+| `GET` | `/compare/:jobId` | Every candidate for a vacancy, scored side by side |
+
 ### Team — `/api/team`
 
 | Method | Path | Purpose |
@@ -262,7 +347,7 @@ login cookie, which the browser sends automatically.
 
 ---
 
-## 6. Optional: "Sign in with Google"
+## 7. Optional: "Sign in with Google"
 
 Email and password sign-in works with any address, including Gmail. If you also
 want the **Continue with Google** button:
@@ -278,24 +363,32 @@ Without those two values the button is hidden and nothing else changes.
 
 ---
 
-## 7. Testing
+## 8. Testing
 
 ```bash
 npm test
 ```
 
-26 tests run against a temporary throw-away database, covering sign up and sign
-in, password rules, the one-time reset token, permission checks, the stage
-pipeline, duplicate applications, CV upload and download (including rejecting a
-`.txt` file), interview scheduling, and that every team role can reach the same
-endpoints.
+41 tests run against a temporary throw-away database, covering:
+
+- sign up and sign in, password rules, the one-time reset token
+- the stage pipeline, duplicate applications, invalid ids
+- CV upload and download, including rejecting a `.txt` file
+- interview scheduling and invalid dates
+- **interviewer feedback** — rating limits, one score per person per stage, and
+  the comparison ranking
+- **client isolation** — a client cannot create a vacancy, read the team list,
+  open somebody else's application, download another CV, move themselves along
+  the pipeline, or accept their own CV, and applies as themselves even if they
+  type a different name and email
+- **equal team access** — a QA account can do everything a Developer account can
 
 Manual test cases can be written against the same list for the QA
 documentation.
 
 ---
 
-## 8. Security notes
+## 9. Security notes
 
 What is already done:
 
@@ -307,19 +400,41 @@ What is already done:
 - **Every SQL query is parameterised.**
 - Sign-in and forgot-password give the **same answer** whether or not an email
   exists, so the forms cannot be used to harvest registered addresses.
+- A client asking for somebody else's application gets **404, not 403**, so they
+  cannot even confirm that the record exists.
+- The React app hides the pages a client may not use, but the **API enforces it
+  independently** — hiding a button is not security.
 - Uploaded CVs are checked by **type and size**, stored under a **random
   generated filename** (never the user's own), and served through an
   authenticated route.
 - Google sign-in uses a **state cookie** to block replayed callbacks.
 
 Before this ever handled real candidate data you would also want: a real
-`JWT_SECRET` in `.env` (never committed), rate limiting on the auth routes,
-HTTPS, virus scanning of uploads, and role-based permissions if the four roles
-should stop being equal.
+`JWT_SECRET` in `.env` (never committed), a proper password for the demo
+accounts instead of `123`, rate limiting on the auth routes, HTTPS, and virus
+scanning of uploads.
 
 ---
 
-## 9. Publishing to GitHub
+## 10. Deliberately out of scope
+
+Scenario 1 lists these as "things to think about". We answered them in the
+design but did not build them, so they are honest gaps to mention in the report:
+
+- **Email notifications** to candidates and interviewers about a scheduled
+  interview — the app records the interview and shows it on both the candidate
+  page and the Interviews list, but sends no email (there is no mail server).
+- **Blocking a candidate from advancing until the current stage's feedback is
+  in** — the comparison page shows how many reviews each candidate has, but the
+  "Move to next stage" button does not enforce it.
+- **Management reports and CSV/PDF export** — the dashboard has live counts, but
+  nothing exports.
+- **Anonymous feedback** — feedback shows who wrote it, which suits a four
+  person team.
+
+---
+
+## 11. Publishing to GitHub
 
 `.gitignore` already excludes `node_modules/`, the database file, uploaded CVs
 and `.env`, so no personal data or secrets get committed.

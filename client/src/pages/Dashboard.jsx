@@ -77,10 +77,10 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-4 mt-2">
+        <Stat label="CVs to review" value={stats?.cvsAwaitingReview ?? 0} />
+        <Stat label="Feedback left" value={stats?.feedbackLeft ?? 0} />
         <Stat label="Hired" value={stats?.hired ?? 0} />
         <Stat label="Rejected" value={stats?.rejected ?? 0} />
-        <Stat label="CVs on file" value={stats?.cvsOnFile ?? 0} />
-        <Stat label="Team members" value={stats?.teamMembers ?? 0} />
       </div>
 
       <div className="grid grid-sidebar mt-3">

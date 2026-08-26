@@ -312,9 +312,186 @@ describe("interviews", () => {
   });
 });
 
+describe("interviewer feedback and comparison (Scenario 1)", () => {
+  test("an interviewer can score a candidate at a stage", async () => {
+    const { status, data } = await call("POST", "/api/feedback", {
+      applicationId: 1,
+      stage: "Interview",
+      rating: 4,
+      recommendation: "ADVANCE",
+      strengths: "Explained her projects clearly.",
+      comment: "Move to the next round.",
+    });
+    assert.equal(status, 201);
+    assert.equal(data.feedback.rating, 4);
+  });
+
+  test("a rating outside 1-5 is refused", async () => {
+    const { status } = await call("POST", "/api/feedback", {
+      applicationId: 1,
+      stage: "Interview",
+      rating: 9,
+    });
+    assert.equal(status, 400);
+  });
+
+  test("writing again replaces my score instead of stacking a second one", async () => {
+    await call("POST", "/api/feedback", {
+      applicationId: 1,
+      stage: "Interview",
+      rating: 2,
+      recommendation: "HOLD",
+    });
+    const { data } = await call("GET", "/api/feedback?application=1");
+    assert.equal(data.feedback.length, 1, "still one entry for this stage");
+    assert.equal(data.feedback[0].rating, 2, "and it is the newer score");
+  });
+
+  test("the comparison table ranks candidates for a vacancy", async () => {
+    const { status, data } = await call("GET", "/api/feedback/compare/1");
+    assert.equal(status, 200);
+    assert.ok(data.stages.includes("Interview"));
+    const maya = data.candidates.find((candidate) => candidate.id === 1);
+    assert.equal(maya.averageRating, 2);
+    assert.equal(maya.votes.hold, 1);
+  });
+});
+
+describe("clients can only see their own application", () => {
+  let clientCookie = "";
+  let staffCookie = "";
+  let clientApplicationId;
+
+  test("a client signs up and applies", async () => {
+    staffCookie = cookie;
+    cookie = "";
+
+    const signUp = await call("POST", "/api/auth/signup", {
+      name: "Nimal Perera",
+      email: "nimal@example.com",
+      password: "Password123",
+      role: "client",
+    });
+    assert.equal(signUp.status, 201);
+    assert.equal(signUp.data.user.role, "client");
+    assert.equal(signUp.data.user.isStaff, false);
+    clientCookie = cookie;
+
+    const applied = await call("POST", "/api/applications", {
+      jobId: 1,
+      fullName: "Someone Else Entirely",
+      email: "someone.else@example.com",
+      phone: "0770000000",
+    });
+    assert.equal(applied.status, 201);
+    // The client always applies as themselves, whatever they typed.
+    assert.equal(applied.data.application.email, "nimal@example.com");
+    assert.equal(applied.data.application.fullName, "Nimal Perera");
+    clientApplicationId = applied.data.application.id;
+  });
+
+  test("a client cannot create or delete a vacancy", async () => {
+    assert.equal((await call("POST", "/api/jobs", { title: "Sneaky" })).status, 403);
+    assert.equal((await call("DELETE", "/api/jobs/1")).status, 403);
+  });
+
+  test("a client cannot see the team list, the stats or the interviews", async () => {
+    assert.equal((await call("GET", "/api/team")).status, 403);
+    assert.equal((await call("GET", "/api/team/stats")).status, 403);
+    assert.equal((await call("GET", "/api/interviews")).status, 403);
+    assert.equal((await call("GET", "/api/feedback?application=1")).status, 403);
+  });
+
+  test("a client's list only ever contains their own application", async () => {
+    const { data } = await call("GET", "/api/applications");
+    assert.equal(data.applications.length, 1);
+    assert.equal(data.applications[0].id, clientApplicationId);
+  });
+
+  test("a client cannot open somebody else's application", async () => {
+    const { status } = await call("GET", "/api/applications/1");
+    assert.equal(status, 404, "404, not 403 - they cannot even confirm it exists");
+  });
+
+  test("a client cannot download somebody else's CV", async () => {
+    assert.equal((await call("GET", "/api/applications/1/cv")).status, 404);
+  });
+
+  test("a client cannot move themselves along the pipeline", async () => {
+    assert.equal(
+      (await call("POST", "/api/applications/" + clientApplicationId + "/advance")).status,
+      403
+    );
+    const patched = await call("PATCH", "/api/applications/" + clientApplicationId, {
+      outcome: "HIRED",
+      notes: "hire me",
+    });
+    // The allowed fields are ignored, so nothing is left to update.
+    assert.equal(patched.status, 400);
+  });
+
+  test("a client uploads a CV and sees it as under review", async () => {
+    const form = new FormData();
+    form.append("cv", new Blob(["%PDF-1.4 client cv"], { type: "application/pdf" }), "nimal.pdf");
+    const upload = await call(
+      "POST",
+      "/api/applications/" + clientApplicationId + "/cv",
+      form,
+      true
+    );
+    assert.equal(upload.status, 200);
+    assert.equal(upload.data.application.cvStatus, "PENDING");
+    assert.equal(upload.data.application.clientStatus.key, "PENDING");
+    assert.equal(upload.data.application.clientStatus.label, "Under review");
+  });
+
+  test("a client cannot accept their own CV", async () => {
+    const { status } = await call(
+      "POST",
+      "/api/applications/" + clientApplicationId + "/cv-review",
+      { status: "ACCEPTED" }
+    );
+    assert.equal(status, 403);
+  });
+
+  test("staff accept the CV and the client sees the new status", async () => {
+    cookie = staffCookie;
+    const review = await call(
+      "POST",
+      "/api/applications/" + clientApplicationId + "/cv-review",
+      { status: "ACCEPTED" }
+    );
+    assert.equal(review.status, 200);
+    assert.equal(review.data.application.cvStatus, "ACCEPTED");
+
+    cookie = clientCookie;
+    const { data } = await call("GET", "/api/applications/" + clientApplicationId);
+    assert.equal(data.application.clientStatus.key, "ACCEPTED");
+    assert.equal(data.application.clientStatus.label, "CV accepted");
+    // Internal information is stripped out of a client's copy.
+    assert.equal(data.application.notes, undefined);
+    assert.equal(data.application.currentStage, undefined);
+    assert.equal(data.feedback.length, 0);
+  });
+
+  test("rejecting the CV rejects the application too", async () => {
+    cookie = staffCookie;
+    await call("POST", "/api/applications/" + clientApplicationId + "/cv-review", {
+      status: "REJECTED",
+    });
+
+    cookie = clientCookie;
+    const { data } = await call("GET", "/api/applications/" + clientApplicationId);
+    assert.equal(data.application.clientStatus.key, "REJECTED");
+    assert.equal(data.application.clientStatus.label, "Not successful");
+
+    cookie = staffCookie;
+  });
+});
+
 describe("team and access level", () => {
   test("every team role can reach the same endpoints", async () => {
-    // Sign up as QA - a different role - and repeat a recruiter action.
+    // Sign up as QA - a different role - and repeat a developer action.
     cookie = "";
     await call("POST", "/api/auth/signup", {
       name: "QA Person",
@@ -328,12 +505,16 @@ describe("team and access level", () => {
 
     const candidates = await call("GET", "/api/applications");
     assert.equal(candidates.status, 200, "QA can see every candidate");
+
+    const team = await call("GET", "/api/team");
+    assert.equal(team.status, 200, "QA can see the team page");
   });
 
   test("the stats endpoint adds up", async () => {
     const { data } = await call("GET", "/api/team/stats");
     assert.equal(data.openVacancies, 2);
-    assert.equal(data.totalApplications, 1);
-    assert.equal(data.teamMembers, 2);
+    assert.equal(data.totalApplications, 2);
+    assert.equal(data.teamMembers, 2, "the client is not counted as a team member");
+    assert.equal(data.clients, 1);
   });
 });

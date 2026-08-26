@@ -110,17 +110,19 @@ export default function SignIn() {
         </p>
 
         <div className="demo-box">
-          <strong>Demo accounts</strong> (created by <code>npm run seed</code>):
+          <strong>Hiring team</strong> — full access:
           <br />
-          Isuru — <code>isuru@example.com</code>
+          <code>isuru@gmail.com</code> (Developer) · <code>fazl@gmail.com</code> (Scrum Master)
           <br />
-          Fazl — <code>fazl@example.com</code>
+          <code>thariq@gmail.com</code> (BA) · <code>ahmed@gmail.com</code> (QA)
           <br />
-          Thariq — <code>thariq@example.com</code>
           <br />
-          Ahmed — <code>ahmed.asmi369@gmail.com</code>
+          <strong>Client</strong> — applies and tracks their own CV only:
           <br />
-          Password for all four: <code>Password123</code>
+          <code>maya.fernando@gmail.com</code>
+          <br />
+          <br />
+          Password for every demo account: <code>123</code>
         </div>
       </div>
     </div>

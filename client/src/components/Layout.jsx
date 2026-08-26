@@ -7,21 +7,28 @@ const ROLE_LABELS = {
   scrum_master: "Scrum Master",
   business_analyst: "Business Analyst",
   qa: "QA Engineer",
-  applicant: "Applicant",
+  client: "Client",
 };
 
-const LINKS = [
+// The hiring team (our four group members) run the whole process.
+const STAFF_LINKS = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/jobs", label: "Vacancies" },
   { to: "/candidates", label: "Candidates" },
   { to: "/interviews", label: "Interviews" },
-  { to: "/my-applications", label: "My applications" },
   { to: "/team", label: "Team" },
+];
+
+// A client from outside only gets these two.
+const CLIENT_LINKS = [
+  { to: "/jobs", label: "Open vacancies" },
+  { to: "/my-applications", label: "My applications" },
 ];
 
 export default function Layout({ children }) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const links = user?.isStaff ? STAFF_LINKS : CLIENT_LINKS;
 
   async function handleSignOut() {
     await signOut();
@@ -32,13 +39,13 @@ export default function Layout({ children }) {
     <div className="app">
       <header className="navbar">
         <div className="navbar-inner">
-          <Link to="/dashboard" className="brand">
+          <Link to={user?.isStaff ? "/dashboard" : "/jobs"} className="brand">
             <span className="brand-mark">HT</span>
             HireTrack
           </Link>
 
           <nav className="nav-links">
-            {LINKS.map((link) => (
+            {links.map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}

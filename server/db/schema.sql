@@ -2,11 +2,12 @@
 -- HireTrack relational schema (SQLite)
 -- ===================================================================
 -- Tables:
---   users          - team members and applicants (one login table)
+--   users          - team members and clients (one login table)
 --   jobs           - job vacancies
 --   job_stages     - the ordered interview pipeline for each vacancy
 --   applications   - a candidate applying to one vacancy (+ their CV)
 --   interviews     - interviews scheduled against an application
+--   feedback       - what an interviewer thought of a candidate at a stage
 --   password_resets- one-time tokens for the "forgot password" flow
 -- ===================================================================
 
@@ -14,9 +15,13 @@ PRAGMA foreign_keys = ON;
 
 -- -------------------------------------------------------------------
 -- users
--- role is a LABEL only (developer / scrum_master / business_analyst /
--- qa / applicant). Every signed-in team member has the SAME access
--- level, which is what our group agreed on.
+-- There are two access levels:
+--   STAFF  - developer / scrum_master / business_analyst / qa. These are
+--            our four group members. The role is a LABEL only: all four
+--            have exactly the SAME access, which is what we agreed.
+--   CLIENT - anyone from outside who signs up to apply for a job. A
+--            client only ever sees the open vacancies and their own
+--            application, never anyone else's.
 -- password_hash is NULL for accounts created through Google sign-in.
 -- -------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS users (
@@ -25,7 +30,7 @@ CREATE TABLE IF NOT EXISTS users (
   email         TEXT    NOT NULL UNIQUE COLLATE NOCASE,
   password_hash TEXT,
   role          TEXT    NOT NULL DEFAULT 'developer'
-                CHECK (role IN ('developer','scrum_master','business_analyst','qa','applicant')),
+                CHECK (role IN ('developer','scrum_master','business_analyst','qa','client')),
   google_id     TEXT    UNIQUE,
   avatar_url    TEXT,
   created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
@@ -90,6 +95,10 @@ CREATE TABLE IF NOT EXISTS applications (
   current_stage  TEXT    NOT NULL,
   outcome        TEXT    NOT NULL DEFAULT 'ACTIVE'
                  CHECK (outcome IN ('ACTIVE','ON_HOLD','HIRED','REJECTED')),
+  -- Has the hiring team reviewed the CV yet? This is what the client
+  -- sees while they wait ("under review" / "accepted" / "rejected").
+  cv_status      TEXT    NOT NULL DEFAULT 'PENDING'
+                 CHECK (cv_status IN ('PENDING','ACCEPTED','REJECTED')),
   cv_filename    TEXT,
   cv_stored_name TEXT,
   cv_mime        TEXT,
@@ -121,6 +130,28 @@ CREATE TABLE IF NOT EXISTS interviews (
 );
 
 CREATE INDEX IF NOT EXISTS idx_interviews_application ON interviews (application_id, scheduled_at);
+
+-- -------------------------------------------------------------------
+-- feedback - an interviewer's verdict on one candidate at one stage.
+-- One person can only leave one piece of feedback per stage, which is
+-- what makes the side-by-side comparison fair.
+-- -------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS feedback (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  application_id INTEGER NOT NULL REFERENCES applications (id) ON DELETE CASCADE,
+  author_id      INTEGER          REFERENCES users (id) ON DELETE SET NULL,
+  stage          TEXT    NOT NULL,
+  rating         INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  recommendation TEXT    NOT NULL DEFAULT 'ADVANCE'
+                 CHECK (recommendation IN ('ADVANCE','HOLD','REJECT')),
+  strengths      TEXT    NOT NULL DEFAULT '',
+  concerns       TEXT    NOT NULL DEFAULT '',
+  comment        TEXT    NOT NULL DEFAULT '',
+  created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (application_id, stage, author_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_application ON feedback (application_id);
 
 -- -------------------------------------------------------------------
 -- password_resets - we store a HASH of the token, never the token

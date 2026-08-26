@@ -20,6 +20,19 @@ export function requireAuth(req, res, next) {
   next();
 }
 
+// Only the four group members (developer, scrum master, business
+// analyst, QA) run the hiring process. A client signing in from outside
+// can apply and watch their own application, nothing else.
+export function requireStaff(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ error: "You need to sign in to do that." });
+  }
+  if (!req.user.isStaff) {
+    return res.status(403).json({ error: "Only the hiring team can do that." });
+  }
+  next();
+}
+
 // Wraps an async route handler so a thrown error reaches the error
 // handler instead of hanging the request.
 export function asyncHandler(fn) {

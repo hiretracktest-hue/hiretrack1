@@ -12,15 +12,29 @@ import bcrypt from "bcryptjs";
 import { db, DB_PATH } from "./db/index.js";
 
 const RESET = process.argv.includes("--reset");
-const DEMO_PASSWORD = "Password123";
 
-// Our group. Replace the example.com addresses with each person's real
-// email before the demo - Ahmed's is already correct.
+// The demo password for every seeded account. It is deliberately short
+// and easy to type for the presentation. The sign-up form still enforces
+// the proper rules (8+ characters with a letter and a number) - these
+// rows are written straight into the database, so they skip it.
+const DEMO_PASSWORD = "123";
+
+// Our group - these four accounts are STAFF. They run the whole hiring
+// process and all four have exactly the same access.
 const TEAM = [
-  { name: "Isuru", email: "isuru@example.com", role: "developer" },
-  { name: "Fazl", email: "fazl@example.com", role: "scrum_master" },
-  { name: "Thariq", email: "thariq@example.com", role: "business_analyst" },
-  { name: "Ahmed Asmi", email: "ahmed.asmi369@gmail.com", role: "qa" },
+  { name: "Isuru", email: "isuru@gmail.com", role: "developer" },
+  { name: "Fazl", email: "fazl@gmail.com", role: "scrum_master" },
+  { name: "Thariq", email: "thariq@gmail.com", role: "business_analyst" },
+  { name: "Ahmed", email: "ahmed@gmail.com", role: "qa" },
+];
+
+// Example CLIENT accounts: people from outside who signed up to apply.
+// A client only ever sees the open vacancies and their own application.
+const CLIENTS = [
+  { name: "Maya Fernando", email: "maya.fernando@gmail.com" },
+  { name: "Dinuka Perera", email: "dinuka.perera@gmail.com" },
+  { name: "Nimasha Silva", email: "nimasha.silva@gmail.com" },
+  { name: "Rashmi Jayawardena", email: "rashmi.jayawardena@gmail.com" },
 ];
 
 const JOBS = [
@@ -58,41 +72,45 @@ const CANDIDATES = [
   {
     job: "Junior Software Engineer",
     fullName: "Maya Fernando",
-    email: "maya.fernando@example.com",
+    email: "maya.fernando@gmail.com",
     phone: "+94 77 123 4567",
     source: "LinkedIn",
     stage: "Technical Interview",
     outcome: "ACTIVE",
+    cvStatus: "ACCEPTED",
     coverNote: "Final year IT undergraduate, built three React projects.",
   },
   {
     job: "Junior Software Engineer",
     fullName: "Dinuka Perera",
-    email: "dinuka.perera@example.com",
+    email: "dinuka.perera@gmail.com",
     phone: "+94 71 998 2211",
     source: "University career fair",
     stage: "Screening",
     outcome: "ON_HOLD",
+    cvStatus: "ACCEPTED",
     coverNote: "Strong Java background, learning JavaScript.",
   },
   {
     job: "QA Engineer",
     fullName: "Nimasha Silva",
-    email: "nimasha.silva@example.com",
+    email: "nimasha.silva@gmail.com",
     phone: "+94 76 445 0091",
     source: "Referral",
     stage: "Interview",
     outcome: "ACTIVE",
+    cvStatus: "ACCEPTED",
     coverNote: "Two years of manual testing, ISTQB certified.",
   },
   {
     job: "Business Analyst Intern",
     fullName: "Rashmi Jayawardena",
-    email: "rashmi.j@example.com",
+    email: "rashmi.jayawardena@gmail.com",
     phone: "+94 70 332 7788",
     source: "Job board",
     stage: "Applied",
     outcome: "ACTIVE",
+    cvStatus: "PENDING",
     coverNote: "Second year business information systems student.",
   },
 ];
@@ -100,6 +118,7 @@ const CANDIDATES = [
 function reset() {
   db.exec(
     "PRAGMA foreign_keys = OFF;" +
+      "DELETE FROM feedback;" +
       "DELETE FROM interviews;" +
       "DELETE FROM applications;" +
       "DELETE FROM job_stages;" +
@@ -130,6 +149,26 @@ function seedTeam() {
     const info = insert.run(member.name, member.email, hash, member.role);
     ids[member.role] = Number(info.lastInsertRowid);
     console.log("  user created  " + member.email + "  (" + member.role + ")");
+  }
+  return ids;
+}
+
+function seedClients() {
+  const hash = bcrypt.hashSync(DEMO_PASSWORD, 10);
+  const insert = db.prepare(
+    "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, 'client')"
+  );
+  const find = db.prepare("SELECT id FROM users WHERE email = ?");
+
+  const ids = {};
+  for (const client of CLIENTS) {
+    const existing = find.get(client.email);
+    if (existing) {
+      ids[client.email] = existing.id;
+      continue;
+    }
+    ids[client.email] = Number(insert.run(client.name, client.email, hash).lastInsertRowid);
+    console.log("  client        " + client.email);
   }
   return ids;
 }
@@ -169,10 +208,10 @@ function seedJobs(ownerId) {
   return ids;
 }
 
-function seedCandidates(jobIds, applicantId) {
+function seedCandidates(jobIds, clientIds) {
   const insert = db.prepare(
-    "INSERT INTO applications (job_id, user_id, full_name, email, phone, source, cover_note, current_stage, outcome) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO applications (job_id, user_id, full_name, email, phone, source, cover_note, current_stage, outcome, cv_status) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
   );
   const find = db.prepare("SELECT id FROM applications WHERE job_id = ? AND email = ?");
 
@@ -185,14 +224,15 @@ function seedCandidates(jobIds, applicantId) {
     }
     insert.run(
       jobId,
-      applicantId,
+      clientIds[candidate.email] ?? null,
       candidate.fullName,
       candidate.email,
       candidate.phone,
       candidate.source,
       candidate.coverNote,
       candidate.stage,
-      candidate.outcome
+      candidate.outcome,
+      candidate.cvStatus || "PENDING"
     );
     console.log("  candidate     " + candidate.fullName + " -> " + candidate.job);
   }
@@ -201,7 +241,7 @@ function seedCandidates(jobIds, applicantId) {
 function seedInterview(jobIds) {
   const application = db
     .prepare("SELECT id, current_stage FROM applications WHERE email = ?")
-    .get("maya.fernando@example.com");
+    .get("maya.fernando@gmail.com");
   if (!application) return;
 
   const already = db
@@ -217,11 +257,47 @@ function seedInterview(jobIds) {
     application.id,
     application.current_stage,
     inThreeDays,
-    "Ahmed Asmi",
-    "ahmed.asmi369@gmail.com",
+    "Isuru",
+    "isuru@gmail.com",
     "Pair programming exercise, 45 minutes."
   );
   console.log("  interview     scheduled for Maya Fernando");
+}
+
+function seedFeedback(userIds) {
+  const application = db
+    .prepare("SELECT id FROM applications WHERE email = ?")
+    .get("maya.fernando@gmail.com");
+  if (!application) return;
+
+  if (db.prepare("SELECT id FROM feedback WHERE application_id = ?").get(application.id)) return;
+
+  const insert = db.prepare(
+    "INSERT INTO feedback (application_id, author_id, stage, rating, recommendation, strengths, concerns, comment) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  );
+
+  insert.run(
+    application.id,
+    userIds.developer,
+    "Screening",
+    4,
+    "ADVANCE",
+    "Solid JavaScript, explained her projects clearly.",
+    "Has not used SQL much.",
+    "Happy to move her to the technical round."
+  );
+  insert.run(
+    application.id,
+    userIds.qa,
+    "Screening",
+    5,
+    "ADVANCE",
+    "Asked good questions about how we test.",
+    "",
+    "Strong communicator."
+  );
+  console.log("  feedback      2 entries for Maya Fernando");
 }
 
 console.log("\nSeeding " + DB_PATH + "\n");
@@ -230,13 +306,21 @@ if (RESET) reset();
 db.transaction(() => {
   const userIds = seedTeam();
   const ownerId = userIds.developer ?? userIds.scrum_master;
+  const clientIds = seedClients();
   const jobIds = seedJobs(ownerId);
-  seedCandidates(jobIds, ownerId);
+  seedCandidates(jobIds, clientIds);
   seedInterview(jobIds);
+  seedFeedback(userIds);
 })();
 
-console.log("\nDone. Sign in with any of these accounts:");
+console.log("\nDone. Every account below uses the password: " + DEMO_PASSWORD + "\n");
+console.log("  THE HIRING TEAM - full access to everything");
 for (const member of TEAM) {
-  console.log("  " + member.email.padEnd(34) + DEMO_PASSWORD);
+  console.log("    " + member.email.padEnd(24) + member.role);
+}
+console.log("");
+console.log("  CLIENTS - can only apply and follow their own application");
+for (const client of CLIENTS) {
+  console.log("    " + client.email.padEnd(32) + client.name);
 }
 console.log("");

@@ -9,6 +9,7 @@ import authRoutes from "./routes/auth.routes.js";
 import jobsRoutes from "./routes/jobs.routes.js";
 import applicationsRoutes from "./routes/applications.routes.js";
 import interviewsRoutes from "./routes/interviews.routes.js";
+import feedbackRoutes from "./routes/feedback.routes.js";
 import teamRoutes from "./routes/team.routes.js";
 import { DB_PATH } from "./db/index.js";
 
@@ -47,6 +48,7 @@ export function createApp({ log = true } = {}) {
   app.use("/api/jobs", jobsRoutes);
   app.use("/api/applications", applicationsRoutes);
   app.use("/api/interviews", interviewsRoutes);
+  app.use("/api/feedback", feedbackRoutes);
   app.use("/api/team", teamRoutes);
 
   // Any other /api/... path is a mistake, not a React route.

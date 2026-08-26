@@ -58,6 +58,8 @@ export const api = {
   apply: (body) => request("/applications", { method: "POST", body }),
   updateApplication: (id, body) => request("/applications/" + id, { method: "PATCH", body }),
   advanceApplication: (id) => request("/applications/" + id + "/advance", { method: "POST" }),
+  reviewCv: (id, status) =>
+    request("/applications/" + id + "/cv-review", { method: "POST", body: { status } }),
   uploadCv: (id, file) => {
     const form = new FormData();
     form.append("cv", file);
@@ -71,6 +73,12 @@ export const api = {
   listInterviews: (params = {}) => request("/interviews" + query(params)),
   scheduleInterview: (body) => request("/interviews", { method: "POST", body }),
   cancelInterview: (id) => request("/interviews/" + id, { method: "DELETE" }),
+
+  // interviewer feedback + side-by-side comparison (Scenario 1)
+  listFeedback: (params = {}) => request("/feedback" + query(params)),
+  leaveFeedback: (body) => request("/feedback", { method: "POST", body }),
+  deleteFeedback: (id) => request("/feedback/" + id, { method: "DELETE" }),
+  compare: (jobId) => request("/feedback/compare/" + jobId),
 
   // team
   team: () => request("/team"),
