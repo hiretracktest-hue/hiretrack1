@@ -751,45 +751,15 @@ tbody tr:hover {
   background: var(--line);
 }
 
-.demo-box {
+.auth-note {
   margin-top: 20px;
   background: var(--purple-50);
-  border: 1px dashed var(--purple-200);
+  border: 1px solid var(--purple-200);
   border-radius: 10px;
   padding: 12px 14px;
   font-size: 0.82rem;
+  line-height: 1.55;
   color: var(--ink-soft);
-}
-.demo-box code {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 1px 5px;
-  font-size: 0.79rem;
-}
-.demo-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 10px 0;
-}
-.demo-table th,
-.demo-table td {
-  text-align: left;
-  padding: 4px 6px 4px 0;
-  vertical-align: middle;
-  white-space: nowrap;
-}
-.demo-table th {
-  font-weight: 600;
-  color: var(--ink);
-}
-.demo-table td:last-child {
-  width: 1%;
-  padding-right: 0;
-}
-.demo-table .btn {
-  padding: 2px 10px;
-  font-size: 0.76rem;
 }
 
 /* --- misc ------------------------------------------------------------ */

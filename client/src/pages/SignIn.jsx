@@ -11,15 +11,6 @@ const GOOGLE_ERRORS = {
   google_unknown: "That Google account is not registered here. Ask HR to create your account.",
 };
 
-// The seeded demo logins (database/seed.js). Clicking one fills the form
-// so a role can be shown quickly in the sprint review without typing.
-const DEMO_ACCOUNTS = [
-  { role: "HR Recruiter", email: "hr@hiretrack.test", password: "hr12345" },
-  { role: "Hiring Manager", email: "hiringmanager@hiretrack.test", password: "hm12345" },
-  { role: "Interviewer", email: "int@hiretrack.test", password: "int12345" },
-  { role: "Management", email: "manag@hiretrack.test", password: "manag12345" },
-];
-
 export default function SignIn() {
   const { signIn, googleEnabled } = useAuth();
   const navigate = useNavigate();
@@ -113,37 +104,13 @@ export default function SignIn() {
           </>
         )}
 
-        <p className="auth-foot">
-          Accounts are created by HR. Ask them if you need one.
-        </p>
-
-        <div className="demo-box">
-          <strong>Demo accounts</strong> — one per role, each with its own password.
-          <table className="demo-table">
-            <tbody>
-              {DEMO_ACCOUNTS.map((account) => (
-                <tr key={account.email}>
-                  <th scope="row">{account.role}</th>
-                  <td>
-                    <code>{account.email}</code>
-                  </td>
-                  <td>
-                    <code>{account.password}</code>
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => setForm({ email: account.email, password: account.password })}
-                    >
-                      Use
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          Candidates do not log in — HR adds them.
+        <div className="auth-note">
+          <strong>There is no sign-up.</strong> HireTrack is an internal system. HR
+          creates every account and sets what it can do, so only an email address HR
+          has already added can sign in — any other address is turned away.
+          <br />
+          <br />
+          Job candidates do not get an account. HR adds them and uploads their CV.
         </div>
       </div>
     </div>
