@@ -1,29 +1,42 @@
+import { useEffect, useState } from "react";
 import { NavLink, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
+import { api } from "../api.js";
 import { initials } from "./ui.jsx";
 
-// Menu items, each with the permission it needs. An interviewer never
-// sees "Vacancies" because they cannot act on that page anyway.
-const STAFF_LINKS = [
-  { to: "/dashboard", label: "Dashboard", need: "stats:view" },
-  { to: "/jobs", label: "Vacancies" },
-  { to: "/candidates", label: "Candidates", need: "candidate:viewAll" },
-  { to: "/interviews", label: "Interviews", need: "interview:viewAll" },
+/**
+ * "Who logs in, and what can each role see and do?" - the menu is built
+ * from the permissions the server sent with the user, so an interviewer
+ * never sees a page they cannot use.
+ */
+const LINKS = [
+  { to: "/dashboard", label: "Dashboard" },
+  { to: "/positions", label: "Positions", need: "position:view" },
+  { to: "/candidates", label: "Candidates", need: "candidate:view" },
+  { to: "/interviews", label: "Interviews", need: "interview:view" },
+  { to: "/outbox", label: "Outbox", need: "outbox:view" },
+  { to: "/reports", label: "Reports", need: "report:view" },
   { to: "/team", label: "Team", need: "team:view" },
-];
-
-// A candidate applying from outside only gets these two.
-const CANDIDATE_LINKS = [
-  { to: "/careers", label: "Open positions" },
-  { to: "/my-applications", label: "My applications" },
 ];
 
 export default function Layout({ children }) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const links = (user?.isStaff ? STAFF_LINKS : CANDIDATE_LINKS).filter(
-    (link) => !link.need || user?.permissions?.[link.need]
-  );
+  const [unread, setUnread] = useState(0);
+
+  const links = LINKS.filter((link) => !link.need || user?.permissions?.[link.need]);
+
+  // An interviewer is told about a new booking here.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .notifications()
+      .then((result) => !cancelled && setUnread(result.unread))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleSignOut() {
     await signOut();
@@ -34,7 +47,7 @@ export default function Layout({ children }) {
     <div className="app">
       <header className="navbar">
         <div className="navbar-inner">
-          <Link to={user?.isStaff ? "/dashboard" : "/jobs"} className="brand">
+          <Link to="/dashboard" className="brand">
             <span className="brand-mark">HT</span>
             HireTrack
           </Link>
@@ -47,6 +60,11 @@ export default function Layout({ children }) {
                 className={({ isActive }) => "nav-link" + (isActive ? " active" : "")}
               >
                 {link.label}
+                {link.to === "/interviews" && unread > 0 && (
+                  <span className="nav-dot" title={unread + " new"}>
+                    {unread}
+                  </span>
+                )}
               </NavLink>
             ))}
           </nav>
@@ -73,7 +91,7 @@ export default function Layout({ children }) {
       {children}
 
       <footer className="footer">
-        HireTrack — group project by Isuru, Fazl, Thariq and Ahmed.
+        HireTrack — recruitment &amp; hiring tracker. Group project by Isuru, Fazl, Thariq and Ahmed.
       </footer>
     </div>
   );

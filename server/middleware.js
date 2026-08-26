@@ -1,5 +1,5 @@
 import { COOKIE_NAME, verifyToken, findUserById, publicUser } from "./auth.js";
-import { can, isStaff, ROLE_LABELS } from "./config.js";
+import { can, ROLE_LABELS } from "./config.js";
 
 // Reads the login cookie and attaches req.user when it is valid.
 // Never rejects - use requireAuth for routes that must be protected.
@@ -17,18 +17,6 @@ export function attachUser(req, _res, next) {
 export function requireAuth(req, res, next) {
   if (!req.user) {
     return res.status(401).json({ error: "You need to sign in to do that." });
-  }
-  next();
-}
-
-// Anyone who works for the company: HR, hiring manager or interviewer.
-// A candidate applying from outside is not staff.
-export function requireStaff(req, res, next) {
-  if (!req.user) {
-    return res.status(401).json({ error: "You need to sign in to do that." });
-  }
-  if (!isStaff(req.user)) {
-    return res.status(403).json({ error: "Only the hiring team can do that." });
   }
   next();
 }

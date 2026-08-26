@@ -5,76 +5,59 @@ import { useAuth } from "../AuthContext.jsx";
 import {
   Alert,
   BandBadge,
-  CvStatusBadge,
+  CvBadge,
   Empty,
   Field,
   Loading,
   OutcomeBadge,
   Pipeline,
-  ShareLink,
   StatusBadge,
   formatDate,
 } from "../components/ui.jsx";
 
+/** One position: its description, its interview process, and everyone
+ *  HR has added to it. */
 export default function JobDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isStaff = Boolean(user?.isStaff);
   const p = user?.permissions || {};
 
   const [job, setJob] = useState(null);
-  const [applicants, setApplicants] = useState([]);
-  const [myApplication, setMyApplication] = useState(null);
+  const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [showApply, setShowApply] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
 
-  const [applyForm, setApplyForm] = useState({
+  const [form, setForm] = useState({
     fullName: "",
     email: "",
     phone: "",
     source: "",
-    coverNote: "",
+    notes: "",
   });
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const jobResult = await api.getJob(id);
+      const [jobResult, candidateResult] = await Promise.all([
+        api.getJob(id),
+        api.listCandidates({ job: id, sort: "band" }),
+      ]);
       setJob(jobResult.job);
-
-      // Staff get the full applicant list; a client only ever gets their
-      // own row back from this endpoint, which tells us if they applied.
-      const applicationsResult = await api.listApplications({ job: id });
-      if (isStaff) {
-        setApplicants(applicationsResult.applications);
-      } else {
-        setMyApplication(applicationsResult.applications[0] || null);
-      }
+      setCandidates(candidateResult.candidates);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [id, isStaff]);
+  }, [id]);
 
   useEffect(() => {
     load();
   }, [load]);
-
-  // Pre-fill the apply form with the signed-in person's own details.
-  useEffect(() => {
-    if (user) {
-      setApplyForm((current) => ({
-        ...current,
-        fullName: current.fullName || user.name || "",
-        email: current.email || user.email || "",
-      }));
-    }
-  }, [user]);
 
   async function toggleStatus() {
     setBusy(true);
@@ -83,24 +66,7 @@ export default function JobDetail() {
       const next = job.status === "ACTIVE" ? "CLOSED" : "ACTIVE";
       const result = await api.updateJob(id, { status: next });
       setJob(result.job);
-      setMessage(next === "CLOSED" ? "Vacancy closed." : "Vacancy reopened.");
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function regenerateLink() {
-    if (!window.confirm("Create a new link? Anyone still holding the old one will get an error.")) {
-      return;
-    }
-    setBusy(true);
-    setError("");
-    try {
-      const result = await api.regenerateShareLink(id);
-      setJob(result.job);
-      setMessage("New link created. Share this one from now on.");
+      setMessage(next === "CLOSED" ? "Position closed." : "Position reopened.");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -109,59 +75,54 @@ export default function JobDetail() {
   }
 
   async function removeJob() {
-    if (!window.confirm("Delete this vacancy? This cannot be undone.")) return;
+    if (!window.confirm("Delete this position? This cannot be undone.")) return;
     setBusy(true);
     setError("");
     try {
       await api.deleteJob(id);
-      navigate("/jobs", { replace: true });
+      navigate("/positions", { replace: true });
     } catch (err) {
       setError(err.message);
       setBusy(false);
     }
   }
 
-  async function submitApplication(event) {
+  async function addCandidate(event) {
     event.preventDefault();
     setBusy(true);
     setError("");
-    setMessage("");
     try {
-      const result = await api.apply({ jobId: Number(id), ...applyForm });
-      setShowApply(false);
-      // A client goes to their own application page to upload the CV;
-      // staff go to the full candidate record.
-      navigate(isStaff ? "/candidates/" + result.application.id : "/my-applications/" + result.application.id);
+      const result = await api.addCandidate({ jobId: Number(id), ...form });
+      // Straight to their record so the CV can be uploaded next.
+      navigate("/candidates/" + result.candidate.id);
     } catch (err) {
       setError(err.message);
       setBusy(false);
     }
   }
 
-  function updateApply(key) {
-    return (event) => setApplyForm((current) => ({ ...current, [key]: event.target.value }));
+  function update(key) {
+    return (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
   }
 
-  if (loading) return <Loading what="this vacancy" />;
+  if (loading) return <Loading what="this position" />;
   if (!job) {
     return (
       <div className="page">
-        <Alert kind="error">{error || "That vacancy could not be found."}</Alert>
-        <Link className="btn btn-secondary" to="/jobs">
-          Back to vacancies
+        <Alert kind="error">{error || "That position could not be found."}</Alert>
+        <Link className="btn btn-secondary" to="/positions">
+          Back to positions
         </Link>
       </div>
     );
   }
 
-  const alreadyApplied = Boolean(myApplication);
-
   return (
     <div className="page">
       <div className="page-head">
         <div>
-          <Link className="small" to="/jobs">
-            ← {isStaff ? "All vacancies" : "Open vacancies"}
+          <Link className="small" to="/positions">
+            ← All positions
           </Link>
           <h1 className="mt-1">{job.title}</h1>
           <p className="subtitle">
@@ -171,27 +132,23 @@ export default function JobDetail() {
         <div className="btn-row">
           <StatusBadge status={job.status} />
           {p["candidate:compare"] && (
-            <Link className="btn btn-secondary" to={"/jobs/" + job.id + "/compare"}>
+            <Link className="btn btn-secondary" to={"/positions/" + job.id + "/compare"}>
               Compare candidates
             </Link>
           )}
-          {p["vacancy:edit"] && (
-            <Link className="btn btn-secondary" to={"/jobs/" + job.id + "/edit"}>
+          {p["position:edit"] && (
+            <Link className="btn btn-secondary" to={"/positions/" + job.id + "/edit"}>
               Edit
             </Link>
           )}
-          {p["vacancy:close"] && (
+          {p["position:close"] && (
             <button className="btn btn-secondary" onClick={toggleStatus} disabled={busy}>
-              {job.status === "ACTIVE" ? "Close vacancy" : "Reopen vacancy"}
+              {job.status === "ACTIVE" ? "Close position" : "Reopen position"}
             </button>
           )}
-          {!alreadyApplied && (!isStaff || p["candidate:create"]) && (
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowApply((current) => !current)}
-              disabled={job.status !== "ACTIVE"}
-            >
-              {showApply ? "Cancel" : isStaff ? "Add candidate" : "Apply for this job"}
+          {p["candidate:add"] && job.status === "ACTIVE" && (
+            <button className="btn btn-primary" onClick={() => setShowAdd((c) => !c)}>
+              {showAdd ? "Cancel" : "+ Add candidate"}
             </button>
           )}
         </div>
@@ -204,32 +161,16 @@ export default function JobDetail() {
         {message}
       </Alert>
 
-      {alreadyApplied && (
-        <div className="alert alert-info">
-          <div className="row-between">
-            <span>
-              You applied for this job on {formatDate(myApplication.createdAt)} —{" "}
-              <strong>{myApplication.clientStatus?.label}</strong>.
-            </span>
-            <Link className="btn btn-secondary btn-sm" to={"/my-applications/" + myApplication.id}>
-              View my application
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {showApply && (
+      {showAdd && (
         <div className="card mb-2">
           <div className="card-title">
-            <h2>{isStaff ? "Add a candidate" : "Apply for this vacancy"}</h2>
+            <h2>Add a candidate</h2>
             <span className="muted small">
-              {isStaff
-                ? "The candidate starts at “" + job.stages?.[0] + "”."
-                : "You can upload your CV on the next screen."}
+              They start at “{job.stages?.[0]}”. You can upload their CV on the next screen.
             </span>
           </div>
 
-          <form onSubmit={submitApplication}>
+          <form onSubmit={addCandidate}>
             <div className="grid grid-2">
               <Field label="Full name" htmlFor="fullName">
                 <input
@@ -237,24 +178,20 @@ export default function JobDetail() {
                   className="input"
                   required
                   minLength={2}
-                  value={applyForm.fullName}
-                  onChange={updateApply("fullName")}
-                  disabled={!isStaff}
+                  placeholder="Maya Fernando"
+                  value={form.fullName}
+                  onChange={update("fullName")}
                 />
               </Field>
-              <Field
-                label="Email"
-                htmlFor="applicantEmail"
-                hint={isStaff ? undefined : "Taken from your account."}
-              >
+              <Field label="Email" htmlFor="email">
                 <input
-                  id="applicantEmail"
+                  id="email"
                   className="input"
                   type="email"
                   required
-                  value={applyForm.email}
-                  onChange={updateApply("email")}
-                  disabled={!isStaff}
+                  placeholder="maya.fernando@gmail.com"
+                  value={form.email}
+                  onChange={update("email")}
                 />
               </Field>
               <Field label="Phone" htmlFor="phone">
@@ -262,57 +199,35 @@ export default function JobDetail() {
                   id="phone"
                   className="input"
                   placeholder="+94 77 123 4567"
-                  value={applyForm.phone}
-                  onChange={updateApply("phone")}
+                  value={form.phone}
+                  onChange={update("phone")}
                 />
               </Field>
-              <Field label="How did you hear about us?" htmlFor="source">
+              <Field label="Where did they come from?" htmlFor="source">
                 <input
                   id="source"
                   className="input"
-                  placeholder="LinkedIn, referral, job board…"
-                  value={applyForm.source}
-                  onChange={updateApply("source")}
+                  placeholder="LinkedIn, referral, email application…"
+                  value={form.source}
+                  onChange={update("source")}
                 />
               </Field>
             </div>
 
-            <Field label="Cover note" htmlFor="coverNote">
+            <Field label="Notes" htmlFor="notes" hint="Internal only - the candidate never sees this.">
               <textarea
-                id="coverNote"
+                id="notes"
                 className="textarea"
                 rows={3}
-                placeholder="Why are you a good fit for this role?"
-                value={applyForm.coverNote}
-                onChange={updateApply("coverNote")}
+                value={form.notes}
+                onChange={update("notes")}
               />
             </Field>
 
             <button className="btn btn-primary" disabled={busy}>
-              {busy ? "Submitting…" : "Submit application"}
+              {busy ? "Adding…" : "Add candidate"}
             </button>
           </form>
-        </div>
-      )}
-
-      {/* The share link is the whole point of posting a vacancy: HR
-          copies it into WhatsApp or LinkedIn and applications come back. */}
-      {p["vacancy:share"] && job.shareUrl && (
-        <div className="card mb-2">
-          <div className="card-title">
-            <h2>Public job link</h2>
-            <span className="muted small">
-              Anyone with this link can read the advert. Applying still needs an account.
-            </span>
-          </div>
-          <ShareLink url={job.shareUrl} title={job.title} />
-          <button
-            className="btn btn-ghost btn-sm mt-2"
-            onClick={regenerateLink}
-            disabled={busy}
-          >
-            Generate a new link (stops the old one working)
-          </button>
         </div>
       )}
 
@@ -321,87 +236,88 @@ export default function JobDetail() {
           <div className="card">
             <h2>Job description</h2>
             <p className="mt-1" style={{ whiteSpace: "pre-wrap" }}>
-              {job.description || "No description was added for this vacancy."}
+              {job.description || "No description was added for this position."}
             </p>
 
-            {isStaff && (
-              <div className="mt-3">
-                <div className="detail-label">Interview pipeline</div>
-                <div className="mt-1">
-                  <Pipeline stages={job.stages || []} />
-                </div>
+            <div className="mt-3">
+              <div className="detail-label">Interview process</div>
+              <p className="field-hint">
+                Stages are set for this position on its own, so different roles can follow different
+                processes.
+              </p>
+              <div className="mt-1">
+                <Pipeline stages={job.stages || []} />
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">
+              <h2>Candidates ({candidates.length})</h2>
+              {p["candidate:compare"] && candidates.length > 0 && (
+                <Link className="small" to={"/positions/" + job.id + "/compare"}>
+                  Compare side by side
+                </Link>
+              )}
+            </div>
+
+            {candidates.length === 0 ? (
+              <Empty title="No candidates yet">
+                <p>
+                  {p["candidate:add"]
+                    ? "Use “Add candidate” above to put someone into this pipeline."
+                    : "HR has not added anyone to this position yet."}
+                </p>
+              </Empty>
+            ) : (
+              <div className="table-wrap" style={{ border: "none", boxShadow: "none" }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Candidate</th>
+                      <th>Stage</th>
+                      <th>CV band</th>
+                      <th>Outcome</th>
+                      <th>CV</th>
+                      <th>Added</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {candidates.map((candidate) => (
+                      <tr key={candidate.id}>
+                        <td>
+                          <Link className="cell-title" to={"/candidates/" + candidate.id}>
+                            {candidate.fullName}
+                          </Link>
+                          <div className="cell-sub">{candidate.email}</div>
+                        </td>
+                        <td>{candidate.currentStage}</td>
+                        <td>
+                          <BandBadge band={candidate.cvBand} />
+                        </td>
+                        <td>
+                          <OutcomeBadge outcome={candidate.outcome} />
+                        </td>
+                        <td>
+                          <CvBadge hasCv={Boolean(candidate.cv)} />
+                        </td>
+                        <td className="cell-sub">{formatDate(candidate.createdAt)}</td>
+                        <td className="cell-right">
+                          <Link
+                            className="btn btn-secondary btn-sm"
+                            to={"/candidates/" + candidate.id}
+                          >
+                            View
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
-
-          {isStaff && (
-            <div className="card">
-              <div className="card-title">
-                <h2>Applicants ({applicants.length})</h2>
-                {p["candidate:compare"] && (
-                  <Link className="small" to={"/jobs/" + job.id + "/compare"}>
-                    Compare side by side
-                  </Link>
-                )}
-              </div>
-
-              {applicants.length === 0 ? (
-                <Empty title="Nobody has applied yet">
-                  <p>Applications submitted for this vacancy will be listed here.</p>
-                </Empty>
-              ) : (
-                <div className="table-wrap" style={{ border: "none", boxShadow: "none" }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Candidate</th>
-                        <th>Stage</th>
-                        <th>Band</th>
-                        <th>Outcome</th>
-                        <th>CV</th>
-                        <th>Applied</th>
-                        <th />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {applicants.map((applicant) => (
-                        <tr key={applicant.id}>
-                          <td>
-                            <Link className="cell-title" to={"/candidates/" + applicant.id}>
-                              {applicant.fullName}
-                            </Link>
-                            <div className="cell-sub">{applicant.email}</div>
-                          </td>
-                          <td>{applicant.currentStage}</td>
-                          <td>
-                            <BandBadge band={applicant.cvBand} />
-                          </td>
-                          <td>
-                            <OutcomeBadge outcome={applicant.outcome} />
-                          </td>
-                          <td>
-                            <CvStatusBadge
-                              status={applicant.cvStatus}
-                              hasCv={Boolean(applicant.cv)}
-                            />
-                          </td>
-                          <td className="cell-sub">{formatDate(applicant.createdAt)}</td>
-                          <td className="cell-right">
-                            <Link
-                              className="btn btn-secondary btn-sm"
-                              to={"/candidates/" + applicant.id}
-                            >
-                              View
-                            </Link>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         <div className="card">
@@ -424,30 +340,29 @@ export default function JobDetail() {
             <div>
               <div className="detail-label">Closing date</div>
               <div className="detail-value">
-                {job.closingDate ? formatDate(job.closingDate) : "Open ended"}
+                {job.closingDate ? formatDate(job.closingDate) : "Open until filled"}
               </div>
             </div>
-            {isStaff && (
-              <>
-                <div>
-                  <div className="detail-label">Posted by</div>
-                  <div className="detail-value">{job.createdByName || "—"}</div>
-                </div>
-                <div>
-                  <div className="detail-label">Posted on</div>
-                  <div className="detail-value">{formatDate(job.createdAt)}</div>
-                </div>
-              </>
-            )}
+            <div>
+              <div className="detail-label">Hiring manager</div>
+              <div className="detail-value">{job.hiringManagerName || "Not assigned"}</div>
+            </div>
+            <div>
+              <div className="detail-label">Opened by</div>
+              <div className="detail-value">
+                {job.createdByName || "—"}
+                <div className="cell-sub">{formatDate(job.createdAt)}</div>
+              </div>
+            </div>
           </div>
 
-          {p["vacancy:delete"] && (
+          {p["position:delete"] && (
             <div className="mt-3">
               <button className="btn btn-danger btn-block" onClick={removeJob} disabled={busy}>
-                Delete vacancy
+                Delete position
               </button>
               <p className="field-hint">
-                A vacancy that already has applications cannot be deleted — close it instead.
+                A position that already has candidates cannot be deleted — close it instead.
               </p>
             </div>
           )}

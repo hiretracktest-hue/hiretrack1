@@ -3,20 +3,13 @@ import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
 import { Alert, Field, PasswordInput, formatDate, initials } from "../components/ui.jsx";
 
-const TEAM_ROLES = [
-  { value: "developer", label: "Developer" },
-  { value: "scrum_master", label: "Scrum Master" },
-  { value: "business_analyst", label: "Business Analyst" },
-  { value: "qa", label: "QA Engineer" },
-];
-const CLIENT_ROLES = [{ value: "client", label: "Client" }];
-
 export default function Profile() {
   const { user, setUser } = useAuth();
 
-  const [profile, setProfile] = useState({ name: user?.name || "", role: user?.role || "client" });
-  // A client cannot promote themselves onto the hiring team.
-  const roles = user?.isStaff ? TEAM_ROLES : CLIENT_ROLES;
+  const [profile, setProfile] = useState({
+    name: user?.name || "",
+    jobTitle: user?.jobTitle || "",
+  });
   const [passwords, setPasswords] = useState({ currentPassword: "", newPassword: "", confirm: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -107,27 +100,18 @@ export default function Profile() {
               />
             </Field>
 
-            <Field
-              label="Project role"
-              htmlFor="role"
-              hint={
-                user?.isStaff
-                  ? "A label for the report - all four hiring team roles can do exactly the same things."
-                  : "Clients apply for jobs and follow their own application."
-              }
-            >
-              <select
-                id="role"
-                className="select"
-                value={profile.role}
-                onChange={(event) => setProfile((c) => ({ ...c, role: event.target.value }))}
-              >
-                {roles.map((role) => (
-                  <option key={role.value} value={role.value}>
-                    {role.label}
-                  </option>
-                ))}
-              </select>
+            <Field label="Job title" htmlFor="jobTitle">
+              <input
+                id="jobTitle"
+                className="input"
+                placeholder="Senior Software Engineer"
+                value={profile.jobTitle}
+                onChange={(event) => setProfile((c) => ({ ...c, jobTitle: event.target.value }))}
+              />
+            </Field>
+
+            <Field label="Your role" hint="Only HR can change a role. Ask them if this is wrong.">
+              <input className="input" value={user?.roleLabel || ""} disabled readOnly />
             </Field>
 
             <button className="btn btn-primary" disabled={busy}>

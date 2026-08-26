@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { config, isStaff, permissionsFor, ROLE_LABELS } from "./config.js";
+import { config, permissionsFor, ROLE_LABELS } from "./config.js";
 import { db } from "./db/index.js";
 
 export const COOKIE_NAME = "hiretrack_token";
@@ -51,7 +51,8 @@ export function clearAuthCookie(res) {
 }
 
 const selectUser = db.prepare(
-  "SELECT id, name, email, role, avatar_url, google_id, created_at FROM users WHERE id = ?"
+  "SELECT id, name, email, role, job_title, avatar_url, google_id, created_at " +
+    "FROM users WHERE id = ? AND is_active = 1"
 );
 
 export function findUserById(id) {
@@ -66,7 +67,7 @@ export function publicUser(row) {
     email: row.email,
     role: row.role,
     roleLabel: ROLE_LABELS[row.role] || row.role,
-    isStaff: isStaff(row),
+    jobTitle: row.job_title || "",
     // The front end uses this to decide which buttons to show. The API
     // checks the same rules again on every request, so hiding a button
     // is convenience, not security.

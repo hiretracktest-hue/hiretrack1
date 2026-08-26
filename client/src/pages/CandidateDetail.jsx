@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api.js";
+import { useAuth } from "../AuthContext.jsx";
 import {
   Alert,
   BAND_LABEL,
   BANDS,
   BandBadge,
-  CvStatusBadge,
   Field,
   Loading,
   OUTCOME_LABEL,
@@ -18,19 +18,22 @@ import {
   formatDate,
   formatDateTime,
 } from "../components/ui.jsx";
-import { useAuth } from "../AuthContext.jsx";
 
 const OUTCOMES = ["ACTIVE", "ON_HOLD", "HIRED", "REJECTED"];
 const RECOMMENDATIONS = ["ADVANCE", "HOLD", "REJECT"];
 
+/** One candidate: their CV, where they are in the process, the feedback
+ *  from each interviewer, and the interviews booked for them. */
 export default function CandidateDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-
   const { user } = useAuth();
-  const [application, setApplication] = useState(null);
+  const p = user?.permissions || {};
+
+  const [candidate, setCandidate] = useState(null);
   const [interviews, setInterviews] = useState([]);
   const [feedback, setFeedback] = useState([]);
+  const [interviewers, setInterviewers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -40,11 +43,12 @@ export default function CandidateDetail() {
   const [editForm, setEditForm] = useState({});
   const [outcome, setOutcome] = useState("ACTIVE");
   const [cvFile, setCvFile] = useState(null);
+
   const [interviewForm, setInterviewForm] = useState({
     stage: "",
     scheduledAt: "",
-    interviewerName: "",
-    interviewerEmail: "",
+    interviewerId: "",
+    location: "",
     notes: "",
   });
   const [feedbackForm, setFeedbackForm] = useState({
@@ -59,26 +63,25 @@ export default function CandidateDetail() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await api.getApplication(id);
-      setApplication(result.application);
+      const result = await api.getCandidate(id);
+      setCandidate(result.candidate);
       setInterviews(result.interviews);
       setFeedback(result.feedback || []);
-      setOutcome(result.application.outcome);
+      setOutcome(result.candidate.outcome);
       setEditForm({
-        fullName: result.application.fullName,
-        email: result.application.email,
-        phone: result.application.phone || "",
-        source: result.application.source || "",
-        coverNote: result.application.coverNote || "",
-        notes: result.application.notes || "",
+        fullName: result.candidate.fullName,
+        email: result.candidate.email,
+        phone: result.candidate.phone || "",
+        source: result.candidate.source || "",
+        notes: result.candidate.notes || "",
       });
       setInterviewForm((current) => ({
         ...current,
-        stage: current.stage || result.application.currentStage,
+        stage: current.stage || result.candidate.currentStage,
       }));
       setFeedbackForm((current) => ({
         ...current,
-        stage: current.stage || result.application.currentStage,
+        stage: current.stage || result.candidate.currentStage,
       }));
     } catch (err) {
       setError(err.message);
@@ -91,17 +94,22 @@ export default function CandidateDetail() {
     load();
   }, [load]);
 
-  // Every action refreshes from the server response, so what is on
-  // screen always matches what is in the database.
+  useEffect(() => {
+    api
+      .interviewers()
+      .then((result) => setInterviewers(result.interviewers))
+      .catch(() => {});
+  }, []);
+
+  /** Every action refreshes from the server response, so what is on
+   *  screen always matches what is in the database. */
   async function run(action, successMessage) {
     setBusy(true);
     setError("");
     setMessage("");
     try {
       const result = await action();
-      if (result?.application) {
-        setApplication((current) => ({ ...current, ...result.application }));
-      }
+      if (result?.candidate) setCandidate((current) => ({ ...current, ...result.candidate }));
       if (successMessage) setMessage(successMessage);
       return result;
     } catch (err) {
@@ -113,37 +121,45 @@ export default function CandidateDetail() {
   }
 
   async function advance() {
-    const result = await run(() => api.advanceApplication(id), null);
+    const result = await run(() => api.advanceCandidate(id), null);
     if (result) {
-      setMessage("Moved to " + result.application.currentStage + ".");
+      setMessage("Moved to " + result.candidate.currentStage + ".");
       await load();
     }
   }
 
   async function saveEdit(event) {
     event.preventDefault();
-    const result = await run(() => api.updateApplication(id, editForm), "Candidate details saved.");
+    const result = await run(() => api.updateCandidate(id, editForm), "Details saved.");
     if (result) setEditing(false);
   }
 
   async function saveOutcome() {
-    await run(
-      () => api.updateApplication(id, { outcome }),
+    const result = await run(
+      () => api.updateCandidate(id, { outcome }),
       "Outcome recorded as " + OUTCOME_LABEL[outcome] + "."
     );
+    if (result) await load();
   }
 
   async function setBand(band) {
     await run(() => api.bandCv(id, band, ""), "CV screened as " + BAND_LABEL[band] + ".");
   }
 
-  async function reviewCv(status) {
-    await run(
-      () => api.reviewCv(id, status),
-      status === "ACCEPTED"
-        ? "CV accepted - the candidate can see this on their own page."
-        : "CV rejected - the candidate has been marked as not successful."
-    );
+  async function uploadCv(event) {
+    event.preventDefault();
+    if (!cvFile) return;
+    const form = event.target;
+    const result = await run(() => api.uploadCv(id, cvFile), "CV uploaded.");
+    if (result) {
+      setCvFile(null);
+      form.reset();
+    }
+  }
+
+  async function removeCv() {
+    if (!window.confirm("Remove this CV?")) return;
+    await run(() => api.deleteCv(id), "CV removed.");
   }
 
   async function submitFeedback(event) {
@@ -151,19 +167,20 @@ export default function CandidateDetail() {
     const result = await run(
       () =>
         api.leaveFeedback({
-          applicationId: Number(id),
+          candidateId: Number(id),
           ...feedbackForm,
           rating: Number(feedbackForm.rating),
         }),
       "Your feedback was saved."
     );
     if (result?.feedback) {
-      // One entry per person per stage: replace mine if it is already there.
+      // One entry per person per stage: replace mine if already there.
       setFeedback((current) => [
         result.feedback,
         ...current.filter((item) => item.id !== result.feedback.id),
       ]);
       setFeedbackForm((current) => ({ ...current, strengths: "", concerns: "", comment: "" }));
+      await load();
     }
   }
 
@@ -173,26 +190,16 @@ export default function CandidateDetail() {
     if (result) setFeedback((current) => current.filter((item) => item.id !== feedbackId));
   }
 
-  async function uploadCv(event) {
-    event.preventDefault();
-    if (!cvFile) return;
-    const result = await run(() => api.uploadCv(id, cvFile), "CV uploaded.");
-    if (result) {
-      setCvFile(null);
-      event.target.reset();
-    }
-  }
-
-  async function removeCv() {
-    if (!window.confirm("Remove this CV?")) return;
-    await run(() => api.deleteCv(id), "CV removed.");
-  }
-
   async function scheduleInterview(event) {
     event.preventDefault();
     const result = await run(
-      () => api.scheduleInterview({ applicationId: Number(id), ...interviewForm }),
-      "Interview scheduled."
+      () =>
+        api.scheduleInterview({
+          candidateId: Number(id),
+          ...interviewForm,
+          interviewerId: interviewForm.interviewerId || undefined,
+        }),
+      "Interview booked. The interviewer has been notified and the candidate's email is in the outbox."
     );
     if (result?.interview) {
       setInterviews((current) =>
@@ -200,42 +207,31 @@ export default function CandidateDetail() {
           (a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt)
         )
       );
-      setInterviewForm((current) => ({
-        ...current,
-        scheduledAt: "",
-        interviewerName: "",
-        interviewerEmail: "",
-        notes: "",
-      }));
+      setInterviewForm((current) => ({ ...current, scheduledAt: "", location: "", notes: "" }));
     }
   }
 
   async function cancelInterview(interviewId) {
-    if (!window.confirm("Cancel this interview?")) return;
+    if (!window.confirm("Cancel this interview? The candidate will be emailed.")) return;
     const result = await run(() => api.cancelInterview(interviewId), "Interview cancelled.");
-    if (result) {
-      setInterviews((current) => current.filter((interview) => interview.id !== interviewId));
-    }
+    if (result) setInterviews((current) => current.filter((i) => i.id !== interviewId));
   }
 
-  async function withdraw() {
-    if (!window.confirm("Delete this application and its CV? This cannot be undone.")) return;
-    const result = await run(() => api.deleteApplication(id), null);
+  async function removeCandidate() {
+    if (!window.confirm("Delete this candidate and their CV? This cannot be undone.")) return;
+    const result = await run(() => api.deleteCandidate(id), null);
     if (result) navigate("/candidates", { replace: true });
   }
 
-  function updateEdit(key) {
-    return (event) => setEditForm((current) => ({ ...current, [key]: event.target.value }));
-  }
-  function updateInterview(key) {
-    return (event) => setInterviewForm((current) => ({ ...current, [key]: event.target.value }));
-  }
-  function updateFeedback(key) {
-    return (event) => setFeedbackForm((current) => ({ ...current, [key]: event.target.value }));
-  }
+  const updateEdit = (key) => (event) =>
+    setEditForm((current) => ({ ...current, [key]: event.target.value }));
+  const updateInterview = (key) => (event) =>
+    setInterviewForm((current) => ({ ...current, [key]: event.target.value }));
+  const updateFeedback = (key) => (event) =>
+    setFeedbackForm((current) => ({ ...current, [key]: event.target.value }));
 
   if (loading) return <Loading what="this candidate" />;
-  if (!application) {
+  if (!candidate) {
     return (
       <div className="page">
         <Alert kind="error">{error || "That candidate could not be found."}</Alert>
@@ -246,12 +242,12 @@ export default function CandidateDetail() {
     );
   }
 
-  const stages = application.stages || [];
-  const averageRating = feedback.length
-    ? Math.round((feedback.reduce((sum, item) => sum + item.rating, 0) / feedback.length) * 10) / 10
-    : null;
-  const stageIndex = stages.indexOf(application.currentStage);
-  const nextStage = stageIndex >= 0 && stageIndex < stages.length - 1 ? stages[stageIndex + 1] : null;
+  const stages = candidate.stages || [];
+  const stageIndex = stages.indexOf(candidate.currentStage);
+  const nextStage =
+    stageIndex >= 0 && stageIndex < stages.length - 1 ? stages[stageIndex + 1] : null;
+  const averageRating = candidate.averageRating;
+  const needsFeedbackFirst = nextStage && candidate.stageFeedbackCount === 0 && stageIndex > 0;
 
   return (
     <div className="page">
@@ -260,17 +256,21 @@ export default function CandidateDetail() {
           <Link className="small" to="/candidates">
             ← All candidates
           </Link>
-          <h1 className="mt-1">{application.fullName}</h1>
+          <h1 className="mt-1">{candidate.fullName}</h1>
           <p className="subtitle">
-            Applied for <Link to={"/jobs/" + application.jobId}>{application.jobTitle}</Link> on{" "}
-            {formatDate(application.createdAt)}
+            <Link to={"/positions/" + candidate.jobId}>{candidate.jobTitle}</Link> · added{" "}
+            {formatDate(candidate.createdAt)}
+            {candidate.addedByName ? " by " + candidate.addedByName : ""}
           </p>
         </div>
         <div className="btn-row">
-          <OutcomeBadge outcome={application.outcome} />
-          <button className="btn btn-secondary" onClick={() => setEditing((current) => !current)}>
-            {editing ? "Cancel edit" : "Edit details"}
-          </button>
+          <BandBadge band={candidate.cvBand} />
+          <OutcomeBadge outcome={candidate.outcome} />
+          {p["candidate:edit"] && (
+            <button className="btn btn-secondary" onClick={() => setEditing((c) => !c)}>
+              {editing ? "Cancel edit" : "Edit details"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -281,55 +281,70 @@ export default function CandidateDetail() {
         {message}
       </Alert>
 
+      {/* ---- progress ---- */}
       <div className="card">
         <div className="card-title">
           <h2>Progress</h2>
           <span className="muted small">
             Stage {stageIndex + 1} of {stages.length}
+            {averageRating !== null && averageRating !== undefined
+              ? " · average score " + averageRating + " / 5"
+              : ""}
           </span>
         </div>
 
-        <Pipeline stages={stages} currentStage={application.currentStage} />
+        <Pipeline stages={stages} currentStage={candidate.currentStage} />
 
-        <div className="btn-row mt-3">
-          <button className="btn btn-primary" onClick={advance} disabled={busy || !nextStage}>
-            {nextStage ? "Move to " + nextStage : "Final stage reached"}
-          </button>
-          {nextStage && application.stageFeedbackCount === 0 && stageIndex > 0 && (
-            <span className="badge badge-amber">
-              Needs feedback for {application.currentStage} first
-            </span>
-          )}
+        {(p["candidate:advance"] || p["candidate:outcome"]) && (
+          <>
+            <div className="btn-row mt-3">
+              {p["candidate:advance"] && (
+                <button className="btn btn-primary" onClick={advance} disabled={busy || !nextStage}>
+                  {nextStage ? "Move to " + nextStage : "Final stage reached"}
+                </button>
+              )}
+              {needsFeedbackFirst && (
+                <span className="badge badge-amber">
+                  Needs feedback for {candidate.currentStage} first
+                </span>
+              )}
 
-          <select
-            className="select"
-            style={{ width: "auto" }}
-            value={outcome}
-            onChange={(event) => setOutcome(event.target.value)}
-            aria-label="Outcome"
-          >
-            {OUTCOMES.map((value) => (
-              <option key={value} value={value}>
-                {OUTCOME_LABEL[value]}
-              </option>
-            ))}
-          </select>
-          <button
-            className="btn btn-secondary"
-            onClick={saveOutcome}
-            disabled={busy || outcome === application.outcome}
-          >
-            Record outcome
-          </button>
-        </div>
-        <p className="field-hint">
-          The outcome is tracked separately from the stage, so a candidate can be at “
-          {application.currentStage}” and on hold at the same time.
-        </p>
+              {p["candidate:outcome"] && (
+                <>
+                  <select
+                    className="select"
+                    style={{ width: "auto" }}
+                    value={outcome}
+                    onChange={(event) => setOutcome(event.target.value)}
+                    aria-label="Outcome"
+                  >
+                    {OUTCOMES.map((value) => (
+                      <option key={value} value={value}>
+                        {OUTCOME_LABEL[value]}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={saveOutcome}
+                    disabled={busy || outcome === candidate.outcome}
+                  >
+                    Record outcome
+                  </button>
+                </>
+              )}
+            </div>
+            <p className="field-hint">
+              Nobody moves forward on missing information: feedback for the current stage has to be
+              submitted first. Hiring or rejecting a candidate also writes an email to the outbox.
+            </p>
+          </>
+        )}
       </div>
 
       <div className="grid grid-sidebar mt-2">
         <div>
+          {/* ---- details ---- */}
           <div className="card">
             <h2>Candidate details</h2>
 
@@ -373,17 +388,7 @@ export default function CandidateDetail() {
                   </Field>
                 </div>
 
-                <Field label="Cover note" htmlFor="coverNote">
-                  <textarea
-                    id="coverNote"
-                    className="textarea"
-                    rows={3}
-                    value={editForm.coverNote}
-                    onChange={updateEdit("coverNote")}
-                  />
-                </Field>
-
-                <Field label="Internal notes" htmlFor="notes" hint="Only the hiring team sees this.">
+                <Field label="Internal notes" htmlFor="notes">
                   <textarea
                     id="notes"
                     className="textarea"
@@ -395,7 +400,7 @@ export default function CandidateDetail() {
 
                 <div className="btn-row">
                   <button className="btn btn-primary" disabled={busy}>
-                    {busy ? "Saving…" : "Save changes"}
+                    Save changes
                   </button>
                   <button type="button" className="btn btn-secondary" onClick={() => setEditing(false)}>
                     Cancel
@@ -407,45 +412,38 @@ export default function CandidateDetail() {
                 <div className="detail-grid mt-2">
                   <div>
                     <div className="detail-label">Email</div>
-                    <div className="detail-value">{application.email}</div>
+                    <div className="detail-value">{candidate.email}</div>
                   </div>
                   <div>
                     <div className="detail-label">Phone</div>
-                    <div className="detail-value">{application.phone || "—"}</div>
+                    <div className="detail-value">{candidate.phone || "—"}</div>
                   </div>
                   <div>
                     <div className="detail-label">Source</div>
-                    <div className="detail-value">{application.source || "—"}</div>
+                    <div className="detail-value">{candidate.source || "—"}</div>
                   </div>
                   <div>
-                    <div className="detail-label">Submitted by</div>
-                    <div className="detail-value">{application.appliedByName || "—"}</div>
+                    <div className="detail-label">Current stage</div>
+                    <div className="detail-value">{candidate.currentStage}</div>
                   </div>
-                </div>
-
-                <div className="mt-3">
-                  <div className="detail-label">Cover note</div>
-                  <p className="detail-value" style={{ whiteSpace: "pre-wrap" }}>
-                    {application.coverNote || "—"}
-                  </p>
                 </div>
 
                 <div className="mt-3">
                   <div className="detail-label">Internal notes</div>
                   <p className="detail-value" style={{ whiteSpace: "pre-wrap" }}>
-                    {application.notes || "—"}
+                    {candidate.notes || "—"}
                   </p>
                 </div>
               </>
             )}
           </div>
 
+          {/* ---- feedback ---- */}
           <div className="card">
             <div className="card-title">
               <h2>Interview feedback</h2>
               <span className="muted small">
                 {feedback.length} review{feedback.length === 1 ? "" : "s"}
-                {averageRating !== null ? " · average " + averageRating + " / 5" : ""}
               </span>
             </div>
 
@@ -493,213 +491,259 @@ export default function CandidateDetail() {
               </div>
             )}
 
-            <form onSubmit={submitFeedback}>
-              <div className="grid grid-3">
-                <Field label="Stage" htmlFor="feedbackStage">
-                  <select
-                    id="feedbackStage"
-                    className="select"
-                    value={feedbackForm.stage}
-                    onChange={updateFeedback("stage")}
-                  >
-                    {stages.map((stage) => (
-                      <option key={stage} value={stage}>
-                        {stage}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Rating (1-5)" htmlFor="rating">
-                  <select
-                    id="rating"
-                    className="select"
-                    value={feedbackForm.rating}
-                    onChange={updateFeedback("rating")}
-                  >
-                    {[1, 2, 3, 4, 5].map((value) => (
-                      <option key={value} value={value}>
-                        {value} / 5
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Recommendation" htmlFor="recommendation">
-                  <select
-                    id="recommendation"
-                    className="select"
-                    value={feedbackForm.recommendation}
-                    onChange={updateFeedback("recommendation")}
-                  >
-                    {RECOMMENDATIONS.map((value) => (
-                      <option key={value} value={value}>
-                        {value.charAt(0) + value.slice(1).toLowerCase()}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              </div>
+            {p["feedback:write"] ? (
+              <form onSubmit={submitFeedback}>
+                <div className="grid grid-3">
+                  <Field label="Stage" htmlFor="feedbackStage">
+                    <select
+                      id="feedbackStage"
+                      className="select"
+                      value={feedbackForm.stage}
+                      onChange={updateFeedback("stage")}
+                    >
+                      {stages.map((stage) => (
+                        <option key={stage} value={stage}>
+                          {stage}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Rating (1-5)" htmlFor="rating">
+                    <select
+                      id="rating"
+                      className="select"
+                      value={feedbackForm.rating}
+                      onChange={updateFeedback("rating")}
+                    >
+                      {[1, 2, 3, 4, 5].map((value) => (
+                        <option key={value} value={value}>
+                          {value} / 5
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Recommendation" htmlFor="recommendation">
+                    <select
+                      id="recommendation"
+                      className="select"
+                      value={feedbackForm.recommendation}
+                      onChange={updateFeedback("recommendation")}
+                    >
+                      {RECOMMENDATIONS.map((value) => (
+                        <option key={value} value={value}>
+                          {value.charAt(0) + value.slice(1).toLowerCase()}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
 
-              <div className="grid grid-2">
-                <Field label="Strengths" htmlFor="strengths">
+                <div className="grid grid-2">
+                  <Field label="Strengths" htmlFor="strengths">
+                    <textarea
+                      id="strengths"
+                      className="textarea"
+                      rows={2}
+                      placeholder="What went well?"
+                      value={feedbackForm.strengths}
+                      onChange={updateFeedback("strengths")}
+                    />
+                  </Field>
+                  <Field label="Concerns" htmlFor="concerns">
+                    <textarea
+                      id="concerns"
+                      className="textarea"
+                      rows={2}
+                      placeholder="Anything that worried you?"
+                      value={feedbackForm.concerns}
+                      onChange={updateFeedback("concerns")}
+                    />
+                  </Field>
+                </div>
+
+                <Field label="Overall comment" htmlFor="comment">
                   <textarea
-                    id="strengths"
+                    id="comment"
                     className="textarea"
                     rows={2}
-                    placeholder="What went well?"
-                    value={feedbackForm.strengths}
-                    onChange={updateFeedback("strengths")}
+                    value={feedbackForm.comment}
+                    onChange={updateFeedback("comment")}
                   />
                 </Field>
-                <Field label="Concerns" htmlFor="concerns">
-                  <textarea
-                    id="concerns"
-                    className="textarea"
-                    rows={2}
-                    placeholder="Anything that worried you?"
-                    value={feedbackForm.concerns}
-                    onChange={updateFeedback("concerns")}
-                  />
-                </Field>
-              </div>
 
-              <Field label="Overall comment" htmlFor="comment">
-                <textarea
-                  id="comment"
-                  className="textarea"
-                  rows={2}
-                  value={feedbackForm.comment}
-                  onChange={updateFeedback("comment")}
-                />
-              </Field>
-
-              <button className="btn btn-primary" disabled={busy}>
-                Save my feedback
-              </button>
-              <p className="field-hint">
-                You get one score per stage — saving again updates the one you already left.
-              </p>
-            </form>
+                <button className="btn btn-primary" disabled={busy}>
+                  Save my feedback
+                </button>
+                <p className="field-hint">
+                  Everyone scores out of 5 with the same options, which is what makes the
+                  side-by-side comparison fair. Saving again updates the score you already left.
+                </p>
+              </form>
+            ) : (
+              <p className="muted small">Your role can read feedback but not write it.</p>
+            )}
           </div>
 
+          {/* ---- interviews ---- */}
           <div className="card">
             <div className="card-title">
               <h2>Interviews</h2>
-              <span className="muted small">{interviews.length} scheduled</span>
+              <span className="muted small">{interviews.length} booked</span>
             </div>
 
             {interviews.length > 0 && (
               <ul className="list mb-2">
-                {interviews.map((interview) => (
-                  <li key={interview.id}>
+                {interviews.map((iv) => (
+                  <li key={iv.id}>
                     <div>
                       <div className="cell-title">
-                        {interview.stage} · {formatDateTime(interview.scheduledAt)}
+                        {iv.stage} · {formatDateTime(iv.scheduledAt)}
                       </div>
                       <div className="cell-sub">
-                        {interview.interviewerName || "Interviewer not set"}
-                        {interview.interviewerEmail ? " · " + interview.interviewerEmail : ""}
+                        {iv.interviewerName || "Interviewer not set"}
+                        {iv.location ? " · " + iv.location : ""}
                       </div>
-                      {interview.notes && <div className="cell-sub">{interview.notes}</div>}
+                      {iv.notes && <div className="cell-sub">{iv.notes}</div>}
                     </div>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => cancelInterview(interview.id)}
-                      disabled={busy}
-                    >
-                      Cancel
-                    </button>
+                    {p["interview:schedule"] && (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => cancelInterview(iv.id)}
+                        disabled={busy}
+                      >
+                        Cancel
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
             )}
 
-            <form onSubmit={scheduleInterview}>
-              <div className="grid grid-2">
-                <Field label="Stage" htmlFor="stage">
-                  <select
-                    id="stage"
-                    className="select"
-                    value={interviewForm.stage}
-                    onChange={updateInterview("stage")}
+            {p["interview:schedule"] && (
+              <form onSubmit={scheduleInterview}>
+                <div className="grid grid-2">
+                  <Field label="Stage" htmlFor="stage">
+                    <select
+                      id="stage"
+                      className="select"
+                      value={interviewForm.stage}
+                      onChange={updateInterview("stage")}
+                    >
+                      {stages.map((stage) => (
+                        <option key={stage} value={stage}>
+                          {stage}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Date and time" htmlFor="scheduledAt">
+                    <input
+                      id="scheduledAt"
+                      className="input"
+                      type="datetime-local"
+                      required
+                      value={interviewForm.scheduledAt}
+                      onChange={updateInterview("scheduledAt")}
+                    />
+                  </Field>
+                  <Field
+                    label="Interviewer"
+                    htmlFor="interviewerId"
+                    hint="They are notified in the app straight away."
                   >
-                    {stages.map((stage) => (
-                      <option key={stage} value={stage}>
-                        {stage}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Date and time" htmlFor="scheduledAt">
-                  <input
-                    id="scheduledAt"
-                    className="input"
-                    type="datetime-local"
-                    required
-                    value={interviewForm.scheduledAt}
-                    onChange={updateInterview("scheduledAt")}
-                  />
-                </Field>
-                <Field label="Interviewer" htmlFor="interviewerName">
-                  <input
-                    id="interviewerName"
-                    className="input"
-                    placeholder="Who is running it?"
-                    value={interviewForm.interviewerName}
-                    onChange={updateInterview("interviewerName")}
-                  />
-                </Field>
-                <Field label="Interviewer email" htmlFor="interviewerEmail">
-                  <input
-                    id="interviewerEmail"
-                    className="input"
-                    type="email"
-                    placeholder="name@company.com"
-                    value={interviewForm.interviewerEmail}
-                    onChange={updateInterview("interviewerEmail")}
-                  />
-                </Field>
-              </div>
+                    <select
+                      id="interviewerId"
+                      className="select"
+                      value={interviewForm.interviewerId}
+                      onChange={updateInterview("interviewerId")}
+                    >
+                      <option value="">Choose an interviewer…</option>
+                      {interviewers.map((person) => (
+                        <option key={person.id} value={person.id}>
+                          {person.name} ({person.roleLabel})
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Where" htmlFor="location">
+                    <input
+                      id="location"
+                      className="input"
+                      placeholder="Meeting room 2, or a video link"
+                      value={interviewForm.location}
+                      onChange={updateInterview("location")}
+                    />
+                  </Field>
+                </div>
 
-              <Field label="Notes" htmlFor="interviewNotes">
-                <textarea
-                  id="interviewNotes"
-                  className="textarea"
-                  rows={2}
-                  placeholder="Format, room / meeting link, what to prepare…"
-                  value={interviewForm.notes}
-                  onChange={updateInterview("notes")}
-                />
-              </Field>
+                <Field label="Notes for the invitation" htmlFor="interviewNotes">
+                  <textarea
+                    id="interviewNotes"
+                    className="textarea"
+                    rows={2}
+                    placeholder="Format, what to prepare, who else will attend…"
+                    value={interviewForm.notes}
+                    onChange={updateInterview("notes")}
+                  />
+                </Field>
 
-              <button className="btn btn-primary" disabled={busy}>
-                Schedule interview
-              </button>
-            </form>
+                <button className="btn btn-primary" disabled={busy}>
+                  Book interview
+                </button>
+                <p className="field-hint">
+                  Booking notifies the interviewer in the app and writes the candidate's invitation
+                  email into the outbox for you to send.
+                </p>
+              </form>
+            )}
           </div>
         </div>
 
+        {/* ---- sidebar: CV ---- */}
         <div>
           <div className="card">
             <div className="card-title">
               <h2>CV</h2>
-              <div className="btn-row">
-                <BandBadge band={application.cvBand} />
-                <CvStatusBadge status={application.cvStatus} hasCv={Boolean(application.cv)} />
-              </div>
+              <BandBadge band={candidate.cvBand} />
             </div>
 
-            {/* Screening band: one quick judgement so a large pile of
-                applications can be filtered instead of re-read. */}
-            {user?.permissions?.["candidate:band"] && (
+            {candidate.cv ? (
               <div className="mt-2">
+                <div className="stack">
+                  <a className="cell-title" href={api.cvDownloadUrl(candidate.id)}>
+                    {candidate.cv.filename}
+                  </a>
+                  <span className="cell-sub">
+                    {formatBytes(candidate.cv.size)} · uploaded {formatDate(candidate.cv.uploadedAt)}
+                  </span>
+                </div>
+                <div className="btn-row mt-2">
+                  <a className="btn btn-secondary btn-sm" href={api.cvDownloadUrl(candidate.id)}>
+                    Download
+                  </a>
+                  {p["candidate:uploadCv"] && (
+                    <button className="btn btn-ghost btn-sm" onClick={removeCv} disabled={busy}>
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="muted small mt-1">No CV on file yet.</p>
+            )}
+
+            {p["candidate:band"] && (
+              <div className="mt-3">
                 <div className="detail-label">Screening band</div>
+                <p className="field-hint">
+                  One quick judgement so a large pile can be filtered instead of re-read.
+                </p>
                 <div className="btn-row mt-1">
                   {BANDS.map((value) => (
                     <button
                       key={value}
                       className={
-                        "btn btn-sm " +
-                        (application.cvBand === value ? "btn-primary" : "btn-secondary")
+                        "btn btn-sm " + (candidate.cvBand === value ? "btn-primary" : "btn-secondary")
                       }
                       onClick={() => setBand(value)}
                       disabled={busy}
@@ -708,102 +752,46 @@ export default function CandidateDetail() {
                     </button>
                   ))}
                 </div>
-                {application.bandedByName && (
+                {candidate.bandedByName && (
                   <p className="field-hint">
-                    Screened by {application.bandedByName}
-                    {application.cvBandedAt ? " on " + formatDate(application.cvBandedAt) : ""}.
+                    Screened by {candidate.bandedByName}
+                    {candidate.cvBandedAt ? " on " + formatDate(candidate.cvBandedAt) : ""}.
                   </p>
                 )}
               </div>
             )}
 
-            {application.cv ? (
-              <div className="mt-2">
-                <div className="stack">
-                  <a className="cell-title" href={api.cvDownloadUrl(application.id)}>
-                    {application.cv.filename}
-                  </a>
-                  <span className="cell-sub">
-                    {formatBytes(application.cv.size)} · uploaded {formatDate(application.cv.uploadedAt)}
-                  </span>
-                </div>
-                <div className="btn-row mt-2">
-                  <a className="btn btn-secondary btn-sm" href={api.cvDownloadUrl(application.id)}>
-                    Download
-                  </a>
-                  <button className="btn btn-ghost btn-sm" onClick={removeCv} disabled={busy}>
-                    Remove
-                  </button>
-                </div>
-
-                {/* This is the decision the client is waiting on. */}
-                <div className="btn-row mt-3">
-                  <button
-                    className="btn btn-primary btn-sm"
-                    onClick={() => reviewCv("ACCEPTED")}
-                    disabled={busy || application.cvStatus === "ACCEPTED"}
-                  >
-                    Accept CV
-                  </button>
-                  <button
-                    className="btn btn-danger btn-sm"
-                    onClick={() => reviewCv("REJECTED")}
-                    disabled={busy || application.cvStatus === "REJECTED"}
-                  >
-                    Reject CV
-                  </button>
-                </div>
-                <p className="field-hint">
-                  The candidate sees this decision on their own “My applications” page.
-                </p>
-              </div>
-            ) : (
-              <p className="muted small mt-1">No CV has been uploaded yet.</p>
+            {p["candidate:uploadCv"] && (
+              <form onSubmit={uploadCv} className="mt-3">
+                <Field
+                  label={candidate.cv ? "Replace the CV" : "Upload their CV"}
+                  htmlFor="cv"
+                  hint="PDF, DOC or DOCX · maximum 5 MB."
+                >
+                  <input
+                    id="cv"
+                    className="input"
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    onChange={(event) => setCvFile(event.target.files?.[0] || null)}
+                  />
+                </Field>
+                <button className="btn btn-primary btn-block" disabled={busy || !cvFile}>
+                  {busy ? "Uploading…" : candidate.cv ? "Replace CV" : "Upload CV"}
+                </button>
+              </form>
             )}
+          </div>
 
-            <form onSubmit={uploadCv} className="mt-3">
-              <Field
-                label={application.cv ? "Replace the CV" : "Upload a CV"}
-                htmlFor="cv"
-                hint="PDF, DOC or DOCX · maximum 5 MB."
-              >
-                <input
-                  id="cv"
-                  className="input"
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={(event) => setCvFile(event.target.files?.[0] || null)}
-                />
-              </Field>
-              <button className="btn btn-primary btn-block" disabled={busy || !cvFile}>
-                {busy ? "Uploading…" : application.cv ? "Replace CV" : "Upload CV"}
+          {p["candidate:delete"] && (
+            <div className="card">
+              <h2>Danger zone</h2>
+              <button className="btn btn-danger btn-block mt-2" onClick={removeCandidate} disabled={busy}>
+                Delete candidate
               </button>
-            </form>
-          </div>
-
-          <div className="card">
-            <h2>Application</h2>
-            <div className="detail-grid mt-2">
-              <div>
-                <div className="detail-label">Vacancy</div>
-                <div className="detail-value">
-                  <Link to={"/jobs/" + application.jobId}>{application.jobTitle}</Link>
-                </div>
-              </div>
-              <div>
-                <div className="detail-label">Current stage</div>
-                <div className="detail-value">{application.currentStage}</div>
-              </div>
-              <div>
-                <div className="detail-label">Last updated</div>
-                <div className="detail-value">{formatDateTime(application.updatedAt)}</div>
-              </div>
+              <p className="field-hint">Removes their record, CV, interviews and feedback.</p>
             </div>
-
-            <button className="btn btn-danger btn-block mt-3" onClick={withdraw} disabled={busy}>
-              Delete application
-            </button>
-          </div>
+          )}
         </div>
       </div>
     </div>

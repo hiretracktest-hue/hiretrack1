@@ -7,11 +7,12 @@ import cookieParser from "cookie-parser";
 import { attachUser, notFound, errorHandler } from "./middleware.js";
 import authRoutes from "./routes/auth.routes.js";
 import jobsRoutes from "./routes/jobs.routes.js";
-import applicationsRoutes from "./routes/applications.routes.js";
+import candidatesRoutes from "./routes/candidates.routes.js";
 import interviewsRoutes from "./routes/interviews.routes.js";
 import feedbackRoutes from "./routes/feedback.routes.js";
 import teamRoutes from "./routes/team.routes.js";
-import publicRoutes from "./routes/public.routes.js";
+import notificationsRoutes from "./routes/notifications.routes.js";
+import reportsRoutes from "./routes/reports.routes.js";
 import { DB_PATH } from "./db/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -45,14 +46,13 @@ export function createApp({ log = true } = {}) {
     res.json({ ok: true, database: path.basename(DB_PATH), time: new Date().toISOString() });
   });
 
-  // No account needed - this is what a shared job link opens.
-  app.use("/api/public", publicRoutes);
-
   app.use("/api/auth", authRoutes);
   app.use("/api/jobs", jobsRoutes);
-  app.use("/api/applications", applicationsRoutes);
+  app.use("/api/candidates", candidatesRoutes);
   app.use("/api/interviews", interviewsRoutes);
   app.use("/api/feedback", feedbackRoutes);
+  app.use("/api/notifications", notificationsRoutes);
+  app.use("/api/reports", reportsRoutes);
   app.use("/api/team", teamRoutes);
 
   // Any other /api/... path is a mistake, not a React route.

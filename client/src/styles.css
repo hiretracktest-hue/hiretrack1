@@ -912,6 +912,41 @@ tbody tr:hover {
   opacity: 0.75;
 }
 
+.nav-dot {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 5px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: var(--purple-600);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 18px;
+}
+
+.unread-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--purple-600);
+  margin-right: 4px;
+}
+
+.email-body {
+  white-space: pre-wrap;
+  font-family: Consolas, ui-monospace, monospace;
+  font-size: 0.82rem;
+  background: #fbfaff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 10px 0 0;
+  overflow-x: auto;
+}
+
 .stars {
   color: #e0a800;
   letter-spacing: 1px;

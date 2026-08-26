@@ -4,7 +4,6 @@ import Layout from "./components/Layout.jsx";
 import { Loading } from "./components/ui.jsx";
 
 import SignIn from "./pages/SignIn.jsx";
-import SignUp from "./pages/SignUp.jsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
@@ -14,57 +13,31 @@ import JobEditor from "./pages/JobEditor.jsx";
 import Compare from "./pages/Compare.jsx";
 import Candidates from "./pages/Candidates.jsx";
 import CandidateDetail from "./pages/CandidateDetail.jsx";
-import MyApplications from "./pages/MyApplications.jsx";
-import MyApplicationDetail from "./pages/MyApplicationDetail.jsx";
 import Interviews from "./pages/Interviews.jsx";
+import Outbox from "./pages/Outbox.jsx";
+import Reports from "./pages/Reports.jsx";
 import Team from "./pages/Team.jsx";
 import Profile from "./pages/Profile.jsx";
-import PublicJob from "./pages/PublicJob.jsx";
-import Careers from "./pages/Careers.jsx";
 
 /** Signed in? If not, go to /signin and remember where they were going. */
-function Protected({ children }) {
+function Protected({ children, need }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
   if (loading) return <Loading what="HireTrack" />;
   if (!user) return <Navigate to="/signin" replace state={{ from: location.pathname }} />;
+  // The API checks the same rule again on every request, so this is
+  // convenience for the user, not the security boundary.
+  if (need && !user.permissions?.[need]) return <Navigate to="/dashboard" replace />;
   return <Layout>{children}</Layout>;
 }
 
-/**
- * Staff-only pages. A candidate who types the address by hand is sent to
- * their own applications instead - the API blocks them as well, so this
- * is a convenience, not the security boundary.
- *
- * Pass `need` to also require one named permission, so an interviewer
- * cannot open the vacancy editor even though they are staff.
- */
-function StaffOnly({ children, need }) {
-  const { user, loading } = useAuth();
-  const location = useLocation();
-
-  if (loading) return <Loading what="HireTrack" />;
-  if (!user) return <Navigate to="/signin" replace state={{ from: location.pathname }} />;
-  if (!user.isStaff) return <Navigate to="/my-applications" replace />;
-  if (need && !user.permissions?.[need]) return <Navigate to="/candidates" replace />;
-  return <Layout>{children}</Layout>;
-}
-
-/** Signed-in users should not see the sign-in / sign-up screens again. */
+/** Signed-in users should not see the sign-in screen again. */
 function PublicOnly({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <Loading what="HireTrack" />;
-  if (user) return <Navigate to={user.isStaff ? "/dashboard" : "/my-applications"} replace />;
+  if (user) return <Navigate to="/dashboard" replace />;
   return children;
-}
-
-/** Sends "/" to the right home page for whoever is signed in. */
-function Home() {
-  const { user, loading } = useAuth();
-  if (loading) return <Loading what="HireTrack" />;
-  if (!user) return <Navigate to="/signin" replace />;
-  return <Navigate to={user.isStaff ? "/dashboard" : "/my-applications"} replace />;
 }
 
 export default function App() {
@@ -79,14 +52,6 @@ export default function App() {
         }
       />
       <Route
-        path="/signup"
-        element={
-          <PublicOnly>
-            <SignUp />
-          </PublicOnly>
-        }
-      />
-      <Route
         path="/forgot-password"
         element={
           <PublicOnly>
@@ -94,43 +59,108 @@ export default function App() {
           </PublicOnly>
         }
       />
-      {/* Reset is reachable while signed out or in - the link comes by email. */}
+      {/* Reachable signed out or in - the link arrives by email. */}
       <Route path="/reset-password" element={<ResetPassword />} />
 
-      {/* --- public: no account needed. This is what a shared link opens. */}
-      <Route path="/job/:token" element={<PublicJob />} />
-      <Route path="/careers" element={<Careers />} />
-
-      {/* --- pages both a candidate and the team can open -------------- */}
       <Route
-        path="/jobs"
+        path="/dashboard"
         element={
           <Protected>
+            <Dashboard />
+          </Protected>
+        }
+      />
+
+      {/* --- open positions ------------------------------------------- */}
+      <Route
+        path="/positions"
+        element={
+          <Protected need="position:view">
             <Jobs />
           </Protected>
         }
       />
       <Route
-        path="/jobs/:id"
+        path="/positions/new"
         element={
-          <Protected>
+          <Protected need="position:create">
+            <JobEditor mode="create" />
+          </Protected>
+        }
+      />
+      <Route
+        path="/positions/:id"
+        element={
+          <Protected need="position:view">
             <JobDetail />
           </Protected>
         }
       />
       <Route
-        path="/my-applications"
+        path="/positions/:id/edit"
         element={
-          <Protected>
-            <MyApplications />
+          <Protected need="position:edit">
+            <JobEditor mode="edit" />
           </Protected>
         }
       />
       <Route
-        path="/my-applications/:id"
+        path="/positions/:id/compare"
         element={
-          <Protected>
-            <MyApplicationDetail />
+          <Protected need="candidate:compare">
+            <Compare />
+          </Protected>
+        }
+      />
+
+      {/* --- candidates ------------------------------------------------ */}
+      <Route
+        path="/candidates"
+        element={
+          <Protected need="candidate:view">
+            <Candidates />
+          </Protected>
+        }
+      />
+      <Route
+        path="/candidates/:id"
+        element={
+          <Protected need="candidate:view">
+            <CandidateDetail />
+          </Protected>
+        }
+      />
+
+      {/* --- interviews, notifications, reports, people ---------------- */}
+      <Route
+        path="/interviews"
+        element={
+          <Protected need="interview:view">
+            <Interviews />
+          </Protected>
+        }
+      />
+      <Route
+        path="/outbox"
+        element={
+          <Protected need="outbox:view">
+            <Outbox />
+          </Protected>
+        }
+      />
+      <Route
+        path="/reports"
+        element={
+          <Protected need="report:view">
+            <Reports />
+          </Protected>
+        }
+      />
+      <Route
+        path="/team"
+        element={
+          <Protected need="team:view">
+            <Team />
           </Protected>
         }
       />
@@ -143,74 +173,10 @@ export default function App() {
         }
       />
 
-      {/* --- hiring team only ----------------------------------------- */}
-      <Route
-        path="/dashboard"
-        element={
-          <StaffOnly>
-            <Dashboard />
-          </StaffOnly>
-        }
-      />
-      <Route
-        path="/jobs/new"
-        element={
-          <StaffOnly need="vacancy:create">
-            <JobEditor mode="create" />
-          </StaffOnly>
-        }
-      />
-      <Route
-        path="/jobs/:id/edit"
-        element={
-          <StaffOnly need="vacancy:edit">
-            <JobEditor mode="edit" />
-          </StaffOnly>
-        }
-      />
-      <Route
-        path="/jobs/:id/compare"
-        element={
-          <StaffOnly need="candidate:compare">
-            <Compare />
-          </StaffOnly>
-        }
-      />
-      <Route
-        path="/candidates"
-        element={
-          <StaffOnly>
-            <Candidates />
-          </StaffOnly>
-        }
-      />
-      <Route
-        path="/candidates/:id"
-        element={
-          <StaffOnly>
-            <CandidateDetail />
-          </StaffOnly>
-        }
-      />
-      <Route
-        path="/interviews"
-        element={
-          <StaffOnly>
-            <Interviews />
-          </StaffOnly>
-        }
-      />
-      <Route
-        path="/team"
-        element={
-          <StaffOnly>
-            <Team />
-          </StaffOnly>
-        }
-      />
-
-      <Route path="/" element={<Home />} />
-      <Route path="*" element={<Home />} />
+      {/* Old vacancy addresses still work. */}
+      <Route path="/jobs" element={<Navigate to="/positions" replace />} />
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }

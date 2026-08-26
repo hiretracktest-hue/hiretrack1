@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
@@ -7,7 +7,7 @@ import {
   BAND_LABEL,
   BANDS,
   BandBadge,
-  CvStatusBadge,
+  CvBadge,
   Empty,
   Loading,
   OUTCOME_LABEL,
@@ -18,21 +18,30 @@ import {
 
 const OUTCOMES = ["ACTIVE", "ON_HOLD", "HIRED", "REJECTED"];
 
+/**
+ * Every candidate across every position. The band filter is what makes
+ * a large pile workable: screen each CV once, then work through the
+ * High band first instead of re-reading everything.
+ */
 export default function Candidates() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const canBand = Boolean(user?.permissions?.["candidate:band"]);
+  const isInterviewer = !canBand;
 
-  const [applications, setApplications] = useState([]);
+  const [candidates, setCandidates] = useState([]);
   const [bandCounts, setBandCounts] = useState(null);
-  const [band, setBand] = useState(searchParams.get("cvBand") || "");
-  const [sort, setSort] = useState(searchParams.get("sort") || "newest");
-  const [selected, setSelected] = useState([]);
-  const [busy, setBusy] = useState(false);
   const [jobs, setJobs] = useState([]);
+
   const [search, setSearch] = useState(searchParams.get("q") || "");
   const [job, setJob] = useState(searchParams.get("job") || "");
   const [outcome, setOutcome] = useState(searchParams.get("outcome") || "");
+  const [band, setBand] = useState(searchParams.get("cvBand") || "");
+  const [sort, setSort] = useState(searchParams.get("sort") || "newest");
+  const [mineOnly, setMineOnly] = useState(searchParams.get("mine") === "1");
+
+  const [selected, setSelected] = useState([]);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -43,23 +52,40 @@ export default function Candidates() {
       .catch((err) => setError(err.message));
   }, []);
 
+  const fetchCandidates = useCallback(
+    () =>
+      api.listCandidates({
+        q: search,
+        job,
+        outcome,
+        cvBand: band,
+        sort,
+        mine: mineOnly ? 1 : "",
+      }),
+    [search, job, outcome, band, sort, mineOnly]
+  );
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setLoading(true);
-      // Keep the filters in the address bar so the view can be shared.
+      // Keep the filters in the address bar so a view can be shared.
       setSearchParams(
         Object.fromEntries(
-          Object.entries({ q: search, job, outcome, cvBand: band, sort }).filter(
-            ([key, value]) => value && !(key === "sort" && value === "newest")
-          )
+          Object.entries({
+            q: search,
+            job,
+            outcome,
+            cvBand: band,
+            sort: sort === "newest" ? "" : sort,
+            mine: mineOnly ? "1" : "",
+          }).filter(([, value]) => value)
         ),
         { replace: true }
       );
 
-      api
-        .listApplications({ q: search, job, outcome, cvBand: band, sort })
+      fetchCandidates()
         .then((result) => {
-          setApplications(result.applications);
+          setCandidates(result.candidates);
           setBandCounts(result.bandCounts || null);
           setSelected([]);
         })
@@ -68,17 +94,17 @@ export default function Candidates() {
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [search, job, outcome, band, sort, setSearchParams]);
+  }, [fetchCandidates, search, job, outcome, band, sort, mineOnly, setSearchParams]);
 
-  /** Band every selected CV in one go - screening in bulk. */
+  /** Screen several CVs in one go. */
   async function bandSelected(value) {
     if (!selected.length) return;
     setBusy(true);
     setError("");
     try {
       await api.bandCvBulk(selected, value);
-      const result = await api.listApplications({ q: search, job, outcome, cvBand: band, sort });
-      setApplications(result.applications);
+      const result = await fetchCandidates();
+      setCandidates(result.candidates);
       setBandCounts(result.bandCounts || null);
       setSelected([]);
     } catch (err) {
@@ -94,36 +120,43 @@ export default function Candidates() {
     );
   }
 
+  const allVisibleSelected = candidates.length > 0 && selected.length === candidates.length;
+
   return (
     <div className="page">
       <div className="page-head">
         <div>
           <h1>Candidates</h1>
           <p className="subtitle">
-            Everyone who has applied, across every vacancy. {applications.length} shown.
+            {candidates.length} shown
+            {bandCounts ? " of " + Object.values(bandCounts).reduce((a, b) => a + b, 0) : ""}.
+            {canBand && " Screen each CV once, then work through the High band first."}
           </p>
         </div>
-        <select
-          className="select"
-          style={{ width: "auto" }}
-          value={sort}
-          onChange={(event) => setSort(event.target.value)}
-          aria-label="Sort candidates"
-        >
-          <option value="newest">Newest first</option>
-          <option value="band">Best screened first</option>
-          <option value="rating">Highest interview score</option>
-          <option value="name">Name (A-Z)</option>
-          <option value="oldest">Oldest first</option>
-        </select>
+        <div className="btn-row">
+          <button className="btn btn-secondary" onClick={() => setMineOnly((c) => !c)}>
+            {mineOnly ? "Show everyone" : "Only mine to interview"}
+          </button>
+          <select
+            className="select"
+            style={{ width: "auto" }}
+            value={sort}
+            onChange={(event) => setSort(event.target.value)}
+            aria-label="Sort candidates"
+          >
+            <option value="newest">Newest first</option>
+            <option value="band">Best screened first</option>
+            <option value="rating">Highest interview score</option>
+            <option value="name">Name (A-Z)</option>
+            <option value="oldest">Oldest first</option>
+          </select>
+        </div>
       </div>
 
       <Alert kind="error" onDismiss={() => setError("")}>
         {error}
       </Alert>
 
-      {/* Screening bands. With hundreds of CVs this is how HR gets to
-          the good ones without opening every file. */}
       {bandCounts && (
         <div className="band-bar">
           <button
@@ -131,7 +164,10 @@ export default function Candidates() {
             className={"band-chip" + (band === "" ? " active" : "")}
             onClick={() => setBand("")}
           >
-            All <span className="count">{bandCounts.HIGH + bandCounts.MEDIUM + bandCounts.LOW + bandCounts.UNRATED}</span>
+            All{" "}
+            <span className="count">
+              {Object.values(bandCounts).reduce((a, b) => a + b, 0)}
+            </span>
           </button>
           {BANDS.map((value) => (
             <button
@@ -150,7 +186,7 @@ export default function Candidates() {
         <div className="alert alert-info">
           <div className="row-between">
             <span>
-              {selected.length} selected. Band {selected.length === 1 ? "it" : "them all"} as:
+              {selected.length} selected. Screen {selected.length === 1 ? "it" : "them all"} as:
             </span>
             <div className="btn-row">
               {BANDS.map((value) => (
@@ -182,9 +218,9 @@ export default function Candidates() {
           className="select"
           value={job}
           onChange={(event) => setJob(event.target.value)}
-          aria-label="Filter by vacancy"
+          aria-label="Filter by position"
         >
-          <option value="">All vacancies</option>
+          <option value="">All positions</option>
           {jobs.map((item) => (
             <option key={item.id} value={item.id}>
               {item.title}
@@ -204,7 +240,7 @@ export default function Candidates() {
             </option>
           ))}
         </select>
-        {(search || job || outcome || band) && (
+        {(search || job || outcome || band || mineOnly) && (
           <button
             className="btn btn-ghost"
             onClick={() => {
@@ -212,6 +248,7 @@ export default function Candidates() {
               setJob("");
               setOutcome("");
               setBand("");
+              setMineOnly(false);
             }}
           >
             Clear filters
@@ -221,10 +258,14 @@ export default function Candidates() {
 
       {loading ? (
         <Loading what="candidates" />
-      ) : applications.length === 0 ? (
+      ) : candidates.length === 0 ? (
         <div className="table-wrap">
           <Empty title="No candidates match those filters">
-            <p>Try clearing the search, or apply to a vacancy to create the first candidate.</p>
+            <p>
+              {isInterviewer
+                ? "You have nobody to interview at the moment."
+                : "Try clearing the filters, or add a candidate from a position."}
+            </p>
           </Empty>
         </div>
       ) : (
@@ -232,62 +273,68 @@ export default function Candidates() {
           <table>
             <thead>
               <tr>
-                {canBand && <th style={{ width: 36 }} />}
+                {canBand && (
+                  <th style={{ width: 36 }}>
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={() =>
+                        setSelected(allVisibleSelected ? [] : candidates.map((c) => c.id))
+                      }
+                      aria-label="Select all"
+                    />
+                  </th>
+                )}
                 <th>Candidate</th>
-                <th>Vacancy</th>
-                <th>Band</th>
+                <th>Position</th>
+                <th>CV band</th>
                 <th>Score</th>
                 <th>Stage</th>
                 <th>Outcome</th>
                 <th>CV</th>
-                <th>Applied</th>
+                <th>Added</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {applications.map((application) => (
-                <tr key={application.id}>
+              {candidates.map((candidate) => (
+                <tr key={candidate.id}>
                   {canBand && (
                     <td>
                       <input
                         type="checkbox"
-                        checked={selected.includes(application.id)}
-                        onChange={() => toggle(application.id)}
-                        aria-label={"Select " + application.fullName}
+                        checked={selected.includes(candidate.id)}
+                        onChange={() => toggle(candidate.id)}
+                        aria-label={"Select " + candidate.fullName}
                       />
                     </td>
                   )}
                   <td>
-                    <Link className="cell-title" to={"/candidates/" + application.id}>
-                      {application.fullName}
+                    <Link className="cell-title" to={"/candidates/" + candidate.id}>
+                      {candidate.fullName}
                     </Link>
-                    <div className="cell-sub">{application.email}</div>
+                    <div className="cell-sub">{candidate.email}</div>
                   </td>
                   <td>
-                    <Link to={"/jobs/" + application.jobId}>{application.jobTitle}</Link>
-                    <div className="cell-sub">{application.jobDepartment || "—"}</div>
+                    <Link to={"/positions/" + candidate.jobId}>{candidate.jobTitle}</Link>
+                    <div className="cell-sub">{candidate.jobDepartment || "—"}</div>
                   </td>
                   <td>
-                    <BandBadge band={application.cvBand} />
+                    <BandBadge band={candidate.cvBand} />
                   </td>
                   <td>
-                    <Stars value={application.averageRating} />
+                    <Stars value={candidate.averageRating} />
                   </td>
-                  <td>{application.currentStage}</td>
+                  <td>{candidate.currentStage}</td>
                   <td>
-                    <OutcomeBadge outcome={application.outcome} />
+                    <OutcomeBadge outcome={candidate.outcome} />
                   </td>
                   <td>
-                    <CvStatusBadge status={application.cvStatus} hasCv={Boolean(application.cv)} />
-                    {application.cv && (
-                      <div className="cell-sub">
-                        <a href={api.cvDownloadUrl(application.id)}>Download</a>
-                      </div>
-                    )}
+                    <CvBadge hasCv={Boolean(candidate.cv)} />
                   </td>
-                  <td className="cell-sub">{formatDate(application.createdAt)}</td>
+                  <td className="cell-sub">{formatDate(candidate.createdAt)}</td>
                   <td className="cell-right">
-                    <Link className="btn btn-secondary btn-sm" to={"/candidates/" + application.id}>
+                    <Link className="btn btn-secondary btn-sm" to={"/candidates/" + candidate.id}>
                       View
                     </Link>
                   </td>

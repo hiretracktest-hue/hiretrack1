@@ -103,24 +103,6 @@ export function StatusBadge({ status }) {
   );
 }
 
-const CLIENT_STATUS_STYLE = {
-  NO_CV: "badge-grey",
-  PENDING: "badge-amber",
-  ACCEPTED: "badge-green",
-  REJECTED: "badge-red",
-  HIRED: "badge-green",
-};
-
-/** What a client sees about their own application while they wait. */
-export function ClientStatusBadge({ status }) {
-  if (!status) return null;
-  return (
-    <span className={"badge " + (CLIENT_STATUS_STYLE[status.key] || "badge-grey")}>
-      {status.label}
-    </span>
-  );
-}
-
 const BAND_STYLE = {
   HIGH: "badge-green",
   MEDIUM: "badge-amber",
@@ -144,19 +126,11 @@ export function BandBadge({ band }) {
   );
 }
 
-const CV_STATUS_STYLE = { PENDING: "badge-amber", ACCEPTED: "badge-green", REJECTED: "badge-red" };
-const CV_STATUS_LABEL = {
-  PENDING: "CV not reviewed",
-  ACCEPTED: "CV accepted",
-  REJECTED: "CV rejected",
-};
-
-/** The same thing from the hiring team's side. */
-export function CvStatusBadge({ status, hasCv = true }) {
-  if (!hasCv) return <span className="badge badge-grey">No CV</span>;
+/** Does this candidate have a CV on file at all? */
+export function CvBadge({ hasCv }) {
   return (
-    <span className={"badge " + (CV_STATUS_STYLE[status] || "badge-grey")}>
-      {CV_STATUS_LABEL[status] || status}
+    <span className={"badge " + (hasCv ? "badge-blue" : "badge-grey")}>
+      {hasCv ? "CV on file" : "No CV"}
     </span>
   );
 }
@@ -257,64 +231,6 @@ export function formatBytes(bytes) {
   if (bytes < 1024) return bytes + " B";
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + " KB";
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-}
-
-/** Copy-to-clipboard share link with WhatsApp / LinkedIn buttons. */
-export function ShareLink({ url, title }) {
-  const [copied, setCopied] = useState(false);
-  if (!url) return null;
-
-  const message = "We are hiring: " + (title || "") + "\n" + url;
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(url);
-    } catch {
-      // Clipboard is blocked on insecure origins; the text is selectable.
-    }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  return (
-    <div>
-      <div className="share-box">
-        <span className="share-url">{url}</span>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={copy}>
-          {copied ? "Copied" : "Copy link"}
-        </button>
-      </div>
-      <div className="btn-row mt-2">
-        <a
-          className="btn btn-secondary btn-sm"
-          href={"https://wa.me/?text=" + encodeURIComponent(message)}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Share on WhatsApp
-        </a>
-        <a
-          className="btn btn-secondary btn-sm"
-          href={"https://www.linkedin.com/sharing/share-offsite/?url=" + encodeURIComponent(url)}
-          target="_blank"
-          rel="noreferrer"
-        >
-          LinkedIn
-        </a>
-        <a
-          className="btn btn-secondary btn-sm"
-          href={"https://www.facebook.com/sharer/sharer.php?u=" + encodeURIComponent(url)}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Facebook
-        </a>
-        <a className="btn btn-secondary btn-sm" href={url} target="_blank" rel="noreferrer">
-          Preview
-        </a>
-      </div>
-    </div>
-  );
 }
 
 export function initials(name = "") {

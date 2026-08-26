@@ -23,6 +23,7 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || DEV_SECRET,
   jwtExpiresIn: Number(process.env.JWT_EXPIRES_IN) || 60 * 60 * 24 * 7, // 7 days
   clientUrl: process.env.CLIENT_URL || "http://localhost:5173",
+  companyName: process.env.COMPANY_NAME || "HireTrack",
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID || "",
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
@@ -41,39 +42,47 @@ export const config = {
     ],
     allowedExt: [".pdf", ".doc", ".docx"],
   },
-  // WF-02 from the project plan: a candidate cannot be advanced until
-  // feedback for their current stage has been submitted. Set
-  // REQUIRE_FEEDBACK_TO_ADVANCE=false in .env to switch the gate off.
+  // "Should a candidate be blocked from advancing until the current
+  // stage's feedback is in?" - yes. Set this to false in .env to lift it.
   requireFeedbackToAdvance: process.env.REQUIRE_FEEDBACK_TO_ADVANCE !== "false",
 };
 
 // =====================================================================
-// Roles. These match the personas in the project plan and they carry
-// genuinely different permissions - HR can do everything, a hiring
-// manager slightly less, an interviewer less again.
+// Who logs in, and what can each role see and do?
+//
+//   hr             - HR / recruiter. Opens positions, adds candidates,
+//                    runs the whole process.
+//   hiring_manager - Compares candidates and makes the hire decision.
+//                    Does not open or close positions.
+//   interviewer    - Leaves feedback at their stage. Sees candidates,
+//                    changes nothing about their progress.
+//   management     - Oversight. Sees everything, changes nothing,
+//                    exports reports.
+//
+// Candidates are NOT users of this system: HR adds them.
 // =====================================================================
 export const ROLE_HR = "hr";
 export const ROLE_HIRING_MANAGER = "hiring_manager";
 export const ROLE_INTERVIEWER = "interviewer";
-export const ROLE_CANDIDATE = "candidate";
+export const ROLE_MANAGEMENT = "management";
 
-export const STAFF_ROLES = [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER];
-export const ALL_ROLES = [...STAFF_ROLES, ROLE_CANDIDATE];
+export const ROLES = [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER, ROLE_MANAGEMENT];
 
 export const ROLE_LABELS = {
   hr: "HR Recruiter",
   hiring_manager: "Hiring Manager",
   interviewer: "Interviewer",
-  candidate: "Candidate",
+  management: "Management",
 };
 
 export const ROLE_DESCRIPTIONS = {
-  hr: "Full access. Opens vacancies, shares the job link, screens CVs, runs the whole pipeline.",
+  hr: "Opens positions, adds candidates, screens CVs, schedules interviews and runs the whole process.",
   hiring_manager:
-    "Works with candidates: bands CVs, moves stages, records outcomes, compares candidates and leaves feedback. Cannot create or close a vacancy.",
+    "Reviews candidates, compares them side by side, records the hire / reject / on-hold decision. Cannot open or close a position.",
   interviewer:
-    "Sees candidates and their CVs, and leaves interview feedback at a stage. Cannot change stages, outcomes or CV bands.",
-  candidate: "Applies through a shared job link and follows their own application only.",
+    "Sees the candidates they are interviewing and leaves structured feedback at their stage. Cannot move anyone forward.",
+  management:
+    "Oversight only. Sees every position, candidate and score, and exports reports. Changes nothing.",
 };
 
 /**
@@ -82,36 +91,39 @@ export const ROLE_DESCRIPTIONS = {
  * rules cannot drift apart.
  */
 export const PERMISSIONS = {
-  // Vacancies - only HR runs the requisition process.
-  "vacancy:create": [ROLE_HR],
-  "vacancy:edit": [ROLE_HR],
-  "vacancy:close": [ROLE_HR],
-  "vacancy:delete": [ROLE_HR],
-  "vacancy:share": [ROLE_HR],
+  // Positions
+  "position:create": [ROLE_HR],
+  "position:edit": [ROLE_HR],
+  "position:close": [ROLE_HR],
+  "position:delete": [ROLE_HR],
+  "position:view": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER, ROLE_MANAGEMENT],
 
-  // Candidates.
-  "candidate:viewAll": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER],
-  "candidate:create": [ROLE_HR],
-  "candidate:edit": [ROLE_HR, ROLE_HIRING_MANAGER],
+  // Candidates
+  "candidate:view": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER, ROLE_MANAGEMENT],
+  "candidate:add": [ROLE_HR],
+  "candidate:edit": [ROLE_HR],
   "candidate:delete": [ROLE_HR],
+  "candidate:uploadCv": [ROLE_HR],
   "candidate:band": [ROLE_HR, ROLE_HIRING_MANAGER],
-  "candidate:reviewCv": [ROLE_HR, ROLE_HIRING_MANAGER],
   "candidate:advance": [ROLE_HR, ROLE_HIRING_MANAGER],
   "candidate:outcome": [ROLE_HR, ROLE_HIRING_MANAGER],
+  "candidate:compare": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_MANAGEMENT],
 
-  // Interviews and feedback.
+  // Interviews and feedback
   "interview:schedule": [ROLE_HR, ROLE_HIRING_MANAGER],
-  "interview:viewAll": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER],
+  "interview:view": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER, ROLE_MANAGEMENT],
   "feedback:write": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER],
-  "feedback:viewAll": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER],
-  "candidate:compare": [ROLE_HR, ROLE_HIRING_MANAGER],
+  "feedback:view": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER, ROLE_MANAGEMENT],
 
-  // People and reporting.
-  "team:view": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER],
-  "stats:view": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER],
+  // Notifications outbox (what would be emailed to a candidate)
+  "outbox:view": [ROLE_HR, ROLE_HIRING_MANAGER],
+
+  // People and reporting
+  "team:view": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER, ROLE_MANAGEMENT],
+  "team:manage": [ROLE_HR],
+  "report:view": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_MANAGEMENT],
+  "report:export": [ROLE_HR, ROLE_MANAGEMENT],
 };
-
-export const isStaff = (user) => Boolean(user) && STAFF_ROLES.includes(user.role);
 
 export function can(user, permission) {
   if (!user) return false;

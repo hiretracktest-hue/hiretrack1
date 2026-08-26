@@ -8,6 +8,7 @@ const GOOGLE_ERRORS = {
   google_token: "Google did not accept the sign-in. Please try again.",
   google_profile: "We could not read your Google profile. Please try again.",
   google_email: "Your Google account did not share an email address.",
+  google_unknown: "That Google account is not registered here. Ask HR to create your account.",
 };
 
 export default function SignIn() {
@@ -20,7 +21,6 @@ export default function SignIn() {
   const [error, setError] = useState(GOOGLE_ERRORS[searchParams.get("error")] || "");
   const [busy, setBusy] = useState(false);
 
-  const justRegistered = searchParams.get("registered") === "1";
   const justReset = searchParams.get("reset") === "1";
 
   function update(key) {
@@ -32,11 +32,8 @@ export default function SignIn() {
     setError("");
     setBusy(true);
     try {
-      const signedIn = await signIn(form);
-      // If they arrived from a shared job link, send them straight back
-      // to it so they can finish applying.
-      const fallback = signedIn.isStaff ? "/dashboard" : "/my-applications";
-      navigate(location.state?.from || fallback, { replace: true });
+      await signIn(form);
+      navigate(location.state?.from || "/dashboard", { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -53,10 +50,9 @@ export default function SignIn() {
             HireTrack
           </span>
           <h1>Welcome back</h1>
-          <p>Sign in to manage vacancies and candidates.</p>
+          <p>Sign in to manage positions and candidates.</p>
         </div>
 
-        {justRegistered && <Alert kind="success">Account created. You can sign in now.</Alert>}
         {justReset && <Alert kind="success">Password updated. Sign in with your new password.</Alert>}
         <Alert kind="error">{error}</Alert>
 
@@ -109,21 +105,24 @@ export default function SignIn() {
         )}
 
         <p className="auth-foot">
-          Don&apos;t have an account? <Link to="/signup">Create one</Link>
+          Accounts are created by HR. Ask them if you need one.
         </p>
 
         <div className="demo-box">
           <strong>Demo accounts</strong> — password <code>123</code> for all of them.
           <br />
           <br />
-          <strong>HR</strong> (full access): <code>isuru@gmail.com</code>,{" "}
-          <code>ahmed@gmail.com</code>
+          <strong>HR Recruiter</strong> — runs everything: <code>isuru@gmail.com</code>
           <br />
-          <strong>Hiring Manager</strong> (no vacancy control): <code>fazl@gmail.com</code>
+          <strong>Hiring Manager</strong> — candidates and the decision:{" "}
+          <code>fazl@gmail.com</code>
           <br />
-          <strong>Interviewer</strong> (feedback only): <code>thariq@gmail.com</code>
+          <strong>Interviewer</strong> — feedback only: <code>thariq@gmail.com</code>
           <br />
-          <strong>Candidate</strong>: <code>maya.fernando@gmail.com</code>
+          <strong>Management</strong> — oversight and reports: <code>ahmed@gmail.com</code>
+          <br />
+          <br />
+          Candidates do not log in — HR adds them.
         </div>
       </div>
     </div>

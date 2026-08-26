@@ -1,7 +1,7 @@
 import express from "express";
 import crypto from "node:crypto";
 import { db } from "../db/index.js";
-import { config, STAFF_ROLES, ROLE_CANDIDATE, ROLE_LABELS } from "../config.js";
+import { config, ROLES, ROLE_LABELS } from "../config.js";
 import { asyncHandler, requireAuth, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 import {
@@ -26,37 +26,13 @@ const findById = db.prepare("SELECT * FROM users WHERE id = ?");
 router.get("/config", (_req, res) => {
   res.json({
     googleEnabled: config.google.enabled,
-    staffRoles: STAFF_ROLES.map((value) => ({ value, label: ROLE_LABELS[value] })),
-    candidateRole: ROLE_CANDIDATE,
+    roles: ROLES.map((value) => ({ value, label: ROLE_LABELS[value] })),
+    companyName: config.companyName,
   });
 });
 
-// --- Sign up ---------------------------------------------------------
-router.post(
-  "/signup",
-  asyncHandler(async (req, res) => {
-    const name = v.str(req.body.name, { field: "Full name", required: true, max: 120, min: 2 });
-    const emailValue = v.email(req.body.email);
-    const pw = v.password(req.body.password);
-    // Anyone can register, but only as a candidate. Staff accounts
-    // (HR, hiring manager, interviewer) are created by HR from the team
-    // page, exactly as they would be in a real company.
-    const role = ROLE_CANDIDATE;
-
-    if (findByEmail.get(emailValue)) {
-      throw httpError(409, "An account with this email already exists. Try signing in.");
-    }
-
-    const passwordHash = await hashPassword(pw);
-    const info = db
-      .prepare("INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)")
-      .run(name, emailValue, passwordHash, role);
-
-    const user = findById.get(info.lastInsertRowid);
-    setAuthCookie(res, signToken(user));
-    res.status(201).json({ user: publicUser(user) });
-  })
-);
+// There is no public sign-up. This is an internal tool: HR creates
+// every account from the Team page. See routes/team.routes.js.
 
 // --- Sign in ---------------------------------------------------------
 router.post(
@@ -245,13 +221,10 @@ router.get(
       ).run(profile.id, profile.picture || null, user.id);
       user = findById.get(user.id);
     } else {
-      const fallbackName = profile.name || emailValue.split("@")[0];
-      const info = db
-        .prepare(
-          "INSERT INTO users (name, email, password_hash, role, google_id, avatar_url) VALUES (?, ?, NULL, 'candidate', ?, ?)"
-        )
-        .run(fallbackName, emailValue, profile.id, profile.picture || null);
-      user = findById.get(info.lastInsertRowid);
+      // No account with that address. We do not create one: staff
+      // accounts come from HR, so an unknown Google account is turned
+      // away rather than silently let in.
+      return res.redirect(config.clientUrl + "/signin?error=google_unknown");
     }
 
     setAuthCookie(res, signToken(user));

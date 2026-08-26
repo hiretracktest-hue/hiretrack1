@@ -35,66 +35,70 @@ async function request(path, { method = "GET", body, isForm = false } = {}) {
 }
 
 export const api = {
-  // public - no account needed. This is what a shared job link opens.
-  publicJob: (token) => request("/public/jobs/" + encodeURIComponent(token)),
-  publicJobs: () => request("/public/jobs"),
-
   // auth
   config: () => request("/auth/config"),
   me: () => request("/auth/me"),
   signIn: (body) => request("/auth/signin", { method: "POST", body }),
-  signUp: (body) => request("/auth/signup", { method: "POST", body }),
   signOut: () => request("/auth/signout", { method: "POST" }),
   forgotPassword: (body) => request("/auth/forgot-password", { method: "POST", body }),
   resetPassword: (body) => request("/auth/reset-password", { method: "POST", body }),
   changePassword: (body) => request("/auth/change-password", { method: "POST", body }),
 
-  // vacancies
+  // open positions
   listJobs: (params = {}) => request("/jobs" + query(params)),
   getJob: (id) => request("/jobs/" + id),
   createJob: (body) => request("/jobs", { method: "POST", body }),
   updateJob: (id, body) => request("/jobs/" + id, { method: "PATCH", body }),
   deleteJob: (id) => request("/jobs/" + id, { method: "DELETE" }),
-  regenerateShareLink: (id) => request("/jobs/" + id + "/share/regenerate", { method: "POST" }),
 
-  // applications / candidates
-  listApplications: (params = {}) => request("/applications" + query(params)),
-  getApplication: (id) => request("/applications/" + id),
-  apply: (body) => request("/applications", { method: "POST", body }),
-  updateApplication: (id, body) => request("/applications/" + id, { method: "PATCH", body }),
-  advanceApplication: (id) => request("/applications/" + id + "/advance", { method: "POST" }),
+  // candidates
+  listCandidates: (params = {}) => request("/candidates" + query(params)),
+  getCandidate: (id) => request("/candidates/" + id),
+  addCandidate: (body) => request("/candidates", { method: "POST", body }),
+  updateCandidate: (id, body) => request("/candidates/" + id, { method: "PATCH", body }),
+  advanceCandidate: (id) => request("/candidates/" + id + "/advance", { method: "POST" }),
   bandCv: (id, band, note) =>
-    request("/applications/" + id + "/band", { method: "POST", body: { band, note } }),
+    request("/candidates/" + id + "/band", { method: "POST", body: { band, note } }),
   bandCvBulk: (ids, band) =>
-    request("/applications/band/bulk", { method: "POST", body: { ids, band } }),
-  reviewCv: (id, status) =>
-    request("/applications/" + id + "/cv-review", { method: "POST", body: { status } }),
+    request("/candidates/band/bulk", { method: "POST", body: { ids, band } }),
   uploadCv: (id, file) => {
     const form = new FormData();
     form.append("cv", file);
-    return request("/applications/" + id + "/cv", { method: "POST", body: form, isForm: true });
+    return request("/candidates/" + id + "/cv", { method: "POST", body: form, isForm: true });
   },
-  deleteCv: (id) => request("/applications/" + id + "/cv", { method: "DELETE" }),
-  deleteApplication: (id) => request("/applications/" + id, { method: "DELETE" }),
-  cvDownloadUrl: (id) => "/api/applications/" + id + "/cv",
+  deleteCv: (id) => request("/candidates/" + id + "/cv", { method: "DELETE" }),
+  deleteCandidate: (id) => request("/candidates/" + id, { method: "DELETE" }),
+  cvDownloadUrl: (id) => "/api/candidates/" + id + "/cv",
 
   // interviews
   listInterviews: (params = {}) => request("/interviews" + query(params)),
   scheduleInterview: (body) => request("/interviews", { method: "POST", body }),
   cancelInterview: (id) => request("/interviews/" + id, { method: "DELETE" }),
 
-  // interviewer feedback + side-by-side comparison (Scenario 1)
+  // interviewer feedback and side-by-side comparison
   listFeedback: (params = {}) => request("/feedback" + query(params)),
   leaveFeedback: (body) => request("/feedback", { method: "POST", body }),
   deleteFeedback: (id) => request("/feedback/" + id, { method: "DELETE" }),
   compare: (jobId) => request("/feedback/compare/" + jobId),
 
-  // team
+  // how people are told about interviews
+  notifications: () => request("/notifications"),
+  markNotificationRead: (id) => request("/notifications/" + id + "/read", { method: "POST" }),
+  markAllNotificationsRead: () => request("/notifications/read-all", { method: "POST" }),
+  outbox: (params = {}) => request("/notifications/outbox" + query(params)),
+  markEmailSent: (id) => request("/notifications/outbox/" + id + "/sent", { method: "POST" }),
+
+  // reports for management
+  reports: () => request("/reports"),
+  reportCsvUrl: (report) => "/api/reports/export.csv?report=" + encodeURIComponent(report),
+
+  // people
   team: () => request("/team"),
+  interviewers: () => request("/team/interviewers"),
   stats: () => request("/team/stats"),
   updateProfile: (body) => request("/team/me", { method: "PATCH", body }),
   addMember: (body) => request("/team/members", { method: "POST", body }),
-  setMemberRole: (id, role) => request("/team/members/" + id, { method: "PATCH", body: { role } }),
+  updateMember: (id, body) => request("/team/members/" + id, { method: "PATCH", body }),
 };
 
 function query(params) {

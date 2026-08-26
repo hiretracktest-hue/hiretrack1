@@ -64,7 +64,7 @@ export default function JobEditor({ mode }) {
 
   function removeStage(name) {
     if (stages.length === 1) {
-      setError("A vacancy needs at least one interview stage.");
+      setError("A position needs at least one interview stage.");
       return;
     }
     setStages((current) => current.filter((stage) => stage !== name));
@@ -85,23 +85,23 @@ export default function JobEditor({ mode }) {
     try {
       const payload = { ...form, stages };
       const result = isEdit ? await api.updateJob(id, payload) : await api.createJob(payload);
-      navigate("/jobs/" + result.job.id);
+      navigate("/positions/" + result.job.id);
     } catch (err) {
       setError(err.message);
       setBusy(false);
     }
   }
 
-  if (loading) return <Loading what="this vacancy" />;
+  if (loading) return <Loading what="this position" />;
 
   return (
     <div className="page">
       <div className="page-head">
         <div>
-          <Link className="small" to={isEdit ? "/jobs/" + id : "/jobs"}>
+          <Link className="small" to={isEdit ? "/positions/" + id : "/jobs"}>
             ← Back
           </Link>
-          <h1 className="mt-1">{isEdit ? "Edit vacancy" : "New vacancy"}</h1>
+          <h1 className="mt-1">{isEdit ? "Edit position" : "New position"}</h1>
           <p className="subtitle">
             Fill in the role details and set the interview stages candidates will move through.
           </p>
@@ -174,7 +174,7 @@ export default function JobEditor({ mode }) {
               </Field>
             </div>
 
-            <Field label="Closing date" htmlFor="closingDate" hint="Leave empty for an open-ended vacancy.">
+            <Field label="Closing date" htmlFor="closingDate" hint="Leave empty for an open-ended position.">
               <input
                 id="closingDate"
                 className="input"
@@ -260,9 +260,9 @@ export default function JobEditor({ mode }) {
 
         <div className="btn-row mt-2">
           <button className="btn btn-primary" disabled={busy}>
-            {busy ? "Saving…" : isEdit ? "Save changes" : "Create vacancy"}
+            {busy ? "Saving…" : isEdit ? "Save changes" : "Create position"}
           </button>
-          <Link className="btn btn-secondary" to={isEdit ? "/jobs/" + id : "/jobs"}>
+          <Link className="btn btn-secondary" to={isEdit ? "/positions/" + id : "/jobs"}>
             Cancel
           </Link>
         </div>
