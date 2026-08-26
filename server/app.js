@@ -13,6 +13,7 @@ import feedbackRoutes from "./routes/feedback.routes.js";
 import teamRoutes from "./routes/team.routes.js";
 import notificationsRoutes from "./routes/notifications.routes.js";
 import reportsRoutes from "./routes/reports.routes.js";
+import invitesRoutes from "./routes/invites.routes.js";
 import { ping } from "../database/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -64,6 +65,9 @@ export function createApp({ log = true } = {}) {
   app.use("/api/notifications", notificationsRoutes);
   app.use("/api/reports", reportsRoutes);
   app.use("/api/team", teamRoutes);
+  // Answering an interview invitation from the email link. Not behind
+  // requireAuth: the token in the URL is the authorisation.
+  app.use("/api/invites", invitesRoutes);
 
   // Any other /api/... path is a mistake, not a React route.
   app.use("/api", notFound);

@@ -1,5 +1,7 @@
 import { run, many } from "../database/index.js";
 import { config } from "./config.js";
+import { sendMail, inviteUrl } from "./mail.js";
+import { interviewInviteEmail, interviewAnswerEmail } from "./mail-templates.js";
 
 /**
  * "How are candidates and interviewers told about a scheduled interview?"
@@ -121,7 +123,38 @@ export async function notifyInterviewScheduled({ interview, candidate, job, book
     );
   }
 
-  // 2. The candidate, by email - written to the outbox for HR to send.
+  // 2. The interviewer's real inbox, with Accept and Decline in it.
+  //    They are not signed in when they read their email, and making
+  //    them sign in first is how invitations get ignored - so the links
+  //    carry a signed token good for this one booking only.
+  if (interview.interviewer_id && interview.interviewer_email) {
+    const mail = interviewInviteEmail({
+      interview,
+      candidate,
+      job,
+      bookedBy,
+      when,
+      url: inviteUrl(interview),
+    });
+    const result = await sendMail({
+      to: interview.interviewer_email,
+      name: interview.interviewer_name,
+      ...mail,
+    });
+    if (!result.sent) {
+      // No mail server, or it refused us. The in-app notification above
+      // still stands, so the booking is not lost - but say so plainly
+      // rather than letting it look delivered.
+      console.warn(
+        "[notify] interview invite not emailed to " +
+          interview.interviewer_email +
+          ": " +
+          result.reason
+      );
+    }
+  }
+
+  // 3. The candidate, by email - written to the outbox for HR to send.
   await toOutbox(
     "interview.invitation",
     { email: candidate.email, name: candidate.full_name },
@@ -170,6 +203,17 @@ export async function notifyInterviewResponse({ interview, candidate, job, respo
   const when = formatWhen(interview.scheduled_at);
   const who = responder?.name || interview.interviewer_name || "The interviewer";
   const note = interview.response_note;
+
+  // Their own copy, so the answer exists somewhere they can find it
+  // again without signing in.
+  const to = interview.interviewer_email || responder?.email;
+  if (to) {
+    await sendMail({
+      to,
+      name: who,
+      ...interviewAnswerEmail({ interview, candidate, job, when, accepted }),
+    });
+  }
 
   if (!accepted) {
     // Declined. Only HR needs this, and it has to read as an action.

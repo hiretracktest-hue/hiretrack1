@@ -6,6 +6,7 @@ import { Loading } from "./components/ui.jsx";
 import SignIn from "./pages/SignIn.jsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
+import Invite from "./pages/Invite.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Jobs from "./pages/Jobs.jsx";
 import JobDetail from "./pages/JobDetail.jsx";
@@ -61,6 +62,10 @@ export default function App() {
       />
       {/* Reachable signed out or in - the link arrives by email. */}
       <Route path="/reset-password" element={<ResetPassword />} />
+
+      {/* Where "Accept" in an interview email lands. The token in the
+          URL is the authorisation, so there is no guard here. */}
+      <Route path="/invite/:token" element={<Invite />} />
 
       <Route
         path="/dashboard"

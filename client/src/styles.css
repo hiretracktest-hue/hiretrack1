@@ -1083,3 +1083,27 @@ tbody tr:hover {
   font-size: 0.79rem;
   line-height: 1.45;
 }
+
+/* --- the interview invitation page ----------------------------------- */
+.invite-title {
+  font-size: 1.3rem;
+  margin-bottom: 14px;
+}
+.invite-details {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  margin: 0 0 18px 0;
+  padding: 14px 16px;
+  background: var(--canvas);
+  border-radius: var(--radius);
+  font-size: 0.86rem;
+}
+.invite-details dt {
+  color: var(--muted);
+}
+.invite-details dd {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 600;
+}

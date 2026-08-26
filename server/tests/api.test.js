@@ -84,6 +84,7 @@ const schemaSql = fs
 await admin.query(schemaSql);
 
 const { createApp } = await import("../app.js");
+const { inviteToken } = await import("../mail.js");
 const { one, many, run, closePool } = await import("../../database/index.js");
 
 let server;
@@ -698,6 +699,130 @@ describe("the interviewer answers the booking", () => {
       0,
       "being told what you just did yourself is noise"
     );
+  });
+});
+
+describe("answering the invitation from the email link", () => {
+  let interviewId;
+  let token;
+  let candidateId;
+
+  test("HR books an interview and a link is minted for it", async () => {
+    const jobId = Number((await one("SELECT id FROM jobs WHERE title = $1", ["Junior Developer"])).id);
+    await signIn("hr@example.com");
+
+    const added = await call("POST", "/api/candidates", {
+      jobId,
+      fullName: "Ishara Wickrama",
+      email: "ishara@example.com",
+    });
+    candidateId = added.data.candidate.id;
+
+    const booked = await call("POST", "/api/interviews", {
+      candidateId,
+      stage: "Applied",
+      scheduledAt: "2027-06-01T10:00",
+      interviewerId: await userId("interviewer@example.com"),
+      location: "Room 9",
+    });
+    assert.equal(booked.status, 201);
+    interviewId = booked.data.interview.id;
+
+    const row = await one("SELECT * FROM interviews WHERE id = $1", [interviewId]);
+    token = inviteToken(row);
+    assert.ok(token.length > 100);
+  });
+
+  test("the link works with no sign-in at all", async () => {
+    // An interviewer reading their email is not signed in. If this
+    // needed a session the whole feature would be pointless.
+    cookie = "";
+    const { status, data } = await call("GET", "/api/invites/" + token);
+    assert.equal(status, 200);
+    assert.equal(data.invite.candidateName, "Ishara Wickrama");
+    assert.equal(data.invite.response, "PENDING");
+  });
+
+  test("the link hands over nothing beyond this one booking", async () => {
+    cookie = "";
+    const { data } = await call("GET", "/api/invites/" + token);
+    const keys = Object.keys(data.invite);
+    // Enough to decide whether you can take it, and no more. The
+    // candidate's contact details and CV stay behind the login.
+    for (const leaked of ["candidateEmail", "email", "phone", "cv", "notes_internal"]) {
+      assert.ok(!keys.includes(leaked), leaked + " must not be exposed by a token");
+    }
+  });
+
+  test("a forged or expired token is refused", async () => {
+    cookie = "";
+    assert.equal((await call("GET", "/api/invites/not-a-real-token")).status, 400);
+    assert.equal((await call("GET", "/api/invites/" + token + "x")).status, 400);
+  });
+
+  test("a sign-in token cannot be used as an invitation", async () => {
+    // Both are signed with the same secret, so they are only kept apart
+    // by the purpose claim. If that ever broke, a session token would
+    // become a skeleton key - hence this test.
+    await signIn("interviewer@example.com");
+    const session = cookie.split("=")[1];
+    cookie = "";
+    assert.equal((await call("GET", "/api/invites/" + session)).status, 400);
+  });
+
+  test("accepting through the link records it and tells HR", async () => {
+    cookie = "";
+    const { status, data } = await call("POST", "/api/invites/" + token + "/respond", {
+      response: "ACCEPTED",
+      note: "See you there.",
+    });
+    assert.equal(status, 200);
+    assert.equal(data.invite.response, "ACCEPTED");
+
+    // Same fan-out as answering inside the app - where the answer came
+    // from makes no difference to who needs to know.
+    await signIn("hr@example.com");
+    const notes = await call("GET", "/api/notifications");
+    assert.ok(
+      notes.data.notifications.some(
+        (n) => n.kind === "interview.accepted" && /Ishara Wickrama/.test(n.subject)
+      ),
+      "HR hears back"
+    );
+  });
+
+  test("the same link cannot be used to answer twice", async () => {
+    cookie = "";
+    const { status } = await call("POST", "/api/invites/" + token + "/respond", {
+      response: "ACCEPTED",
+    });
+    assert.equal(status, 400);
+  });
+
+  test("the link dies if the booking is handed to somebody else", async () => {
+    await run("UPDATE interviews SET interviewer_id = $1 WHERE id = $2", [
+      await userId("hr@example.com"),
+      interviewId,
+    ]);
+    cookie = "";
+    assert.equal((await call("GET", "/api/invites/" + token)).status, 403);
+  });
+
+  test("with no mail server, sending from the outbox is refused rather than faked", async () => {
+    // The tests run without SMTP configured. Nothing may be marked sent
+    // when no mail server was ever reached.
+    await signIn("hr@example.com");
+    const { data } = await call("GET", "/api/notifications/outbox?pending=1");
+    const message = data.messages[0];
+    const { status, data: body } = await call(
+      "POST",
+      "/api/notifications/outbox/" + message.id + "/send"
+    );
+    assert.equal(status, 400);
+    assert.match(body.error, /No mail server is configured/);
+
+    const after = await one("SELECT sent_at FROM notifications WHERE id = $1", [message.id]);
+    assert.equal(after.sent_at, null, "it must not look delivered");
   });
 });
 

@@ -15,7 +15,7 @@ Built for our second year, second semester group project.
 | Back end | Node.js + Express (REST API) |
 | Database | **PostgreSQL on Supabase**, accessed with `pg` (node-postgres) — 8 tables |
 | Auth | Email + password (bcrypt), JWT in an httpOnly cookie, optional Google sign-in |
-| Tests | Node's built-in test runner — 62 API tests |
+| Tests | Node's built-in test runner — 71 API tests |
 
 > **This is an internal system.** The people who log in are HR, hiring managers,
 > interviewers and management. **Job candidates do not have accounts** — HR adds
@@ -83,7 +83,7 @@ line up.
 | `npm run dev` | Run the API and the React dev server together |
 | `npm run build` | Build the React app into `client/dist` |
 | `npm start` | Run the API, serving the built React app too |
-| `npm test` | Run the 62 automated API tests |
+| `npm test` | Run the 71 automated API tests |
 | `npm run seed` | Add any missing demo data (safe to re-run) |
 | `npm run seed:reset` | Empty every table, then seed from scratch |
 
@@ -176,6 +176,55 @@ Two things that table is doing deliberately:
 - **Nobody is notified about their own action.** Being told what you just did
   yourself is noise, so the person who caused an event is skipped.
 
+### Real email, and the Accept link in it
+
+The interviewer's message is not only an in-app notification — it is sent to
+their **actual inbox**, with **Accept** and **Decline** in the body. Clicking one
+opens the booking inside Altrium, shows the full details and asks them to
+confirm.
+
+They are not signed in when they read their email, and making them sign in
+first is how invitations end up ignored. So the link carries a signed token,
+kept deliberately narrow:
+
+- **signed** with the server secret, so it cannot be forged
+- **purpose-scoped** — a sign-in token will not work as an invitation and an
+  invitation will not work as a login. Both are signed with the same secret, so
+  the purpose claim is the only thing keeping them apart. There is a test for it.
+- **one interview, one interviewer.** It grants nothing else: no candidate list,
+  no other booking, and not even the candidate's email address or CV. Only
+  enough to decide whether you can take it.
+- **expiring** (`INVITE_EXPIRES_IN`, 30 days by default)
+- **dead if the booking is reassigned** to somebody else
+
+Following the link does not answer anything by itself. It shows what is being
+asked and waits for a click, so a link opened by accident — or prefetched by a
+mail client — commits nobody to anything.
+
+Answering from the email produces exactly the same fan-out as answering inside
+the app. Where the reply came from makes no difference to who needs to know.
+
+**Setting it up** is optional. Leave `SMTP_HOST` blank and nothing is sent —
+every message still lands in the outbox, which is how the project worked before
+mail existed. To switch it on, put your SMTP details in `.env`:
+
+```
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=you@gmail.com
+SMTP_PASS=your-16-character-app-password
+MAIL_FROM="Altrium Recruitment" <you@gmail.com>
+```
+
+For Gmail you need 2-Step Verification on, then an
+[App Password](https://myaccount.google.com/apppasswords) — your normal Gmail
+password will not work.
+
+**Nothing is ever marked sent unless a mail server accepted it.** With SMTP
+configured, HR can send an outbox message with one click. Without it, that
+button refuses and explains why, rather than quietly setting a "sent" flag on a
+message nobody delivered.
+
 Candidates still have no account, so everything addressed to them is written
 into the **Outbox** — invitation, confirmation, apology, offer, regret letter.
 HR reads it, sends it, and marks it sent. There is no mail server in this
@@ -261,7 +310,7 @@ our web/
 │   │   ├── notifications.routes.js in-app notifications + candidate outbox
 │   │   ├── reports.routes.js       management reports + CSV export
 │   │   └── team.routes.js          who logs in, roles, dashboard counts
-│   └── tests/api.test.js   62 automated tests
+│   └── tests/api.test.js   71 automated tests
 │
 └── client/                 React front end
     ├── index.html

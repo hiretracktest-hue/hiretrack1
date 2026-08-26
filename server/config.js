@@ -41,6 +41,24 @@ export const config = {
       return Boolean(this.clientId && this.clientSecret);
     },
   },
+  // Real email. Leave SMTP_HOST blank and nothing is sent - every
+  // message still lands in the outbox for a person to send by hand,
+  // which is how this project worked before mail was wired up.
+  smtp: {
+    host: process.env.SMTP_HOST || "",
+    port: Number(process.env.SMTP_PORT) || 587,
+    user: process.env.SMTP_USER || "",
+    pass: process.env.SMTP_PASS || "",
+    from:
+      process.env.MAIL_FROM ||
+      '"' + (process.env.COMPANY_NAME || "Altrium") + '" <' + (process.env.SMTP_USER || "") + ">",
+    get enabled() {
+      return Boolean(this.host && this.user && this.pass);
+    },
+  },
+  // How long the accept/decline link in an interview email stays valid.
+  inviteExpiresIn: Number(process.env.INVITE_EXPIRES_IN) || 60 * 60 * 24 * 30, // 30 days
+
   upload: {
     maxBytes: 5 * 1024 * 1024, // 5 MB
     allowedMime: [

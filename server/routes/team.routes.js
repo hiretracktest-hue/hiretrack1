@@ -231,6 +231,7 @@ router.get(
       teamMembers: Number(row.team_members),
       pendingEmails: Number(row.pending_emails),
       googleEnabled: config.google.enabled,
+      mailEnabled: config.smtp.enabled,
     });
   })
 );

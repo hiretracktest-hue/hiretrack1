@@ -78,6 +78,14 @@ export const api = {
   respondToInterview: (id, response, note) =>
     request("/interviews/" + id + "/respond", { method: "POST", body: { response, note } }),
 
+  // answering an interview invitation from the email link (no sign-in)
+  getInvite: (token) => request("/invites/" + encodeURIComponent(token)),
+  respondToInvite: (token, response, note) =>
+    request("/invites/" + encodeURIComponent(token) + "/respond", {
+      method: "POST",
+      body: { response, note },
+    }),
+
   // interviewer feedback and side-by-side comparison
   listFeedback: (params = {}) => request("/feedback" + query(params)),
   leaveFeedback: (body) => request("/feedback", { method: "POST", body }),
@@ -90,6 +98,8 @@ export const api = {
   markAllNotificationsRead: () => request("/notifications/read-all", { method: "POST" }),
   outbox: (params = {}) => request("/notifications/outbox" + query(params)),
   markEmailSent: (id) => request("/notifications/outbox/" + id + "/sent", { method: "POST" }),
+  // Really send it, when a mail server is configured.
+  sendEmailNow: (id) => request("/notifications/outbox/" + id + "/send", { method: "POST" }),
 
   // reports for management
   reports: () => request("/reports"),

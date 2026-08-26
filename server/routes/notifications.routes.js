@@ -2,6 +2,9 @@ import express from "express";
 import { one, many, run } from "../../database/index.js";
 import { asyncHandler, requireAuth, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
+import { sendMail } from "../mail.js";
+import { plainEmail } from "../mail-templates.js";
+import { config } from "../config.js";
 
 /**
  * "How are candidates and interviewers told about a scheduled interview?"
@@ -112,6 +115,45 @@ router.get(
     );
 
     res.json({ messages: rows.map(toJson), pending: count });
+  })
+);
+
+/**
+ * Actually send one outbox message.
+ *
+ * With SMTP configured this really goes out and is then marked sent.
+ * Without it, nothing is marked - a message must never look delivered
+ * when no mail server was ever reached.
+ */
+router.post(
+  "/outbox/:id/send",
+  requirePermission("outbox:view"),
+  asyncHandler(async (req, res) => {
+    const id = v.id(req.params.id, { field: "message id" });
+    const row = await one(
+      "SELECT * FROM notifications WHERE id = $1 AND channel = 'EMAIL'",
+      [id]
+    );
+    if (!row) throw httpError(404, "That message does not exist.");
+    if (row.sent_at) throw httpError(400, "That message has already been sent.");
+
+    if (!config.smtp.enabled) {
+      throw httpError(
+        400,
+        "No mail server is configured, so this cannot be sent from here. " +
+          "Copy the message and send it yourself, then use 'Mark as sent'."
+      );
+    }
+
+    const result = await sendMail({
+      to: row.recipient_email,
+      name: row.recipient_name,
+      ...plainEmail({ subject: row.subject, body: row.body }),
+    });
+    if (!result.sent) throw httpError(502, "The mail server refused it: " + result.reason);
+
+    await run("UPDATE notifications SET sent_at = NOW() WHERE id = $1", [id]);
+    res.json({ ok: true, sent: true });
   })
 );
 
