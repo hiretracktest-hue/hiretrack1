@@ -23,28 +23,28 @@ const RESET = process.argv.includes("--reset");
 // number) - see server/validate.js.
 const TEAM = [
   {
-    name: "Kevin Fernando",
+    name: "Nimali Wijesinghe",
     email: "hr@hiretrack.test",
     password: "hr12345",
     role: "hr",
     jobTitle: "HR Manager",
   },
   {
-    name: "Arosh Perera",
+    name: "Chathura Rajapaksha",
     email: "hiringmanager@hiretrack.test",
     password: "hm12345",
     role: "hiring_manager",
     jobTitle: "Engineering / Hiring Manager",
   },
   {
-    name: "Sara Salgadu",
+    name: "Sanduni Ekanayake",
     email: "int@hiretrack.test",
     password: "int12345",
     role: "interviewer",
     jobTitle: "Senior Software Engineer",
   },
   {
-    name: "Thusitha Samarasinghe",
+    name: "Mahesh Gunawardena",
     email: "manag@hiretrack.test",
     password: "manag12345",
     role: "management",
@@ -93,8 +93,8 @@ const JOBS = [
 const CANDIDATES = [
   {
     job: "Junior Software Engineer",
-    fullName: "Maya Fernando",
-    email: "maya.fernando@gmail.com",
+    fullName: "Dilshan Herath",
+    email: "dilshan.herath@gmail.com",
     phone: "+94 77 123 4567",
     source: "LinkedIn",
     stage: "Technical Interview",
@@ -104,8 +104,8 @@ const CANDIDATES = [
   },
   {
     job: "Junior Software Engineer",
-    fullName: "Dinuka Perera",
-    email: "dinuka.perera@gmail.com",
+    fullName: "Tharushi Weerasekara",
+    email: "tharushi.weerasekara@gmail.com",
     phone: "+94 71 998 2211",
     source: "University career fair",
     stage: "Screening",
@@ -115,8 +115,8 @@ const CANDIDATES = [
   },
   {
     job: "Junior Software Engineer",
-    fullName: "Tharindu Bandara",
-    email: "tharindu.bandara@gmail.com",
+    fullName: "Kasun Bandara",
+    email: "kasun.bandara@gmail.com",
     phone: "+94 76 220 1188",
     source: "Email application",
     stage: "Applied",
@@ -126,8 +126,8 @@ const CANDIDATES = [
   },
   {
     job: "Junior Software Engineer",
-    fullName: "Ishara Wickrama",
-    email: "ishara.wickrama@gmail.com",
+    fullName: "Amaya Dissanayake",
+    email: "amaya.dissanayake@gmail.com",
     phone: "+94 70 771 3344",
     source: "Job board",
     stage: "Applied",
@@ -137,8 +137,8 @@ const CANDIDATES = [
   },
   {
     job: "QA Engineer",
-    fullName: "Nimasha Silva",
-    email: "nimasha.silva@gmail.com",
+    fullName: "Sachini Rathnayake",
+    email: "sachini.rathnayake@gmail.com",
     phone: "+94 76 445 0091",
     source: "Referral",
     stage: "Interview",
@@ -148,8 +148,8 @@ const CANDIDATES = [
   },
   {
     job: "Business Analyst Intern",
-    fullName: "Rashmi Jayawardena",
-    email: "rashmi.jayawardena@gmail.com",
+    fullName: "Nuwan Karunaratne",
+    email: "nuwan.karunaratne@gmail.com",
     phone: "+94 70 332 7788",
     source: "University career fair",
     stage: "Applied",
@@ -277,7 +277,7 @@ async function seedCandidates(jobIds, hrId) {
 
 async function seedInterviewAndFeedback(userIds) {
   const candidate = await one("SELECT * FROM candidates WHERE email = $1", [
-    "maya.fernando@gmail.com",
+    "dilshan.herath@gmail.com",
   ]);
   if (!candidate) return;
   if (await one("SELECT id FROM interviews WHERE candidate_id = $1", [candidate.id])) return;
@@ -294,14 +294,14 @@ async function seedInterviewAndFeedback(userIds) {
       candidate.current_stage,
       inThreeDays,
       interviewerId,
-      "Sara Salgadu",
+      "Sanduni Ekanayake",
       INTERVIEWER,
       "Meeting room 2 / Google Meet",
       "Pair programming exercise, 45 minutes.",
       userIds[HR],
     ]
   );
-  console.log("  interview scheduled for Maya Fernando");
+  console.log("  interview scheduled for Dilshan Herath");
 
   const feedback = [
     [
@@ -309,9 +309,9 @@ async function seedInterviewAndFeedback(userIds) {
       "Screening",
       4,
       "ADVANCE",
-      "Solid JavaScript, explained her projects clearly.",
+      "Solid JavaScript, explained his projects clearly.",
       "Has not used SQL much.",
-      "Happy to move her to the technical round.",
+      "Happy to move him to the technical round.",
     ],
     [
       userIds[HIRING_MANAGER],
@@ -331,7 +331,7 @@ async function seedInterviewAndFeedback(userIds) {
       [candidate.id, authorId, stage, rating, recommendation, strengths, concerns, comment]
     );
   }
-  console.log("  feedback  2 entries for Maya Fernando");
+  console.log("  feedback  2 entries for Dilshan Herath");
 }
 
 async function main() {

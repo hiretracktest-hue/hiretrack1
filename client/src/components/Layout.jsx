@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { NavLink, Link, useNavigate } from "react-router-dom";
+import { NavLink, Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
 import { api } from "../api.js";
 import { initials } from "./ui.jsx";
@@ -25,6 +25,10 @@ export default function Layout({ children }) {
   const [notifications, setNotifications] = useState([]);
   const [unread, setUnread] = useState(0);
   const [bellOpen, setBellOpen] = useState(false);
+  // On a phone there is no room for seven links, so they collapse
+  // behind a button. On a wide screen the button is hidden and the
+  // links are always shown - see the media query in styles.css.
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const links = LINKS.filter((link) => !link.need || user?.permissions?.[link.need]);
 
@@ -58,6 +62,12 @@ export default function Layout({ children }) {
     return () => document.removeEventListener("click", close);
   }, [bellOpen]);
 
+  // Following a link should close the menu behind you.
+  const location = useLocation();
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
+
   async function markAllRead() {
     await api.markAllNotificationsRead().catch(() => {});
     await loadNotifications();
@@ -77,7 +87,17 @@ export default function Layout({ children }) {
             Altrium
           </Link>
 
-          <nav className="nav-links">
+          <button
+            type="button"
+            className="nav-toggle"
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <MenuIcon open={menuOpen} />
+          </button>
+
+          <nav className={"nav-links" + (menuOpen ? " is-open" : "")}>
             {links.map((link) => (
               <NavLink
                 key={link.to}
@@ -178,5 +198,17 @@ function BellIcon() {
       />
       <path d="M9.5 19a2.5 2.5 0 0 0 5 0" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
     </svg>
+  );
+}
+
+/** Three lines that become a cross. Animated, unless the viewer has
+ *  asked their system for less motion. */
+function MenuIcon({ open }) {
+  return (
+    <span className={"burger" + (open ? " is-open" : "")} aria-hidden="true">
+      <span />
+      <span />
+      <span />
+    </span>
   );
 }

@@ -61,10 +61,9 @@ each row has a **Use** button that fills the form for you.
 | `int@hiretrack.test` | `int12345` | Interviewer | Sees candidates, leaves feedback at their stage. **Cannot** move anyone forward |
 | `manag@hiretrack.test` | `manag12345` | Management | Oversight: sees everything, changes nothing, exports reports |
 
-The names behind them are the four personas from the project plan — Kevin
-Fernando (HR), Arosh Perera (Hiring Manager), Sara Salgadu (Interviewer) and
-Thusitha Samarasinghe (Management) — so the document and the running system
-line up.
+The names behind them are the four personas from the project plan — Nimali
+Wijesinghe (HR), Chathura Rajapaksha (Hiring Manager), Sanduni Ekanayake
+(Interviewer) and Mahesh Gunawardena (Management).
 
 > These are demo passwords, short on purpose so they are quick to type in the
 > sprint review. They are written straight into the database by `seed.js`.
@@ -114,6 +113,30 @@ ratio of 1.8:1, far below the 4.5:1 WCAG AA needs — it is close to unreadable.
 Altrium themselves put black on the amber, and so do we: `#1e2228` on `#fbb401`
 gives 8.9:1. For the same reason the accent is never used as text at full
 strength; `#8a6300` is used instead, which reaches 5.4:1 on white.
+
+### Responsive, and how it moves
+
+One stylesheet, four breakpoints, tested at each width rather than assumed:
+
+| Width | What changes |
+| --- | --- |
+| 1024px | Tighter bar and page padding |
+| 820px | The seven nav links collapse behind a menu button; the name beside the avatar goes; stat tiles drop to two across; tables scroll sideways instead of crushing their columns |
+| 560px | Stat tiles go to one; buttons in a row go full width and stack, so they stay tappable |
+| `pointer: coarse` | Small buttons and nav links get bigger targets on a touch screen |
+
+Checked at 375px, 768px and 1440px with no horizontal overflow at any of them —
+a page that scrolls sideways on a phone is the usual giveaway that "responsive"
+was only ever claimed.
+
+Movement is used to explain a change, never for decoration: a screen rises into
+place, stat tiles arrive one after another because the row really is being
+filled in, buttons go down when pressed, and the notification panel grows out of
+the bell that opened it.
+
+**All of it is switched off under `prefers-reduced-motion`.** That is not
+politeness — for people with vestibular disorders, motion they did not ask for
+causes real nausea. Focus outlines are visible for keyboard users too.
 
 ## 2. How the brief is answered
 
