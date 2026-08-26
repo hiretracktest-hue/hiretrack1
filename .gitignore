@@ -1,0 +1,26 @@
+# dependencies
+node_modules/
+
+# build output
+client/dist/
+
+# database + uploaded files (never commit real candidate data)
+server/db/*.db
+server/db/*.db-journal
+server/db/*.db-wal
+server/db/*.db-shm
+server/uploads/*
+!server/uploads/.gitkeep
+
+# environment
+.env
+.env.local
+*.local
+
+# logs / editor / os
+*.log
+npm-debug.log*
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
