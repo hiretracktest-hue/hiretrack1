@@ -1,7 +1,7 @@
 import express from "express";
 import crypto from "node:crypto";
 import { db } from "../db/index.js";
-import { config, TEAM_ROLES, CLIENT_ROLE } from "../config.js";
+import { config, STAFF_ROLES, ROLE_CANDIDATE, ROLE_LABELS } from "../config.js";
 import { asyncHandler, requireAuth, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 import {
@@ -26,8 +26,8 @@ const findById = db.prepare("SELECT * FROM users WHERE id = ?");
 router.get("/config", (_req, res) => {
   res.json({
     googleEnabled: config.google.enabled,
-    teamRoles: TEAM_ROLES,
-    clientRole: CLIENT_ROLE,
+    staffRoles: STAFF_ROLES.map((value) => ({ value, label: ROLE_LABELS[value] })),
+    candidateRole: ROLE_CANDIDATE,
   });
 });
 
@@ -38,10 +38,10 @@ router.post(
     const name = v.str(req.body.name, { field: "Full name", required: true, max: 120, min: 2 });
     const emailValue = v.email(req.body.email);
     const pw = v.password(req.body.password);
-    const role = v.oneOf(req.body.role, [...TEAM_ROLES, CLIENT_ROLE], {
-      field: "Role",
-      fallback: CLIENT_ROLE,
-    });
+    // Anyone can register, but only as a candidate. Staff accounts
+    // (HR, hiring manager, interviewer) are created by HR from the team
+    // page, exactly as they would be in a real company.
+    const role = ROLE_CANDIDATE;
 
     if (findByEmail.get(emailValue)) {
       throw httpError(409, "An account with this email already exists. Try signing in.");
@@ -248,7 +248,7 @@ router.get(
       const fallbackName = profile.name || emailValue.split("@")[0];
       const info = db
         .prepare(
-          "INSERT INTO users (name, email, password_hash, role, google_id, avatar_url) VALUES (?, ?, NULL, 'client', ?, ?)"
+          "INSERT INTO users (name, email, password_hash, role, google_id, avatar_url) VALUES (?, ?, NULL, 'candidate', ?, ?)"
         )
         .run(fallbackName, emailValue, profile.id, profile.picture || null);
       user = findById.get(info.lastInsertRowid);

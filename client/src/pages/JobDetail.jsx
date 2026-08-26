@@ -4,12 +4,14 @@ import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
 import {
   Alert,
+  BandBadge,
   CvStatusBadge,
   Empty,
   Field,
   Loading,
   OutcomeBadge,
   Pipeline,
+  ShareLink,
   StatusBadge,
   formatDate,
 } from "../components/ui.jsx";
@@ -19,6 +21,7 @@ export default function JobDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isStaff = Boolean(user?.isStaff);
+  const p = user?.permissions || {};
 
   const [job, setJob] = useState(null);
   const [applicants, setApplicants] = useState([]);
@@ -88,6 +91,23 @@ export default function JobDetail() {
     }
   }
 
+  async function regenerateLink() {
+    if (!window.confirm("Create a new link? Anyone still holding the old one will get an error.")) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api.regenerateShareLink(id);
+      setJob(result.job);
+      setMessage("New link created. Share this one from now on.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function removeJob() {
     if (!window.confirm("Delete this vacancy? This cannot be undone.")) return;
     setBusy(true);
@@ -150,20 +170,22 @@ export default function JobDetail() {
         </div>
         <div className="btn-row">
           <StatusBadge status={job.status} />
-          {isStaff && (
-            <>
-              <Link className="btn btn-secondary" to={"/jobs/" + job.id + "/compare"}>
-                Compare candidates
-              </Link>
-              <Link className="btn btn-secondary" to={"/jobs/" + job.id + "/edit"}>
-                Edit
-              </Link>
-              <button className="btn btn-secondary" onClick={toggleStatus} disabled={busy}>
-                {job.status === "ACTIVE" ? "Close vacancy" : "Reopen vacancy"}
-              </button>
-            </>
+          {p["candidate:compare"] && (
+            <Link className="btn btn-secondary" to={"/jobs/" + job.id + "/compare"}>
+              Compare candidates
+            </Link>
           )}
-          {!alreadyApplied && (
+          {p["vacancy:edit"] && (
+            <Link className="btn btn-secondary" to={"/jobs/" + job.id + "/edit"}>
+              Edit
+            </Link>
+          )}
+          {p["vacancy:close"] && (
+            <button className="btn btn-secondary" onClick={toggleStatus} disabled={busy}>
+              {job.status === "ACTIVE" ? "Close vacancy" : "Reopen vacancy"}
+            </button>
+          )}
+          {!alreadyApplied && (!isStaff || p["candidate:create"]) && (
             <button
               className="btn btn-primary"
               onClick={() => setShowApply((current) => !current)}
@@ -273,6 +295,27 @@ export default function JobDetail() {
         </div>
       )}
 
+      {/* The share link is the whole point of posting a vacancy: HR
+          copies it into WhatsApp or LinkedIn and applications come back. */}
+      {p["vacancy:share"] && job.shareUrl && (
+        <div className="card mb-2">
+          <div className="card-title">
+            <h2>Public job link</h2>
+            <span className="muted small">
+              Anyone with this link can read the advert. Applying still needs an account.
+            </span>
+          </div>
+          <ShareLink url={job.shareUrl} title={job.title} />
+          <button
+            className="btn btn-ghost btn-sm mt-2"
+            onClick={regenerateLink}
+            disabled={busy}
+          >
+            Generate a new link (stops the old one working)
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-sidebar">
         <div>
           <div className="card">
@@ -295,9 +338,11 @@ export default function JobDetail() {
             <div className="card">
               <div className="card-title">
                 <h2>Applicants ({applicants.length})</h2>
-                <Link className="small" to={"/jobs/" + job.id + "/compare"}>
-                  Compare side by side
-                </Link>
+                {p["candidate:compare"] && (
+                  <Link className="small" to={"/jobs/" + job.id + "/compare"}>
+                    Compare side by side
+                  </Link>
+                )}
               </div>
 
               {applicants.length === 0 ? (
@@ -311,6 +356,7 @@ export default function JobDetail() {
                       <tr>
                         <th>Candidate</th>
                         <th>Stage</th>
+                        <th>Band</th>
                         <th>Outcome</th>
                         <th>CV</th>
                         <th>Applied</th>
@@ -327,6 +373,9 @@ export default function JobDetail() {
                             <div className="cell-sub">{applicant.email}</div>
                           </td>
                           <td>{applicant.currentStage}</td>
+                          <td>
+                            <BandBadge band={applicant.cvBand} />
+                          </td>
                           <td>
                             <OutcomeBadge outcome={applicant.outcome} />
                           </td>
@@ -392,7 +441,7 @@ export default function JobDetail() {
             )}
           </div>
 
-          {isStaff && (
+          {p["vacancy:delete"] && (
             <div className="mt-3">
               <button className="btn btn-danger btn-block" onClick={removeJob} disabled={busy}>
                 Delete vacancy

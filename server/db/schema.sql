@@ -5,7 +5,8 @@
 --   users          - team members and clients (one login table)
 --   jobs           - job vacancies
 --   job_stages     - the ordered interview pipeline for each vacancy
---   applications   - a candidate applying to one vacancy (+ their CV)
+--   applications   - a candidate applying to one vacancy (+ their CV and
+--                    its screening band)
 --   interviews     - interviews scheduled against an application
 --   feedback       - what an interviewer thought of a candidate at a stage
 --   password_resets- one-time tokens for the "forgot password" flow
@@ -15,13 +16,17 @@ PRAGMA foreign_keys = ON;
 
 -- -------------------------------------------------------------------
 -- users
--- There are two access levels:
---   STAFF  - developer / scrum_master / business_analyst / qa. These are
---            our four group members. The role is a LABEL only: all four
---            have exactly the SAME access, which is what we agreed.
---   CLIENT - anyone from outside who signs up to apply for a job. A
---            client only ever sees the open vacancies and their own
---            application, never anyone else's.
+-- Roles mirror the personas in the project plan and DO carry different
+-- permissions inside the company:
+--   hr             - Kevin (HR Recruiter). Full access: opens vacancies,
+--                    manages every candidate, rates CVs, runs the pipeline.
+--   hiring_manager - Arosh. Works with candidates (rate CVs, move stages,
+--                    record outcomes, compare) but cannot create, edit or
+--                    close a vacancy.
+--   interviewer    - Sara. Sees candidates and leaves feedback at her
+--                    stage. Cannot change a stage, an outcome or a CV band.
+--   candidate      - someone applying from outside through a shared job
+--                    link. Only ever sees their own application.
 -- password_hash is NULL for accounts created through Google sign-in.
 -- -------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS users (
@@ -30,7 +35,7 @@ CREATE TABLE IF NOT EXISTS users (
   email         TEXT    NOT NULL UNIQUE COLLATE NOCASE,
   password_hash TEXT,
   role          TEXT    NOT NULL DEFAULT 'developer'
-                CHECK (role IN ('developer','scrum_master','business_analyst','qa','client')),
+                CHECK (role IN ('hr','hiring_manager','interviewer','candidate')),
   google_id     TEXT    UNIQUE,
   avatar_url    TEXT,
   created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
@@ -54,12 +59,17 @@ CREATE TABLE IF NOT EXISTS jobs (
   closing_date    TEXT,
   status          TEXT    NOT NULL DEFAULT 'ACTIVE'
                   CHECK (status IN ('ACTIVE','CLOSED')),
+  -- Random slug used in the public share link that HR posts to WhatsApp,
+  -- LinkedIn or anywhere else. Anyone holding the link can read the advert
+  -- without an account; applying still requires signing in.
+  public_token    TEXT    NOT NULL UNIQUE,
   created_by      INTEGER REFERENCES users (id) ON DELETE SET NULL,
   created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at      TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs (status);
+CREATE INDEX IF NOT EXISTS idx_jobs_token  ON jobs (public_token);
 
 -- -------------------------------------------------------------------
 -- job_stages - the pipeline, ordered by position (0,1,2,...)
@@ -95,10 +105,18 @@ CREATE TABLE IF NOT EXISTS applications (
   current_stage  TEXT    NOT NULL,
   outcome        TEXT    NOT NULL DEFAULT 'ACTIVE'
                  CHECK (outcome IN ('ACTIVE','ON_HOLD','HIRED','REJECTED')),
-  -- Has the hiring team reviewed the CV yet? This is what the client
+  -- Has the hiring team reviewed the CV yet? This is what the candidate
   -- sees while they wait ("under review" / "accepted" / "rejected").
   cv_status      TEXT    NOT NULL DEFAULT 'PENDING'
                  CHECK (cv_status IN ('PENDING','ACCEPTED','REJECTED')),
+  -- Screening band. With hundreds of applications HR cannot open every
+  -- CV twice, so each one is banded once and the list is then filtered
+  -- and sorted by this column.
+  cv_band        TEXT    NOT NULL DEFAULT 'UNRATED'
+                 CHECK (cv_band IN ('UNRATED','HIGH','MEDIUM','LOW')),
+  cv_band_note   TEXT    NOT NULL DEFAULT '',
+  cv_banded_by   INTEGER          REFERENCES users (id) ON DELETE SET NULL,
+  cv_banded_at   TEXT,
   cv_filename    TEXT,
   cv_stored_name TEXT,
   cv_mime        TEXT,
@@ -113,6 +131,7 @@ CREATE TABLE IF NOT EXISTS applications (
 CREATE INDEX IF NOT EXISTS idx_applications_job     ON applications (job_id);
 CREATE INDEX IF NOT EXISTS idx_applications_user    ON applications (user_id);
 CREATE INDEX IF NOT EXISTS idx_applications_outcome ON applications (outcome);
+CREATE INDEX IF NOT EXISTS idx_applications_band    ON applications (job_id, cv_band);
 
 -- -------------------------------------------------------------------
 -- interviews

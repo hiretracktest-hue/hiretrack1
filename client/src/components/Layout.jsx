@@ -2,33 +2,28 @@ import { NavLink, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
 import { initials } from "./ui.jsx";
 
-const ROLE_LABELS = {
-  developer: "Developer",
-  scrum_master: "Scrum Master",
-  business_analyst: "Business Analyst",
-  qa: "QA Engineer",
-  client: "Client",
-};
-
-// The hiring team (our four group members) run the whole process.
+// Menu items, each with the permission it needs. An interviewer never
+// sees "Vacancies" because they cannot act on that page anyway.
 const STAFF_LINKS = [
-  { to: "/dashboard", label: "Dashboard" },
+  { to: "/dashboard", label: "Dashboard", need: "stats:view" },
   { to: "/jobs", label: "Vacancies" },
-  { to: "/candidates", label: "Candidates" },
-  { to: "/interviews", label: "Interviews" },
-  { to: "/team", label: "Team" },
+  { to: "/candidates", label: "Candidates", need: "candidate:viewAll" },
+  { to: "/interviews", label: "Interviews", need: "interview:viewAll" },
+  { to: "/team", label: "Team", need: "team:view" },
 ];
 
-// A client from outside only gets these two.
-const CLIENT_LINKS = [
-  { to: "/jobs", label: "Open vacancies" },
+// A candidate applying from outside only gets these two.
+const CANDIDATE_LINKS = [
+  { to: "/careers", label: "Open positions" },
   { to: "/my-applications", label: "My applications" },
 ];
 
 export default function Layout({ children }) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const links = user?.isStaff ? STAFF_LINKS : CLIENT_LINKS;
+  const links = (user?.isStaff ? STAFF_LINKS : CANDIDATE_LINKS).filter(
+    (link) => !link.need || user?.permissions?.[link.need]
+  );
 
   async function handleSignOut() {
     await signOut();
@@ -66,7 +61,7 @@ export default function Layout({ children }) {
             </Link>
             <div className="nav-user-meta">
               <strong>{user?.name}</strong>
-              <span>{ROLE_LABELS[user?.role] || user?.role}</span>
+              <span>{user?.roleLabel || user?.role}</span>
             </div>
             <button className="btn btn-secondary btn-sm" onClick={handleSignOut}>
               Sign out
@@ -78,8 +73,7 @@ export default function Layout({ children }) {
       {children}
 
       <footer className="footer">
-        HireTrack — group project by Isuru (Developer) · Fazl (Scrum Master) · Thariq (Business
-        Analyst) · Ahmed (QA). All four have equal access.
+        HireTrack — group project by Isuru, Fazl, Thariq and Ahmed.
       </footer>
     </div>
   );

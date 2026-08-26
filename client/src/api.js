@@ -35,6 +35,10 @@ async function request(path, { method = "GET", body, isForm = false } = {}) {
 }
 
 export const api = {
+  // public - no account needed. This is what a shared job link opens.
+  publicJob: (token) => request("/public/jobs/" + encodeURIComponent(token)),
+  publicJobs: () => request("/public/jobs"),
+
   // auth
   config: () => request("/auth/config"),
   me: () => request("/auth/me"),
@@ -51,6 +55,7 @@ export const api = {
   createJob: (body) => request("/jobs", { method: "POST", body }),
   updateJob: (id, body) => request("/jobs/" + id, { method: "PATCH", body }),
   deleteJob: (id) => request("/jobs/" + id, { method: "DELETE" }),
+  regenerateShareLink: (id) => request("/jobs/" + id + "/share/regenerate", { method: "POST" }),
 
   // applications / candidates
   listApplications: (params = {}) => request("/applications" + query(params)),
@@ -58,6 +63,10 @@ export const api = {
   apply: (body) => request("/applications", { method: "POST", body }),
   updateApplication: (id, body) => request("/applications/" + id, { method: "PATCH", body }),
   advanceApplication: (id) => request("/applications/" + id + "/advance", { method: "POST" }),
+  bandCv: (id, band, note) =>
+    request("/applications/" + id + "/band", { method: "POST", body: { band, note } }),
+  bandCvBulk: (ids, band) =>
+    request("/applications/band/bulk", { method: "POST", body: { ids, band } }),
   reviewCv: (id, status) =>
     request("/applications/" + id + "/cv-review", { method: "POST", body: { status } }),
   uploadCv: (id, file) => {
@@ -84,6 +93,8 @@ export const api = {
   team: () => request("/team"),
   stats: () => request("/team/stats"),
   updateProfile: (body) => request("/team/me", { method: "PATCH", body }),
+  addMember: (body) => request("/team/members", { method: "POST", body }),
+  setMemberRole: (id, role) => request("/team/members/" + id, { method: "PATCH", body: { role } }),
 };
 
 function query(params) {

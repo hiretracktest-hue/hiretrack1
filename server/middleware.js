@@ -1,4 +1,5 @@
 import { COOKIE_NAME, verifyToken, findUserById, publicUser } from "./auth.js";
+import { can, isStaff, ROLE_LABELS } from "./config.js";
 
 // Reads the login cookie and attaches req.user when it is valid.
 // Never rejects - use requireAuth for routes that must be protected.
@@ -20,17 +21,36 @@ export function requireAuth(req, res, next) {
   next();
 }
 
-// Only the four group members (developer, scrum master, business
-// analyst, QA) run the hiring process. A client signing in from outside
-// can apply and watch their own application, nothing else.
+// Anyone who works for the company: HR, hiring manager or interviewer.
+// A candidate applying from outside is not staff.
 export function requireStaff(req, res, next) {
   if (!req.user) {
     return res.status(401).json({ error: "You need to sign in to do that." });
   }
-  if (!req.user.isStaff) {
+  if (!isStaff(req.user)) {
     return res.status(403).json({ error: "Only the hiring team can do that." });
   }
   next();
+}
+
+/**
+ * Guards a route with one named permission from config.js. The message
+ * names the role, because "you cannot do that" with no reason is the
+ * most annoying error a system can give you.
+ */
+export function requirePermission(permission) {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: "You need to sign in to do that." });
+    }
+    if (!can(req.user, permission)) {
+      const label = ROLE_LABELS[req.user.role] || req.user.role;
+      return res.status(403).json({
+        error: "Your role (" + label + ") does not have permission to do that.",
+      });
+    }
+    next();
+  };
 }
 
 // Wraps an async route handler so a thrown error reaches the error

@@ -3,6 +3,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api.js";
 import {
   Alert,
+  BAND_LABEL,
+  BANDS,
+  BandBadge,
   CvStatusBadge,
   Field,
   Loading,
@@ -128,6 +131,10 @@ export default function CandidateDetail() {
       () => api.updateApplication(id, { outcome }),
       "Outcome recorded as " + OUTCOME_LABEL[outcome] + "."
     );
+  }
+
+  async function setBand(band) {
+    await run(() => api.bandCv(id, band, ""), "CV screened as " + BAND_LABEL[band] + ".");
   }
 
   async function reviewCv(status) {
@@ -288,6 +295,11 @@ export default function CandidateDetail() {
           <button className="btn btn-primary" onClick={advance} disabled={busy || !nextStage}>
             {nextStage ? "Move to " + nextStage : "Final stage reached"}
           </button>
+          {nextStage && application.stageFeedbackCount === 0 && stageIndex > 0 && (
+            <span className="badge badge-amber">
+              Needs feedback for {application.currentStage} first
+            </span>
+          )}
 
           <select
             className="select"
@@ -670,8 +682,40 @@ export default function CandidateDetail() {
           <div className="card">
             <div className="card-title">
               <h2>CV</h2>
-              <CvStatusBadge status={application.cvStatus} hasCv={Boolean(application.cv)} />
+              <div className="btn-row">
+                <BandBadge band={application.cvBand} />
+                <CvStatusBadge status={application.cvStatus} hasCv={Boolean(application.cv)} />
+              </div>
             </div>
+
+            {/* Screening band: one quick judgement so a large pile of
+                applications can be filtered instead of re-read. */}
+            {user?.permissions?.["candidate:band"] && (
+              <div className="mt-2">
+                <div className="detail-label">Screening band</div>
+                <div className="btn-row mt-1">
+                  {BANDS.map((value) => (
+                    <button
+                      key={value}
+                      className={
+                        "btn btn-sm " +
+                        (application.cvBand === value ? "btn-primary" : "btn-secondary")
+                      }
+                      onClick={() => setBand(value)}
+                      disabled={busy}
+                    >
+                      {BAND_LABEL[value]}
+                    </button>
+                  ))}
+                </div>
+                {application.bandedByName && (
+                  <p className="field-hint">
+                    Screened by {application.bandedByName}
+                    {application.cvBandedAt ? " on " + formatDate(application.cvBandedAt) : ""}.
+                  </p>
+                )}
+              </div>
+            )}
 
             {application.cv ? (
               <div className="mt-2">

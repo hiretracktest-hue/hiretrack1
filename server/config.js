@@ -41,23 +41,89 @@ export const config = {
     ],
     allowedExt: [".pdf", ".doc", ".docx"],
   },
+  // WF-02 from the project plan: a candidate cannot be advanced until
+  // feedback for their current stage has been submitted. Set
+  // REQUIRE_FEEDBACK_TO_ADVANCE=false in .env to switch the gate off.
+  requireFeedbackToAdvance: process.env.REQUIRE_FEEDBACK_TO_ADVANCE !== "false",
 };
 
-// Two access levels.
-//   TEAM_ROLES - our four group members. The role is a label only; all
-//                four have identical permissions inside the system.
-//   CLIENT_ROLE - someone from outside applying for a job. They only
-//                ever see open vacancies and their own application.
-export const TEAM_ROLES = ["developer", "scrum_master", "business_analyst", "qa"];
-export const CLIENT_ROLE = "client";
-export const ALL_ROLES = [...TEAM_ROLES, CLIENT_ROLE];
+// =====================================================================
+// Roles. These match the personas in the project plan and they carry
+// genuinely different permissions - HR can do everything, a hiring
+// manager slightly less, an interviewer less again.
+// =====================================================================
+export const ROLE_HR = "hr";
+export const ROLE_HIRING_MANAGER = "hiring_manager";
+export const ROLE_INTERVIEWER = "interviewer";
+export const ROLE_CANDIDATE = "candidate";
+
+export const STAFF_ROLES = [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER];
+export const ALL_ROLES = [...STAFF_ROLES, ROLE_CANDIDATE];
 
 export const ROLE_LABELS = {
-  developer: "Developer",
-  scrum_master: "Scrum Master",
-  business_analyst: "Business Analyst",
-  qa: "QA Engineer",
-  client: "Client",
+  hr: "HR Recruiter",
+  hiring_manager: "Hiring Manager",
+  interviewer: "Interviewer",
+  candidate: "Candidate",
 };
 
-export const isStaff = (user) => Boolean(user) && user.role !== CLIENT_ROLE;
+export const ROLE_DESCRIPTIONS = {
+  hr: "Full access. Opens vacancies, shares the job link, screens CVs, runs the whole pipeline.",
+  hiring_manager:
+    "Works with candidates: bands CVs, moves stages, records outcomes, compares candidates and leaves feedback. Cannot create or close a vacancy.",
+  interviewer:
+    "Sees candidates and their CVs, and leaves interview feedback at a stage. Cannot change stages, outcomes or CV bands.",
+  candidate: "Applies through a shared job link and follows their own application only.",
+};
+
+/**
+ * One place that answers "is this person allowed to do this?". Every
+ * route asks this rather than checking role strings of its own, so the
+ * rules cannot drift apart.
+ */
+export const PERMISSIONS = {
+  // Vacancies - only HR runs the requisition process.
+  "vacancy:create": [ROLE_HR],
+  "vacancy:edit": [ROLE_HR],
+  "vacancy:close": [ROLE_HR],
+  "vacancy:delete": [ROLE_HR],
+  "vacancy:share": [ROLE_HR],
+
+  // Candidates.
+  "candidate:viewAll": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER],
+  "candidate:create": [ROLE_HR],
+  "candidate:edit": [ROLE_HR, ROLE_HIRING_MANAGER],
+  "candidate:delete": [ROLE_HR],
+  "candidate:band": [ROLE_HR, ROLE_HIRING_MANAGER],
+  "candidate:reviewCv": [ROLE_HR, ROLE_HIRING_MANAGER],
+  "candidate:advance": [ROLE_HR, ROLE_HIRING_MANAGER],
+  "candidate:outcome": [ROLE_HR, ROLE_HIRING_MANAGER],
+
+  // Interviews and feedback.
+  "interview:schedule": [ROLE_HR, ROLE_HIRING_MANAGER],
+  "interview:viewAll": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER],
+  "feedback:write": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER],
+  "feedback:viewAll": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER],
+  "candidate:compare": [ROLE_HR, ROLE_HIRING_MANAGER],
+
+  // People and reporting.
+  "team:view": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER],
+  "stats:view": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER],
+};
+
+export const isStaff = (user) => Boolean(user) && STAFF_ROLES.includes(user.role);
+
+export function can(user, permission) {
+  if (!user) return false;
+  const allowed = PERMISSIONS[permission];
+  if (!allowed) throw new Error("Unknown permission: " + permission);
+  return allowed.includes(user.role);
+}
+
+/** The whole permission map for one role - the front end uses this to
+ *  decide which buttons and menu items to render. */
+export function permissionsFor(user) {
+  const out = {};
+  for (const key of Object.keys(PERMISSIONS)) out[key] = can(user, key);
+  return out;
+}

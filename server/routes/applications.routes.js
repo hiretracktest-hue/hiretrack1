@@ -1,7 +1,8 @@
 import path from "node:path";
 import express from "express";
 import { db } from "../db/index.js";
-import { asyncHandler, requireAuth, requireStaff, httpError } from "../middleware.js";
+import { config, can } from "../config.js";
+import { asyncHandler, requireAuth, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 import { stagesFor } from "./jobs.routes.js";
 import { UPLOAD_DIR, uploadCv, deleteStoredFile, safeFilename } from "../upload.js";
@@ -10,6 +11,10 @@ const router = express.Router();
 
 const OUTCOMES = ["ACTIVE", "ON_HOLD", "HIRED", "REJECTED"];
 const CV_STATUSES = ["PENDING", "ACCEPTED", "REJECTED"];
+// Screening bands. With hundreds of applications nobody reads every CV
+// twice - each one is banded once, then the list is filtered by band.
+const CV_BANDS = ["UNRATED", "HIGH", "MEDIUM", "LOW"];
+const BAND_ORDER = "CASE a.cv_band WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 WHEN 'LOW' THEN 2 ELSE 3 END";
 
 // What a client is told while they wait. The hiring team's internal
 // wording (stages, ON_HOLD) is deliberately not shown to them.
@@ -32,14 +37,18 @@ const CLIENT_STATUS = {
   },
 };
 
-const selectOne = db.prepare(
+const SELECT_COLUMNS =
   "SELECT a.*, j.title AS job_title, j.status AS job_status, j.department AS job_department, " +
-    "j.location AS job_location, u.name AS applied_by_name " +
-    "FROM applications a " +
-    "JOIN jobs j ON j.id = a.job_id " +
-    "LEFT JOIN users u ON u.id = a.user_id " +
-    "WHERE a.id = ?"
-);
+  "j.location AS job_location, u.name AS applied_by_name, b.name AS banded_by_name, " +
+  "(SELECT COUNT(*) FROM feedback f WHERE f.application_id = a.id) AS feedback_count, " +
+  "(SELECT ROUND(AVG(f.rating), 1) FROM feedback f WHERE f.application_id = a.id) AS average_rating, " +
+  "(SELECT COUNT(*) FROM feedback f WHERE f.application_id = a.id AND f.stage = a.current_stage) AS stage_feedback_count " +
+  "FROM applications a " +
+  "JOIN jobs j ON j.id = a.job_id " +
+  "LEFT JOIN users u ON u.id = a.user_id " +
+  "LEFT JOIN users b ON b.id = a.cv_banded_by ";
+
+const selectOne = db.prepare(SELECT_COLUMNS + "WHERE a.id = ?");
 
 function toJson(row) {
   if (!row) return null;
@@ -61,6 +70,13 @@ function toJson(row) {
     currentStage: row.current_stage,
     outcome: row.outcome,
     cvStatus: row.cv_status,
+    cvBand: row.cv_band,
+    cvBandNote: row.cv_band_note,
+    bandedByName: row.banded_by_name ?? null,
+    cvBandedAt: row.cv_banded_at,
+    feedbackCount: row.feedback_count ?? 0,
+    averageRating: row.average_rating ?? null,
+    stageFeedbackCount: row.stage_feedback_count ?? 0,
     clientStatus: clientStatusFor(row),
     cv: row.cv_filename
       ? {
@@ -122,6 +138,12 @@ router.get(
         where.push("a.cv_status = ?");
         params.push(v.oneOf(String(req.query.cvStatus), CV_STATUSES, { field: "CV status" }));
       }
+      if (req.query.cvBand) {
+        where.push("a.cv_band = ?");
+        params.push(v.oneOf(String(req.query.cvBand), CV_BANDS, { field: "CV band" }));
+      }
+      if (req.query.hasCv === "1") where.push("a.cv_stored_name IS NOT NULL");
+      if (req.query.hasCv === "0") where.push("a.cv_stored_name IS NULL");
       if (req.query.stage) {
         where.push("a.current_stage = ?");
         params.push(String(req.query.stage));
@@ -143,17 +165,42 @@ router.get(
       params.push(v.id(req.query.job, { field: "vacancy id" }));
     }
 
-    const sql =
-      "SELECT a.*, j.title AS job_title, j.status AS job_status, j.department AS job_department, " +
-      "j.location AS job_location, u.name AS applied_by_name " +
-      "FROM applications a " +
-      "JOIN jobs j ON j.id = a.job_id " +
-      "LEFT JOIN users u ON u.id = a.user_id " +
-      (where.length ? "WHERE " + where.join(" AND ") + " " : "") +
-      "ORDER BY datetime(a.created_at) DESC";
+    // Sorting matters once there are hundreds of applications: "best
+    // first" is the whole point of banding them.
+    const SORTS = {
+      newest: "datetime(a.created_at) DESC",
+      oldest: "datetime(a.created_at) ASC",
+      band: BAND_ORDER + " ASC, datetime(a.created_at) DESC",
+      rating: "average_rating IS NULL, average_rating DESC",
+      name: "a.full_name COLLATE NOCASE ASC",
+    };
+    const sort = SORTS[String(req.query.sort || "")] || SORTS.newest;
 
-    const rows = db.prepare(sql).all(...params);
-    res.json({ applications: rows.map(toJson) });
+    const whereSql = where.length ? "WHERE " + where.join(" AND ") + " " : "";
+    const rows = db.prepare(SELECT_COLUMNS + whereSql + "ORDER BY " + sort).all(...params);
+
+    const payload = { applications: rows.map(toJson) };
+
+    // Band totals for the whole vacancy (not just the filtered page), so
+    // HR can see "120 high, 300 medium, 600 low, 80 not screened yet".
+    if (req.user.isStaff) {
+      const scope = [];
+      const scopeParams = [];
+      if (req.query.job) {
+        scope.push("job_id = ?");
+        scopeParams.push(v.id(req.query.job, { field: "vacancy id" }));
+      }
+      const scopeSql = scope.length ? "WHERE " + scope.join(" AND ") + " " : "";
+      const counts = db
+        .prepare("SELECT cv_band, COUNT(*) AS total FROM applications " + scopeSql + "GROUP BY cv_band")
+        .all(...scopeParams);
+
+      payload.bandCounts = Object.fromEntries(CV_BANDS.map((band) => [band, 0]));
+      for (const row of counts) payload.bandCounts[row.cv_band] = row.total;
+      payload.total = Object.values(payload.bandCounts).reduce((a, b) => a + b, 0);
+    }
+
+    res.json(payload);
   })
 );
 
@@ -241,6 +288,10 @@ router.post(
 
     // A client always applies as themselves; only staff can enter an
     // application on someone else's behalf.
+    if (req.user.isStaff && !can(req.user, "candidate:create")) {
+      throw httpError(403, "Only HR can enter an application on someone else's behalf.");
+    }
+
     const fullName = req.user.isStaff
       ? v.str(req.body.fullName, { field: "Full name", required: true, max: 120, min: 2 })
       : req.user.name;
@@ -291,6 +342,9 @@ router.patch(
       push("cover_note", v.str(req.body.coverNote, { field: "Cover note", max: 2000 }));
     }
     if (req.user.isStaff) {
+      if (!can(req.user, "candidate:edit")) {
+        throw httpError(403, "Your role cannot edit a candidate's record.");
+      }
       if (req.body.fullName !== undefined) {
         push(
           "full_name",
@@ -305,9 +359,15 @@ router.patch(
         push("notes", v.str(req.body.notes, { field: "Notes", max: 2000 }));
       }
       if (req.body.outcome !== undefined) {
+        if (!can(req.user, "candidate:outcome")) {
+          throw httpError(403, "Your role cannot record an outcome.");
+        }
         push("outcome", v.oneOf(req.body.outcome, OUTCOMES, { field: "Outcome" }));
       }
       if (req.body.currentStage !== undefined) {
+        if (!can(req.user, "candidate:advance")) {
+          throw httpError(403, "Your role cannot change a candidate's stage.");
+        }
         // A candidate can only sit on a stage this vacancy actually has.
         const stages = stagesFor(existing.job_id);
         push("current_stage", v.oneOf(req.body.currentStage, stages, { field: "Stage" }));
@@ -337,7 +397,7 @@ router.patch(
 // "Not successful".
 router.post(
   "/:id/cv-review",
-  requireStaff,
+  requirePermission("candidate:reviewCv"),
   asyncHandler(async (req, res) => {
     const id = v.id(req.params.id, { field: "application id" });
     const existing = loadFor(req, id);
@@ -366,10 +426,60 @@ router.post(
   })
 );
 
+// --- Band a CV: HIGH / MEDIUM / LOW -----------------------------------
+// This is the answer to "a thousand CVs arrived and I cannot open them
+// all". Each CV is skimmed once and banded; the list is then filtered.
+router.post(
+  "/:id/band",
+  requirePermission("candidate:band"),
+  asyncHandler(async (req, res) => {
+    const id = v.id(req.params.id, { field: "application id" });
+    loadFor(req, id);
+
+    const band = v.oneOf(req.body.band, CV_BANDS, { field: "CV band" });
+    const note = v.str(req.body.note, { field: "Note", max: 300 });
+
+    db.prepare(
+      "UPDATE applications SET cv_band = ?, cv_band_note = ?, cv_banded_by = ?, " +
+        "cv_banded_at = datetime('now'), updated_at = datetime('now') WHERE id = ?"
+    ).run(band, note, band === "UNRATED" ? null : req.user.id, id);
+
+    res.json({ application: toJson(selectOne.get(id)) });
+  })
+);
+
+// --- Band several CVs at once -----------------------------------------
+// Screening in bulk from the candidate list.
+router.post(
+  "/band/bulk",
+  requirePermission("candidate:band"),
+  asyncHandler(async (req, res) => {
+    const band = v.oneOf(req.body.band, CV_BANDS, { field: "CV band" });
+    const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
+    if (!ids.length) throw httpError(400, "Choose at least one candidate.");
+    if (ids.length > 200) throw httpError(400, "Band at most 200 candidates at a time.");
+
+    const clean = ids.map((id) => v.id(id, { field: "application id" }));
+    const update = db.prepare(
+      "UPDATE applications SET cv_band = ?, cv_banded_by = ?, cv_banded_at = datetime('now'), " +
+        "updated_at = datetime('now') WHERE id = ?"
+    );
+    const bandedBy = band === "UNRATED" ? null : req.user.id;
+
+    const run = db.transaction(() => {
+      let changed = 0;
+      for (const id of clean) changed += update.run(band, bandedBy, id).changes;
+      return changed;
+    });
+
+    res.json({ updated: run(), band });
+  })
+);
+
 // --- Move to the next stage in the pipeline ---------------------------
 router.post(
   "/:id/advance",
-  requireStaff,
+  requirePermission("candidate:advance"),
   asyncHandler(async (req, res) => {
     const id = v.id(req.params.id, { field: "application id" });
     const existing = loadFor(req, id);
@@ -379,6 +489,26 @@ router.post(
     if (index === -1) throw httpError(400, "This candidate's stage is no longer in the pipeline.");
     if (index >= stages.length - 1) {
       throw httpError(400, "This candidate is already at the final stage.");
+    }
+
+    // WF-02 from the project plan: nobody moves forward on missing
+    // information. The first stage is exempt - a candidate has not been
+    // interviewed yet when they have only just applied.
+    if (config.requireFeedbackToAdvance && index > 0) {
+      const given = db
+        .prepare("SELECT COUNT(*) AS total FROM feedback WHERE application_id = ? AND stage = ?")
+        .get(id, existing.current_stage).total;
+
+      if (given === 0) {
+        throw httpError(
+          400,
+          'Feedback for "' +
+            existing.current_stage +
+            '" has to be submitted before this candidate can move to "' +
+            stages[index + 1] +
+            '".'
+        );
+      }
     }
 
     db.prepare(
@@ -470,6 +600,12 @@ router.delete(
   asyncHandler(async (req, res) => {
     const id = v.id(req.params.id, { field: "application id" });
     const row = loadFor(req, id);
+
+    // A candidate may withdraw their own application; among staff only
+    // HR may delete somebody else's.
+    if (req.user.isStaff && !can(req.user, "candidate:delete")) {
+      throw httpError(403, "Only HR can delete a candidate's application.");
+    }
 
     db.prepare("DELETE FROM applications WHERE id = ?").run(id);
     deleteStoredFile(row.cv_stored_name);

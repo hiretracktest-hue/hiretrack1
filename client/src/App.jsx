@@ -19,6 +19,8 @@ import MyApplicationDetail from "./pages/MyApplicationDetail.jsx";
 import Interviews from "./pages/Interviews.jsx";
 import Team from "./pages/Team.jsx";
 import Profile from "./pages/Profile.jsx";
+import PublicJob from "./pages/PublicJob.jsx";
+import Careers from "./pages/Careers.jsx";
 
 /** Signed in? If not, go to /signin and remember where they were going. */
 function Protected({ children }) {
@@ -31,17 +33,21 @@ function Protected({ children }) {
 }
 
 /**
- * Staff-only pages. A client who types the address by hand is sent to
+ * Staff-only pages. A candidate who types the address by hand is sent to
  * their own applications instead - the API blocks them as well, so this
  * is a convenience, not the security boundary.
+ *
+ * Pass `need` to also require one named permission, so an interviewer
+ * cannot open the vacancy editor even though they are staff.
  */
-function StaffOnly({ children }) {
+function StaffOnly({ children, need }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
   if (loading) return <Loading what="HireTrack" />;
   if (!user) return <Navigate to="/signin" replace state={{ from: location.pathname }} />;
   if (!user.isStaff) return <Navigate to="/my-applications" replace />;
+  if (need && !user.permissions?.[need]) return <Navigate to="/candidates" replace />;
   return <Layout>{children}</Layout>;
 }
 
@@ -49,7 +55,7 @@ function StaffOnly({ children }) {
 function PublicOnly({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <Loading what="HireTrack" />;
-  if (user) return <Navigate to={user.isStaff ? "/dashboard" : "/jobs"} replace />;
+  if (user) return <Navigate to={user.isStaff ? "/dashboard" : "/my-applications"} replace />;
   return children;
 }
 
@@ -58,7 +64,7 @@ function Home() {
   const { user, loading } = useAuth();
   if (loading) return <Loading what="HireTrack" />;
   if (!user) return <Navigate to="/signin" replace />;
-  return <Navigate to={user.isStaff ? "/dashboard" : "/jobs"} replace />;
+  return <Navigate to={user.isStaff ? "/dashboard" : "/my-applications"} replace />;
 }
 
 export default function App() {
@@ -91,7 +97,11 @@ export default function App() {
       {/* Reset is reachable while signed out or in - the link comes by email. */}
       <Route path="/reset-password" element={<ResetPassword />} />
 
-      {/* --- pages both a client and the team can open ---------------- */}
+      {/* --- public: no account needed. This is what a shared link opens. */}
+      <Route path="/job/:token" element={<PublicJob />} />
+      <Route path="/careers" element={<Careers />} />
+
+      {/* --- pages both a candidate and the team can open -------------- */}
       <Route
         path="/jobs"
         element={
@@ -145,7 +155,7 @@ export default function App() {
       <Route
         path="/jobs/new"
         element={
-          <StaffOnly>
+          <StaffOnly need="vacancy:create">
             <JobEditor mode="create" />
           </StaffOnly>
         }
@@ -153,7 +163,7 @@ export default function App() {
       <Route
         path="/jobs/:id/edit"
         element={
-          <StaffOnly>
+          <StaffOnly need="vacancy:edit">
             <JobEditor mode="edit" />
           </StaffOnly>
         }
@@ -161,7 +171,7 @@ export default function App() {
       <Route
         path="/jobs/:id/compare"
         element={
-          <StaffOnly>
+          <StaffOnly need="candidate:compare">
             <Compare />
           </StaffOnly>
         }

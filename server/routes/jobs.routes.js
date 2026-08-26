@@ -1,6 +1,8 @@
+import crypto from "node:crypto";
 import express from "express";
 import { db } from "../db/index.js";
-import { asyncHandler, requireStaff, httpError } from "../middleware.js";
+import { config } from "../config.js";
+import { asyncHandler, requireStaff, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 
 const router = express.Router();
@@ -18,6 +20,16 @@ const countApplicants = db.prepare(
 
 export function stagesFor(jobId) {
   return selectStages.all(jobId).map((row) => row.name);
+}
+
+/** Short, unguessable slug for the public share link. */
+function newPublicToken() {
+  return crypto.randomBytes(9).toString("base64url"); // 12 url-safe characters
+}
+
+/** The link HR copies into WhatsApp, LinkedIn or an email. */
+export function shareUrlFor(token) {
+  return config.clientUrl + "/job/" + token;
 }
 
 // Replaces the whole pipeline for a vacancy in one transaction, so the
@@ -40,6 +52,8 @@ export function jobToJson(row, { includeStages = true } = {}) {
     salaryRange: row.salary_range,
     closingDate: row.closing_date,
     status: row.status,
+    publicToken: row.public_token,
+    shareUrl: row.public_token ? shareUrlFor(row.public_token) : null,
     createdBy: row.created_by,
     createdByName: row.created_by_name ?? null,
     applicantCount: row.applicant_count ?? undefined,
@@ -111,7 +125,7 @@ router.get(
 // --- Create -----------------------------------------------------------
 router.post(
   "/",
-  requireStaff,
+  requirePermission("vacancy:create"),
   asyncHandler(async (req, res) => {
     const title = v.str(req.body.title, { field: "Job title", required: true, max: 120 });
     const department = v.str(req.body.department, { field: "Department", max: 80 });
@@ -128,8 +142,8 @@ router.post(
     const created = db.transaction(() => {
       const info = db
         .prepare(
-          "INSERT INTO jobs (title, department, location, employment_type, description, salary_range, closing_date, created_by) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+          "INSERT INTO jobs (title, department, location, employment_type, description, salary_range, closing_date, created_by, public_token) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .run(
           title,
@@ -139,7 +153,8 @@ router.post(
           description,
           salaryRange,
           closingDate,
-          req.user.id
+          req.user.id,
+          newPublicToken()
         );
       const jobId = Number(info.lastInsertRowid);
       replaceStages(jobId, stages);
@@ -153,7 +168,7 @@ router.post(
 // --- Update / close / reopen -----------------------------------------
 router.patch(
   "/:id",
-  requireStaff,
+  requirePermission("vacancy:edit"),
   asyncHandler(async (req, res) => {
     const jobId = v.id(req.params.id, { field: "vacancy id" });
     const existing = selectJob.get(jobId);
@@ -230,7 +245,7 @@ router.patch(
 // --- Delete -----------------------------------------------------------
 router.delete(
   "/:id",
-  requireStaff,
+  requirePermission("vacancy:delete"),
   asyncHandler(async (req, res) => {
     const jobId = v.id(req.params.id, { field: "vacancy id" });
     const existing = selectJob.get(jobId);
@@ -246,6 +261,26 @@ router.delete(
 
     db.prepare("DELETE FROM jobs WHERE id = ?").run(jobId);
     res.json({ ok: true });
+  })
+);
+
+// --- Regenerate the public link ----------------------------------------
+// Used when a link has been shared too widely and HR wants the old one
+// to stop working.
+router.post(
+  "/:id/share/regenerate",
+  requirePermission("vacancy:share"),
+  asyncHandler(async (req, res) => {
+    const jobId = v.id(req.params.id, { field: "vacancy id" });
+    if (!selectJob.get(jobId)) throw httpError(404, "That vacancy does not exist.");
+
+    const token = newPublicToken();
+    db.prepare("UPDATE jobs SET public_token = ?, updated_at = datetime('now') WHERE id = ?").run(
+      token,
+      jobId
+    );
+
+    res.json({ job: jobToJson(selectJob.get(jobId)) });
   })
 );
 

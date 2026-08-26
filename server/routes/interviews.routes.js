@@ -1,6 +1,6 @@
 import express from "express";
 import { db } from "../db/index.js";
-import { asyncHandler, requireStaff, httpError } from "../middleware.js";
+import { asyncHandler, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 import { stagesFor } from "./jobs.routes.js";
 
@@ -33,7 +33,7 @@ const BASE_SELECT =
 // --- Upcoming interviews (optionally for one application) -------------
 router.get(
   "/",
-  requireStaff,
+  requirePermission("interview:viewAll"),
   asyncHandler(async (req, res) => {
     const where = [];
     const params = [];
@@ -61,7 +61,7 @@ router.get(
 // --- Schedule an interview --------------------------------------------
 router.post(
   "/",
-  requireStaff,
+  requirePermission("interview:schedule"),
   asyncHandler(async (req, res) => {
     const applicationId = v.id(req.body.applicationId, { field: "application id" });
     const application = db
@@ -112,7 +112,7 @@ router.post(
 // --- Cancel an interview -----------------------------------------------
 router.delete(
   "/:id",
-  requireStaff,
+  requirePermission("interview:schedule"),
   asyncHandler(async (req, res) => {
     const id = v.id(req.params.id, { field: "interview id" });
     const info = db.prepare("DELETE FROM interviews WHERE id = ?").run(id);

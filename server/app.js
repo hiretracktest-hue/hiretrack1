@@ -11,6 +11,7 @@ import applicationsRoutes from "./routes/applications.routes.js";
 import interviewsRoutes from "./routes/interviews.routes.js";
 import feedbackRoutes from "./routes/feedback.routes.js";
 import teamRoutes from "./routes/team.routes.js";
+import publicRoutes from "./routes/public.routes.js";
 import { DB_PATH } from "./db/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -43,6 +44,9 @@ export function createApp({ log = true } = {}) {
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, database: path.basename(DB_PATH), time: new Date().toISOString() });
   });
+
+  // No account needed - this is what a shared job link opens.
+  app.use("/api/public", publicRoutes);
 
   app.use("/api/auth", authRoutes);
   app.use("/api/jobs", jobsRoutes);

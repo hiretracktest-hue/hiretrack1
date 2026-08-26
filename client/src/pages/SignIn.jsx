@@ -32,8 +32,11 @@ export default function SignIn() {
     setError("");
     setBusy(true);
     try {
-      await signIn(form);
-      navigate(location.state?.from || "/dashboard", { replace: true });
+      const signedIn = await signIn(form);
+      // If they arrived from a shared job link, send them straight back
+      // to it so they can finish applying.
+      const fallback = signedIn.isStaff ? "/dashboard" : "/my-applications";
+      navigate(location.state?.from || fallback, { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -110,19 +113,17 @@ export default function SignIn() {
         </p>
 
         <div className="demo-box">
-          <strong>Hiring team</strong> — full access:
-          <br />
-          <code>isuru@gmail.com</code> (Developer) · <code>fazl@gmail.com</code> (Scrum Master)
-          <br />
-          <code>thariq@gmail.com</code> (BA) · <code>ahmed@gmail.com</code> (QA)
+          <strong>Demo accounts</strong> — password <code>123</code> for all of them.
           <br />
           <br />
-          <strong>Client</strong> — applies and tracks their own CV only:
+          <strong>HR</strong> (full access): <code>isuru@gmail.com</code>,{" "}
+          <code>ahmed@gmail.com</code>
           <br />
-          <code>maya.fernando@gmail.com</code>
+          <strong>Hiring Manager</strong> (no vacancy control): <code>fazl@gmail.com</code>
           <br />
+          <strong>Interviewer</strong> (feedback only): <code>thariq@gmail.com</code>
           <br />
-          Password for every demo account: <code>123</code>
+          <strong>Candidate</strong>: <code>maya.fernando@gmail.com</code>
         </div>
       </div>
     </div>

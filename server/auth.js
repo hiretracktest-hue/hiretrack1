@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { config, isStaff } from "./config.js";
+import { config, isStaff, permissionsFor, ROLE_LABELS } from "./config.js";
 import { db } from "./db/index.js";
 
 export const COOKIE_NAME = "hiretrack_token";
@@ -65,7 +65,12 @@ export function publicUser(row) {
     name: row.name,
     email: row.email,
     role: row.role,
+    roleLabel: ROLE_LABELS[row.role] || row.role,
     isStaff: isStaff(row),
+    // The front end uses this to decide which buttons to show. The API
+    // checks the same rules again on every request, so hiding a button
+    // is convenience, not security.
+    permissions: permissionsFor(row),
     avatarUrl: row.avatar_url || null,
     signedInWithGoogle: Boolean(row.google_id),
     createdAt: row.created_at,

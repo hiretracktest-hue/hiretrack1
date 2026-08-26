@@ -822,6 +822,96 @@ tbody tr:hover {
   word-break: break-all;
 }
 
+/* --- public pages (shared job link, careers) ----------------------- */
+.public-page {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(circle at 12% 0%, #ece7ff 0%, transparent 42%),
+    radial-gradient(circle at 88% 8%, #e6f0ff 0%, transparent 40%),
+    var(--canvas);
+}
+.public-bar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding: 0 24px;
+  height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.public-main {
+  flex: 1;
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 36px 24px 72px;
+}
+.public-hero {
+  margin-bottom: 24px;
+}
+.public-hero h1 {
+  font-size: 2.1rem;
+}
+
+/* --- share link box ------------------------------------------------- */
+.share-box {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.share-url {
+  flex: 1;
+  min-width: 220px;
+  font-family: Consolas, ui-monospace, monospace;
+  font-size: 0.8rem;
+  padding: 9px 12px;
+  border: 1px dashed var(--purple-200);
+  border-radius: 9px;
+  background: var(--purple-50);
+  color: var(--purple-700);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* --- CV screening bands --------------------------------------------- */
+.band-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.band-chip {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.band-chip:hover {
+  border-color: var(--purple-200);
+  background: var(--purple-50);
+}
+.band-chip.active {
+  background: var(--purple-600);
+  border-color: var(--purple-600);
+  color: #fff;
+}
+.band-chip .count {
+  font-size: 0.78rem;
+  opacity: 0.75;
+}
+
 .stars {
   color: #e0a800;
   letter-spacing: 1px;

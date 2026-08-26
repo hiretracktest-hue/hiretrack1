@@ -1,6 +1,6 @@
 import express from "express";
 import { db } from "../db/index.js";
-import { asyncHandler, requireStaff, httpError } from "../middleware.js";
+import { asyncHandler, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 import { stagesFor } from "./jobs.routes.js";
 
@@ -42,7 +42,7 @@ const BASE_SELECT =
 // --- List feedback ------------------------------------------------------
 router.get(
   "/",
-  requireStaff,
+  requirePermission("feedback:viewAll"),
   asyncHandler(async (req, res) => {
     const where = [];
     const params = [];
@@ -71,7 +71,7 @@ router.get(
 // --- Leave (or update) my feedback for one stage ------------------------
 router.post(
   "/",
-  requireStaff,
+  requirePermission("feedback:write"),
   asyncHandler(async (req, res) => {
     const applicationId = v.id(req.body.applicationId, { field: "application id" });
     const application = db
@@ -128,7 +128,7 @@ router.post(
 // --- Delete my own feedback ---------------------------------------------
 router.delete(
   "/:id",
-  requireStaff,
+  requirePermission("feedback:write"),
   asyncHandler(async (req, res) => {
     const id = v.id(req.params.id, { field: "feedback id" });
     const row = db.prepare("SELECT * FROM feedback WHERE id = ?").get(id);
@@ -145,7 +145,7 @@ router.delete(
 // --- Compare every candidate for one vacancy, side by side --------------
 router.get(
   "/compare/:jobId",
-  requireStaff,
+  requirePermission("candidate:compare"),
   asyncHandler(async (req, res) => {
     const jobId = v.id(req.params.jobId, { field: "vacancy id" });
     const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(jobId);

@@ -40,7 +40,7 @@ export default function Jobs() {
               : "Roles we are hiring for right now. Open one to apply and upload your CV."}
           </p>
         </div>
-        {isStaff && (
+        {user?.permissions?.["vacancy:create"] && (
           <Link className="btn btn-primary" to="/jobs/new">
             + New vacancy
           </Link>
@@ -80,9 +80,11 @@ export default function Jobs() {
             {isStaff ? (
               <>
                 <p>Try a different search, or create your first vacancy.</p>
-                <Link className="btn btn-primary mt-2" to="/jobs/new">
-                  + New vacancy
-                </Link>
+                {user?.permissions?.["vacancy:create"] && (
+                  <Link className="btn btn-primary mt-2" to="/jobs/new">
+                    + New vacancy
+                  </Link>
+                )}
               </>
             ) : (
               <p>There are no open vacancies at the moment. Please check back soon.</p>

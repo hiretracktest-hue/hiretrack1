@@ -1,28 +1,15 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
 import { Alert, Field, PasswordInput } from "../components/ui.jsx";
 import { GoogleMark } from "./SignIn.jsx";
 
-const ROLES = [
-  { value: "client", label: "Client - I want to apply for a job" },
-  { value: "developer", label: "Hiring team - Developer" },
-  { value: "scrum_master", label: "Hiring team - Scrum Master" },
-  { value: "business_analyst", label: "Hiring team - Business Analyst" },
-  { value: "qa", label: "Hiring team - QA Engineer" },
-];
-
 export default function SignUp() {
   const { signUp, googleEnabled } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    password: "",
-    confirm: "",
-    role: "client",
-  });
+  const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "" });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -41,13 +28,10 @@ export default function SignUp() {
 
     setBusy(true);
     try {
-      await signUp({
-        name: form.name,
-        email: form.email,
-        password: form.password,
-        role: form.role,
-      });
-      navigate(form.role === "client" ? "/jobs" : "/dashboard", { replace: true });
+      await signUp({ name: form.name, email: form.email, password: form.password });
+      // Everyone who signs up here is a candidate. Staff accounts are
+      // created by HR from the team page.
+      navigate(location.state?.from || "/careers", { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -64,7 +48,7 @@ export default function SignUp() {
             HireTrack
           </span>
           <h1>Create your account</h1>
-          <p>Job applicants and the hiring team both sign up here.</p>
+          <p>Create an account to apply for a job and follow your application.</p>
         </div>
 
         <Alert kind="error">{error}</Alert>
@@ -95,20 +79,6 @@ export default function SignUp() {
               value={form.email}
               onChange={update("email")}
             />
-          </Field>
-
-          <Field
-            label="I am joining as"
-            htmlFor="role"
-            hint="A client can apply for jobs and follow their own application. The four hiring team roles all have the same full access."
-          >
-            <select id="role" className="select" value={form.role} onChange={update("role")}>
-              {ROLES.map((role) => (
-                <option key={role.value} value={role.value}>
-                  {role.label}
-                </option>
-              ))}
-            </select>
           </Field>
 
           <Field
