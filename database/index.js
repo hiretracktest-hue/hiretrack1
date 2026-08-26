@@ -36,8 +36,10 @@ export const pool = new Pool({
   connectionString: config.databaseUrl,
   // The automated tests point this at their own throw-away schema, so a
   // test run can never touch the real tables.
+  // public is on the path too so the citext operators resolve - the
+  // extension lives there and cannot be installed per schema.
   options: process.env.DATABASE_SCHEMA
-    ? "-c search_path=" + process.env.DATABASE_SCHEMA
+    ? "-c search_path=" + process.env.DATABASE_SCHEMA + ",public"
     : undefined,
   // Supabase requires TLS. Their certificate is signed by a root that
   // Node does not ship with, so we accept it explicitly rather than

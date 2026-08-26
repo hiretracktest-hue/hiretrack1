@@ -29,7 +29,15 @@ import "dotenv/config";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA_FILE = path.join(__dirname, "..", "..", "database", "schema.sql");
 
-const CONNECTION = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+// Run against the SESSION pooler (port 5432), not the transaction
+// pooler (6543). In transaction mode the pooler hands the same backend
+// to different clients, so the SET search_path below leaks out of the
+// test run and into the live app - which is exactly what happened the
+// first time these tests were run against Supabase.
+const CONNECTION = (process.env.TEST_DATABASE_URL || process.env.DATABASE_URL || "").replace(
+  ":6543/",
+  ":5432/"
+);
 if (!CONNECTION) {
   console.error(
     "\n  DATABASE_URL is not set, so the tests cannot run.\n" +
@@ -58,8 +66,22 @@ const admin = new pg.Client({
 });
 await admin.connect();
 await admin.query('CREATE SCHEMA "' + TEST_SCHEMA + '"');
-await admin.query('SET search_path TO "' + TEST_SCHEMA + '"');
-await admin.query(fs.readFileSync(SCHEMA_FILE, "utf8"));
+
+// public has to be on the path as well: Supabase keeps the citext
+// extension there, and an extension is one per database - it cannot be
+// installed again inside the test schema. Tables still land in the test
+// schema because it comes first.
+await admin.query('SET search_path TO "' + TEST_SCHEMA + '", public');
+
+// The DROP statements at the top of schema.sql exist so `npm run
+// db:migrate` can be re-run. Here they are dangerous: the test schema is
+// brand new, so an unqualified DROP would fall through to public and
+// delete the real tables. Nothing needs dropping in a schema created a
+// moment ago, so they are stripped out.
+const schemaSql = fs
+  .readFileSync(SCHEMA_FILE, "utf8")
+  .replace(/^DROP\s+(TABLE|TYPE)\s+IF\s+EXISTS[^;]*;/gim, "");
+await admin.query(schemaSql);
 
 const { createApp } = await import("../app.js");
 const { one, many, run, closePool } = await import("../../database/index.js");
