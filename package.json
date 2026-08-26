@@ -10,7 +10,7 @@
   "scripts": {
     "setup": "npm install && npm --prefix client install && npm run db:migrate && npm run seed",
     "dev": "concurrently -n API,WEB -c magenta,cyan \"npm:dev:server\" \"npm:dev:client\"",
-    "dev:server": "node --watch server/index.js",
+    "dev:server": "node --watch --watch-path=server --watch-path=database --watch-path=.env server/index.js",
     "dev:client": "npm --prefix client run dev",
     "build": "npm --prefix client run build",
     "start": "node server/index.js",
