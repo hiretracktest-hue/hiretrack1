@@ -1,11 +1,11 @@
-import path from "node:path";
 import express from "express";
 import { one, many, run } from "../../database/index.js";
 import { config, can } from "../config.js";
 import { asyncHandler, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 import { stagesFor } from "./jobs.routes.js";
-import { UPLOAD_DIR, uploadCv, deleteStoredFile, safeFilename } from "../upload.js";
+import { uploadCv, safeFilename } from "../upload.js";
+import { putCv, getCv, removeCv } from "../storage.js";
 import { notifyOutcome } from "../notify.js";
 
 /**
@@ -61,6 +61,7 @@ function toJson(row) {
     cv: row.cv_filename
       ? {
           filename: row.cv_filename,
+          storage: row.cv_storage || "local",
           mime: row.cv_mime,
           size: num(row.cv_size),
           uploadedAt: row.cv_uploaded_at,
@@ -457,21 +458,29 @@ router.post(
     const id = v.id(req.params.id, { field: "candidate id" });
     const existing = await one("SELECT * FROM candidates WHERE id = $1", [id]);
 
-    if (!existing) {
-      deleteStoredFile(req.file?.filename); // do not leave an orphan behind
-      throw httpError(404, "That candidate does not exist.");
-    }
+    // Nothing has been stored yet, so there is no orphan to clean up -
+    // the file is still only in memory at this point.
+    if (!existing) throw httpError(404, "That candidate does not exist.");
     if (!req.file) throw httpError(400, "Choose a CV file to upload.");
 
-    const previous = existing.cv_stored_name;
+    const previous = { name: existing.cv_stored_name, storage: existing.cv_storage };
+    const stored = await putCv(req.file);
 
     await run(
       "UPDATE candidates SET cv_filename = $1, cv_stored_name = $2, cv_mime = $3, cv_size = $4, " +
-        "cv_uploaded_at = NOW() WHERE id = $5",
-      [safeFilename(req.file.originalname), req.file.filename, req.file.mimetype, req.file.size, id]
+        "cv_storage = $5, cv_uploaded_at = NOW() WHERE id = $6",
+      [
+        safeFilename(req.file.originalname),
+        stored.storedName,
+        req.file.mimetype,
+        req.file.size,
+        stored.storage,
+        id,
+      ]
     );
 
-    deleteStoredFile(previous);
+    // Only once the new one is safely written.
+    await removeCv(previous.name, previous.storage);
     res.json({ candidate: toJson(await loadOr404(id)) });
   })
 );
@@ -485,8 +494,24 @@ router.get(
     const row = await loadOr404(id);
     if (!row.cv_stored_name) throw httpError(404, "No CV has been uploaded yet.");
 
-    const filePath = path.join(UPLOAD_DIR, path.basename(row.cv_stored_name));
-    res.download(filePath, safeFilename(row.cv_filename), (err) => {
+    const filename = safeFilename(row.cv_filename);
+    const found = await getCv(row.cv_stored_name, row.cv_storage, filename);
+
+    // A bucket CV is handed over as a signed URL that expires in a
+    // minute. The bucket is private, so this is the only way in, and the
+    // link is not worth passing on to anybody. The URL carries a
+    // download flag, so Supabase serves it as an attachment too.
+    if (found.kind === "supabase") return res.redirect(found.url);
+
+    // Any file type is accepted, so a CV could be an .html or an .svg.
+    // Both of those would run scripts if a browser rendered them, and
+    // rendering one on this origin would be an XSS hole straight through
+    // the app. res.download() sets Content-Disposition: attachment, and
+    // nosniff stops the browser second-guessing the type - together that
+    // means a stored file is never executed, only saved.
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+    res.download(found.path, filename, (err) => {
       if (err && !res.headersSent) {
         res.status(404).json({ error: "The stored CV file is missing from the server." });
       }
@@ -505,10 +530,10 @@ router.delete(
 
     await run(
       "UPDATE candidates SET cv_filename = NULL, cv_stored_name = NULL, cv_mime = NULL, " +
-        "cv_size = NULL, cv_uploaded_at = NULL WHERE id = $1",
+        "cv_size = NULL, cv_storage = NULL, cv_uploaded_at = NULL WHERE id = $1",
       [id]
     );
-    deleteStoredFile(row.cv_stored_name);
+    await removeCv(row.cv_stored_name, row.cv_storage);
 
     res.json({ candidate: toJson(await loadOr404(id)) });
   })
@@ -523,7 +548,7 @@ router.delete(
     const row = await loadOr404(id);
 
     await run("DELETE FROM candidates WHERE id = $1", [id]);
-    deleteStoredFile(row.cv_stored_name);
+    await removeCv(row.cv_stored_name, row.cv_storage);
     res.json({ ok: true });
   })
 );

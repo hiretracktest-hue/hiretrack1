@@ -59,14 +59,30 @@ export const config = {
   // How long the accept/decline link in an interview email stays valid.
   inviteExpiresIn: Number(process.env.INVITE_EXPIRES_IN) || 60 * 60 * 24 * 30, // 30 days
 
+  // Where candidate CVs are stored. With these set, uploads go to a
+  // private Supabase Storage bucket; without them, to server/uploads as
+  // before. The service role key bypasses row-level security, so it is
+  // read on the server only and never reaches the browser.
+  storage: {
+    url: process.env.SUPABASE_URL || "",
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+    bucket: process.env.SUPABASE_CV_BUCKET || "candidate-cvs",
+    get enabled() {
+      return Boolean(this.url && this.serviceRoleKey);
+    },
+  },
+
   upload: {
-    maxBytes: 5 * 1024 * 1024, // 5 MB
-    allowedMime: [
-      "application/pdf",
-      "application/msword",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ],
-    allowedExt: [".pdf", ".doc", ".docx"],
+    maxBytes: Number(process.env.UPLOAD_MAX_MB || 15) * 1024 * 1024,
+    // Any file type. A CV arrives as whatever the candidate happened to
+    // send - a PDF, a Word file, an ODT, a scan, a zip of a portfolio -
+    // and HR should not have to convert it before it can be filed.
+    //
+    // Accepting anything is only safe because of how it is served back:
+    // always as a download, never rendered in the page. See the note on
+    // the download route in candidates.routes.js.
+    allowedMime: null,
+    allowedExt: null,
   },
   // "Should a candidate be blocked from advancing until the current
   // stage's feedback is in?" - yes. Set this to false in .env to lift it.

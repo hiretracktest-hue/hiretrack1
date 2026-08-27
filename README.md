@@ -138,6 +138,36 @@ the bell that opened it.
 politeness — for people with vestibular disorders, motion they did not ask for
 causes real nausea. Focus outlines are visible for keyboard users too.
 
+### Where CVs are stored
+
+HR uploads a CV; the hiring manager, the interviewer and management can open
+and download it but cannot replace it. Candidates have no account at all — the
+system begins after HR has added them.
+
+**Any file type is accepted.** A CV arrives as whatever the candidate happened
+to send: a PDF, a Word file, an ODT, a phone photo of a printout, a zip of a
+portfolio. Making HR convert it first is a made-up obstacle. The cap is size
+(15 MB), not format.
+
+That is only safe because of how a CV is served back. An `.html` or `.svg` CV
+would run its own scripts if a browser rendered it, and rendering one on this
+origin would be XSS straight through the app. So a CV always comes back as an
+**attachment**, with `X-Content-Type-Options: nosniff` and a locked-down CSP —
+it is saved, never executed. There is a test that uploads a file containing a
+`<script>` tag and checks it comes back as a download.
+
+Files go to a **private Supabase Storage bucket** when `SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY` are set, and to `server/uploads` when they are not.
+Which one was used is recorded per candidate, so switching the bucket on does
+not strand CVs that were already uploaded — nothing has to be migrated.
+
+The bucket is private. Downloads are handed out as signed URLs that expire after
+a minute, so a CV cannot be reached by guessing a path, and the link is not
+worth passing on. The service role key bypasses row-level security, so it is
+read on the server only and never reaches the browser. At startup the app checks
+the bucket exists and **refuses to use it if it is public** — CVs are personal
+data.
+
 ## 2. How the brief is answered
 
 The scenario ends with six questions. Each one is answered by something you can

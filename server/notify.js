@@ -1,7 +1,7 @@
-import { run, many } from "../database/index.js";
+import { one, run, many } from "../database/index.js";
 import { config } from "./config.js";
 import { sendMail, inviteUrl } from "./mail.js";
-import { interviewInviteEmail, interviewAnswerEmail } from "./mail-templates.js";
+import { interviewInviteEmail, interviewAnswerEmail, plainEmail } from "./mail-templates.js";
 
 /**
  * "How are candidates and interviewers told about a scheduled interview?"
@@ -37,19 +37,39 @@ function toUser(kind, user, subject, body, candidateId = null, interviewId = nul
   ]);
 }
 
-/** One email written into the outbox for HR to send by hand. */
-function toOutbox(kind, to, subject, body, candidateId = null, interviewId = null) {
-  return run(INSERT, [
-    "EMAIL",
-    kind,
-    null,
-    to.email,
-    to.name,
-    subject,
-    body,
-    candidateId,
-    interviewId,
-  ]);
+/**
+ * A message for a candidate.
+ *
+ * Candidates have no account here, so this is the only way to reach
+ * them. The row is written first and always: it is the record of what
+ * the system decided to say, and it does not depend on a mail server
+ * being up.
+ *
+ * Then, if SMTP is configured, it really goes out and the row is marked
+ * sent. If it is not configured - or the send fails - the row stays
+ * pending and HR sends it by hand from the Outbox. Nothing is ever
+ * marked sent unless a mail server accepted it.
+ */
+async function toOutbox(kind, to, subject, body, candidateId = null, interviewId = null) {
+  const row = await one(
+    INSERT + " RETURNING id",
+    ["EMAIL", kind, null, to.email, to.name, subject, body, candidateId, interviewId]
+  );
+
+  if (!config.smtp.enabled || !to.email) return row;
+
+  const result = await sendMail({
+    to: to.email,
+    name: to.name,
+    ...plainEmail({ subject, body }),
+  });
+
+  if (result.sent) {
+    await run("UPDATE notifications SET sent_at = NOW() WHERE id = $1", [row.id]);
+  } else {
+    console.warn("[notify] could not email " + to.email + ": " + result.reason + " (left in the outbox)");
+  }
+  return row;
 }
 
 /**

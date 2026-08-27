@@ -1,4 +1,5 @@
 import { config } from "./config.js";
+import { ensureBucket } from "./storage.js";
 import { ping } from "../database/index.js";
 import { createApp, hasClientBuild } from "./app.js";
 
@@ -21,11 +22,24 @@ try {
   process.exit(1);
 }
 
+// Same reasoning for the CV bucket: a wrong service role key or a
+// bucket left public should surface now, not the first time somebody
+// uploads a CV.
+let cvStorageLine = "server/uploads (set SUPABASE_URL to use a bucket)";
+if (config.storage.enabled) {
+  const bucket = await ensureBucket();
+  cvStorageLine = bucket.ok
+    ? "Supabase bucket '" + config.storage.bucket + "'" +
+      (bucket.created ? "  (created just now)" : "")
+    : "server/uploads  - SUPABASE UNUSABLE: " + bucket.reason;
+}
+
 app.listen(config.port, () => {
   const built = hasClientBuild();
   console.log("");
   console.log("  Altrium API    ->  http://localhost:" + config.port);
   console.log("  Database       ->  Supabase PostgreSQL");
+  console.log("  CV storage     ->  " + cvStorageLine);
   console.log(
     "  Google sign-in ->  " +
       (config.google.enabled ? "enabled" : "disabled (email + password only)")

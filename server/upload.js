@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import multer from "multer";
 import { config } from "./config.js";
@@ -14,23 +13,18 @@ export const UPLOAD_DIR = process.env.UPLOAD_DIR
   : path.join(__dirname, "uploads");
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-  filename: (_req, file, cb) => {
-    // Never trust the uploaded name for the name on disk - a crafted
-    // filename could otherwise write outside this folder.
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, Date.now() + "-" + crypto.randomBytes(8).toString("hex") + ext);
-  },
-});
+// The file is held in memory, not written straight to disk, because
+// storage.js decides afterwards whether it belongs in a Supabase bucket
+// or in the uploads folder. Safe at this size - uploads are capped at
+// config.upload.maxBytes and one file per request.
+const storage = multer.memoryStorage();
 
 function fileFilter(_req, file, cb) {
-  const ext = path.extname(file.originalname).toLowerCase();
-  const typeOk = config.upload.allowedMime.includes(file.mimetype);
-  const extOk = config.upload.allowedExt.includes(ext);
-
-  if (!typeOk || !extOk) {
-    const err = new Error("Only PDF, DOC or DOCX files are accepted.");
+  // Every file type is accepted - see config.upload for why. Size is
+  // still capped (multer limits, below), and an empty upload is not a
+  // file at all.
+  if (!file.originalname) {
+    const err = new Error("That file has no name, so it cannot be stored.");
     err.status = 400;
     err.expose = true;
     return cb(err);
@@ -43,14 +37,6 @@ export const uploadCv = multer({
   fileFilter,
   limits: { fileSize: config.upload.maxBytes, files: 1 },
 }).single("cv");
-
-export function deleteStoredFile(storedName) {
-  if (!storedName) return;
-  // path.basename strips any directory part, so we can only ever delete
-  // inside the uploads folder.
-  const target = path.join(UPLOAD_DIR, path.basename(storedName));
-  fs.promises.unlink(target).catch(() => {});
-}
 
 // Content-Disposition breaks if the filename contains quotes or newlines.
 export function safeFilename(name) {

@@ -137,6 +137,10 @@ CREATE TABLE candidates (
   cv_banded_at   TIMESTAMPTZ,
   cv_filename    TEXT,
   cv_stored_name TEXT,
+  -- 'supabase' (a key in the private CV bucket) or 'local' (a file in
+  -- server/uploads). Recorded per candidate so rows stored before the
+  -- bucket was switched on keep working - nothing has to be migrated.
+  cv_storage     TEXT,
   cv_mime        TEXT,
   cv_size        BIGINT,
   cv_uploaded_at TIMESTAMPTZ,

@@ -288,27 +288,72 @@ describe("HR adds candidates", () => {
     assert.equal(status, 409);
   });
 
-  test("HR uploads their CV, and a .txt file is refused", async () => {
+  test("a CV can be any kind of file", async () => {
+    // A CV arrives as whatever the candidate happened to send. HR should
+    // not have to convert a scan or an ODT before it can be filed.
     const id = Number((await one("SELECT id FROM candidates WHERE email = $1", ["maya@example.com"])).id);
 
-    const good = new FormData();
-    good.append("cv", new Blob(["%PDF-1.4 cv"], { type: "application/pdf" }), "maya.pdf");
-    const upload = await call("POST", "/api/candidates/" + id + "/cv", good, true);
-    assert.equal(upload.status, 200);
-    assert.equal(upload.data.candidate.cv.filename, "maya.pdf");
+    const kinds = [
+      ["maya.pdf", "%PDF-1.4 cv", "application/pdf"],
+      ["notes.txt", "plain notes", "text/plain"],
+      ["portfolio.zip", "PK\u0003\u0004", "application/zip"],
+      ["scan.png", "\u0089PNG", "image/png"],
+    ];
 
-    const bad = new FormData();
-    bad.append("cv", new Blob(["nope"], { type: "text/plain" }), "notes.txt");
-    assert.equal((await call("POST", "/api/candidates/" + id + "/cv", bad, true)).status, 400);
+    for (const [name, body, type] of kinds) {
+      const form = new FormData();
+      form.append("cv", new Blob([body], { type }), name);
+      const upload = await call("POST", "/api/candidates/" + id + "/cv", form, true);
+      assert.equal(upload.status, 200, name + " should be accepted");
+      assert.equal(upload.data.candidate.cv.filename, name);
+    }
+
+    // Uploading again replaces what was there - a candidate has one CV.
+    const finalForm = new FormData();
+    finalForm.append("cv", new Blob(["%PDF-1.4 cv"], { type: "application/pdf" }), "maya.pdf");
+    await call("POST", "/api/candidates/" + id + "/cv", finalForm, true);
   });
 
-  test("the CV can be downloaded again", async () => {
+  test("a CV is always served as a download, never rendered", async () => {
+    // This is what makes accepting any file type safe. An .html or .svg
+    // CV would run its own scripts if a browser rendered it, and
+    // rendering one on this origin would be XSS straight through the
+    // app. It must come back as an attachment every time.
     const id = Number((await one("SELECT id FROM candidates WHERE email = $1", ["maya@example.com"])).id);
+
+    const nasty = new FormData();
+    nasty.append(
+      "cv",
+      new Blob(["<script>alert(1)</script>"], { type: "text/html" }),
+      "cv.html"
+    );
+    assert.equal((await call("POST", "/api/candidates/" + id + "/cv", nasty, true)).status, 200);
+
     const response = await fetch(baseUrl + "/api/candidates/" + id + "/cv", {
       headers: { Cookie: cookie },
     });
     assert.equal(response.status, 200);
-    assert.match(response.headers.get("content-disposition") || "", /maya\.pdf/);
+    assert.match(
+      response.headers.get("content-disposition") || "",
+      /^attachment/,
+      "must be an attachment, not inline"
+    );
+    assert.match(response.headers.get("content-disposition") || "", /cv\.html/);
+    assert.equal(
+      response.headers.get("x-content-type-options"),
+      "nosniff",
+      "the browser must not second-guess the type"
+    );
+
+    // Put a normal CV back for the tests that follow.
+    const restore = new FormData();
+    restore.append("cv", new Blob(["%PDF-1.4 cv"], { type: "application/pdf" }), "maya.pdf");
+    await call("POST", "/api/candidates/" + id + "/cv", restore, true);
+
+    const again = await fetch(baseUrl + "/api/candidates/" + id + "/cv", {
+      headers: { Cookie: cookie },
+    });
+    assert.match(again.headers.get("content-disposition") || "", /maya\.pdf/);
   });
 
   test("an invalid id returns a clear 400, not a crash", async () => {
