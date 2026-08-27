@@ -6,6 +6,7 @@ import * as v from "../validate.js";
 import { stagesFor } from "./jobs.routes.js";
 import { uploadCv, safeFilename } from "../upload.js";
 import { putCv, getCv, removeCv } from "../storage.js";
+import { notifyCandidateAdded } from "../notify.js";
 import { notifyOutcome } from "../notify.js";
 
 /**
@@ -248,7 +249,17 @@ router.post(
       [jobId, fullName, emailValue, phone, source, notes, stages[0], req.user.id]
     );
 
-    res.status(201).json({ candidate: toJson(await loadOr404(created.id)) });
+    const candidate = await loadOr404(created.id);
+
+    // Tell them we have their application. Opt-out rather than opt-in:
+    // somebody who applied should hear back, and the case for silence is
+    // the unusual one - a name copied off a CV pile who has not actually
+    // applied yet. Pass notify: false for that.
+    if (req.body.notify !== false) {
+      await notifyCandidateAdded({ candidate, job, addedBy: req.user });
+    }
+
+    res.status(201).json({ candidate: toJson(candidate) });
   })
 );
 

@@ -486,3 +486,41 @@ export async function notifyOutcome({ candidate, job, outcome, decidedBy }) {
     null
   );
 }
+
+/**
+ * HR has added a candidate.
+ *
+ * The candidate has no account and did not put themselves here — HR
+ * typed their details in. So the first thing they hear from us should
+ * confirm their application exists and is being looked at, rather than
+ * silence until somebody happens to book an interview.
+ *
+ * HR can turn this off per candidate: a name copied off a CV pile is
+ * not always somebody who has applied yet, and emailing them would be
+ * strange.
+ */
+export async function notifyCandidateAdded({ candidate, job, addedBy }) {
+  await toOutbox(
+    "candidate.added",
+    { email: candidate.email, name: candidate.full_name },
+    "We have your application - " + job.title,
+    "Dear " +
+      candidate.full_name +
+      ",\n\n" +
+      "Thank you for your interest in the " +
+      job.title +
+      " position at " +
+      config.companyName +
+      ".\n\n" +
+      "Your application is now with our hiring team and we are reviewing it. If we " +
+      "would like to take it further, we will email you to arrange an interview.\n\n" +
+      "You do not need to do anything for now, and there is no account to create — " +
+      "we will come to you.\n\n" +
+      "Kind regards,\n" +
+      (addedBy?.name || "The hiring team") +
+      "\n" +
+      config.companyName,
+    candidate.id,
+    null
+  );
+}

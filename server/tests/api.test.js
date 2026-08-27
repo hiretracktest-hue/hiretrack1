@@ -292,6 +292,60 @@ describe("HR adds candidates", () => {
     assert.equal(data.candidate.addedByName, "Test HR");
   });
 
+  test("adding a candidate writes them an acknowledgement", async () => {
+    // The candidate has no account and did not put themselves here - HR
+    // typed their details in - so the first thing they hear from us
+    // should confirm their application exists.
+    const added = await call("POST", "/api/candidates", {
+      jobId,
+      fullName: "Dilshan Herath",
+      email: "dilshan@example.com",
+    });
+    assert.equal(added.status, 201);
+
+    const { data } = await call("GET", "/api/notifications/outbox");
+    const note = data.messages.find(
+      (m) => m.kind === "candidate.added" && m.recipientEmail === "dilshan@example.com"
+    );
+    assert.ok(note, "the candidate is told we have their application");
+    assert.match(note.subject, /We have your application/);
+    assert.equal(note.sentAt, null, "no mail provider in tests, so it waits in the outbox");
+  });
+
+  test("notify:false adds them silently", async () => {
+    // A name copied off a CV pile has not necessarily applied, and
+    // emailing them would be strange.
+    const before = (await call("GET", "/api/notifications/outbox")).data.messages.length;
+
+    const added = await call("POST", "/api/candidates", {
+      jobId,
+      fullName: "Quiet Pile Name",
+      email: "quiet@example.com",
+      notify: false,
+    });
+    assert.equal(added.status, 201);
+
+    const after = (await call("GET", "/api/notifications/outbox")).data.messages.length;
+    assert.equal(after, before, "nothing at all is written for them");
+  });
+
+  test("only HR can add a candidate", async () => {
+    for (const [who, password] of [
+      ["manager@example.com", "Password123"],
+      ["interviewer@example.com", "Password123"],
+      ["management@example.com", "Password456"],
+    ]) {
+      await signIn(who, password);
+      const { status } = await call("POST", "/api/candidates", {
+        jobId,
+        fullName: "Should Not Work",
+        email: "nope@example.com",
+      });
+      assert.equal(status, 403, who + " must not be able to add a candidate");
+    }
+    await signIn("hr@example.com");
+  });
+
   test("the same person cannot be added twice to one position", async () => {
     const { status } = await call("POST", "/api/candidates", {
       jobId,

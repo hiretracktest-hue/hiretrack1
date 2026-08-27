@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
 import {
   Alert,
+  Field,
   BAND_LABEL,
   BANDS,
   BandBadge,
@@ -28,6 +29,22 @@ export default function Candidates() {
   const { user } = useAuth();
   const canBand = Boolean(user?.permissions?.["candidate:band"]);
   const isInterviewer = !canBand;
+
+  const canAdd = Boolean(user?.permissions?.["candidate:add"]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState("");
+  const [form, setForm] = useState({
+    jobId: "",
+    fullName: "",
+    email: "",
+    phone: "",
+    source: "",
+    // Somebody who applied should hear back, so telling them is the
+    // default. HR turns it off for a name copied off a CV pile who has
+    // not actually applied yet.
+    notify: true,
+  });
 
   const [candidates, setCandidates] = useState([]);
   const [bandCounts, setBandCounts] = useState(null);
@@ -122,6 +139,43 @@ export default function Candidates() {
 
   const allVisibleSelected = candidates.length > 0 && selected.length === candidates.length;
 
+  const updateForm = (key) => (event) =>
+    setForm((current) => ({
+      ...current,
+      [key]: event.target.type === "checkbox" ? event.target.checked : event.target.value,
+    }));
+
+  async function addCandidate(event) {
+    event.preventDefault();
+    setAdding(true);
+    setError("");
+    setAdded("");
+    try {
+      const result = await api.addCandidate({
+        jobId: Number(form.jobId),
+        fullName: form.fullName,
+        email: form.email,
+        phone: form.phone,
+        source: form.source,
+        notify: form.notify,
+      });
+      setAdded(
+        result.candidate.fullName +
+          " was added." +
+          (form.notify ? " An email has gone to " + result.candidate.email + "." : "")
+      );
+      setForm({ jobId: form.jobId, fullName: "", email: "", phone: "", source: "", notify: true });
+      setShowAdd(false);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  const openJobs = jobs.filter((j) => j.status === "ACTIVE");
+
   return (
     <div className="page">
       <div className="page-head">
@@ -134,6 +188,11 @@ export default function Candidates() {
           </p>
         </div>
         <div className="btn-row">
+          {canAdd && (
+            <button className="btn btn-primary" onClick={() => setShowAdd((c) => !c)}>
+              {showAdd ? "Cancel" : "+ Add candidate"}
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={() => setMineOnly((c) => !c)}>
             {mineOnly ? "Show everyone" : "Only mine to interview"}
           </button>
@@ -156,6 +215,115 @@ export default function Candidates() {
       <Alert kind="error" onDismiss={() => setError("")}>
         {error}
       </Alert>
+      <Alert kind="success" onDismiss={() => setAdded("")}>
+        {added}
+      </Alert>
+
+      {showAdd && canAdd && (
+        <div className="card mb-2">
+          <div className="card-title">
+            <h2>Add a candidate</h2>
+            <span className="muted small">
+              They start at the first stage of the position. Upload their CV on their own page.
+            </span>
+          </div>
+
+          {openJobs.length === 0 ? (
+            <p className="muted">
+              There are no open positions to add anyone to. Open one first.
+            </p>
+          ) : (
+            <form onSubmit={addCandidate}>
+              <div className="grid grid-2">
+                <Field label="Position" htmlFor="add-job">
+                  <select
+                    id="add-job"
+                    className="select"
+                    required
+                    value={form.jobId}
+                    onChange={updateForm("jobId")}
+                  >
+                    <option value="">Choose a position…</option>
+                    {openJobs.map((j) => (
+                      <option key={j.id} value={j.id}>
+                        {j.title}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Full name" htmlFor="add-name">
+                  <input
+                    id="add-name"
+                    className="input"
+                    required
+                    minLength={2}
+                    placeholder="Dilshan Herath"
+                    value={form.fullName}
+                    onChange={updateForm("fullName")}
+                  />
+                </Field>
+                <Field
+                  label="Email"
+                  htmlFor="add-email"
+                  hint="Their real address — this is where their invitation will go."
+                >
+                  <input
+                    id="add-email"
+                    className="input"
+                    type="email"
+                    required
+                    placeholder="dilshan.herath@gmail.com"
+                    value={form.email}
+                    onChange={updateForm("email")}
+                  />
+                </Field>
+                <Field label="Phone" htmlFor="add-phone">
+                  <input
+                    id="add-phone"
+                    className="input"
+                    placeholder="+94 77 123 4567"
+                    value={form.phone}
+                    onChange={updateForm("phone")}
+                  />
+                </Field>
+                <Field label="Where did they come from?" htmlFor="add-source">
+                  <input
+                    id="add-source"
+                    className="input"
+                    placeholder="LinkedIn, referral, email application…"
+                    value={form.source}
+                    onChange={updateForm("source")}
+                  />
+                </Field>
+              </div>
+
+              <label className="check">
+                <input type="checkbox" checked={form.notify} onChange={updateForm("notify")} />
+                <span>
+                  Email them to confirm we have their application
+                  <span className="muted small">
+                    {" "}
+                    — turn this off for a name taken off a CV pile who has not applied yet.
+                  </span>
+                </span>
+              </label>
+
+              <div className="btn-row mt-2">
+                <button className="btn btn-primary" type="submit" disabled={adding}>
+                  {adding ? "Adding…" : "Add candidate"}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  onClick={() => setShowAdd(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
 
       {bandCounts && (
         <div className="band-bar">

@@ -15,7 +15,7 @@ Built for our second year, second semester group project.
 | Back end | Node.js + Express (REST API) |
 | Database | **PostgreSQL on Supabase**, accessed with `pg` (node-postgres) — 8 tables |
 | Auth | Email + password (bcrypt), JWT in an httpOnly cookie, optional Google sign-in |
-| Tests | Node's built-in test runner — 71 API tests |
+| Tests | Node's built-in test runner — 74 API tests |
 
 > **This is an internal system.** The people who log in are HR, hiring managers,
 > interviewers and management. **Job candidates do not have accounts** — HR adds
@@ -82,7 +82,7 @@ Wijesinghe (HR), Chathura Rajapaksha (Hiring Manager), Sanduni Ekanayake
 | `npm run dev` | Run the API and the React dev server together |
 | `npm run build` | Build the React app into `client/dist` |
 | `npm start` | Run the API, serving the built React app too |
-| `npm test` | Run the 71 automated API tests |
+| `npm test` | Run the 74 automated API tests |
 | `npm run seed` | Add any missing demo data (safe to re-run) |
 | `npm run seed:reset` | Empty every table, then seed from scratch |
 
@@ -141,8 +141,18 @@ causes real nausea. Focus outlines are visible for keyboard users too.
 ### Sending to real candidates
 
 HR adds a candidate with whatever email address they actually have — a real
-Gmail is fine, and that is the point. When HR schedules the interview, the
-invitation goes to that address for real.
+Gmail is fine, and that is the point.
+
+**Add candidate** sits on the Candidates page as well as inside a position, so
+HR does not have to open the right position first to add somebody. Only HR sees
+it, and the API returns 403 to the other three roles whether or not the button
+was rendered.
+
+The candidate hears from us twice: once when they are added, confirming their
+application exists, and again when an interview is booked. The first one is
+opt-out — HR unticks it for a name copied off a CV pile who has not actually
+applied yet — but on by default, because somebody who applied should hear back
+and silence is the unusual case.
 
 Two providers, either optional:
 
@@ -394,7 +404,7 @@ our web/
 │   │   ├── notifications.routes.js in-app notifications + candidate outbox
 │   │   ├── reports.routes.js       management reports + CSV export
 │   │   └── team.routes.js          who logs in, roles, dashboard counts
-│   └── tests/api.test.js   71 automated tests
+│   └── tests/api.test.js   74 automated tests
 │
 └── client/                 React front end
     ├── index.html
