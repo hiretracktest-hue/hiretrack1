@@ -518,6 +518,36 @@ of uploads, and an audit log.
 
 ---
 
+## 9b. Putting it online
+
+**GitHub Pages cannot host this.** Pages serves static files only — it cannot
+run Node, so it cannot run the API, the database connection, sign-in, uploads
+or email. Pointing Pages at this repository renders `README.md` as a web page,
+which is not the application.
+
+One service hosts the whole thing instead: `npm start` boots Express, which also
+serves the built React app. The database stays on Supabase.
+
+**[render.yaml](render.yaml)** configures it. In Render: **New → Blueprint →**
+pick this repository. It asks for the secrets, which are never written into the
+repo. Set `CLIENT_URL` to the https address Render gives you — the accept and
+decline links in interview emails are built from it, and they point at localhost
+if it is wrong.
+
+The free plan sleeps after 15 minutes idle, so the first visit after a quiet
+spell takes about 50 seconds to wake. Worth knowing before somebody marks it and
+assumes it is broken.
+
+### Before making it public
+
+The seeded accounts are `hr@hiretrack.test` / `hr12345` and three like it. On
+`localhost` that is convenient. On a public URL it is a real database of CVs and
+candidate email addresses behind a password that has been shared over chat.
+
+Either change the demo passwords in `database/seed.js` before deploying, or
+point the deployed copy at a second, throw-away Supabase project and keep the
+real one local. Do not put real candidate data behind `hr12345`.
+
 ## 10. Publishing to GitHub
 
 `.gitignore` already excludes `node_modules/`, the database file, uploaded CVs

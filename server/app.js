@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import cookieParser from "cookie-parser";
 
+import { config } from "./config.js";
 import { attachUser, notFound, errorHandler } from "./middleware.js";
 import authRoutes from "./routes/auth.routes.js";
 import jobsRoutes from "./routes/jobs.routes.js";
@@ -27,6 +28,12 @@ export function createApp({ log = true } = {}) {
   const app = express();
 
   app.disable("x-powered-by");
+
+  // Behind a host's TLS proxy (Render, Railway, Fly), the connection to
+  // this process is plain HTTP even though the visitor is on HTTPS.
+  // Without this, Express reports req.protocol as "http" and treats the
+  // request as insecure, which breaks the Secure session cookie.
+  if (config.isProduction) app.set("trust proxy", 1);
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser());

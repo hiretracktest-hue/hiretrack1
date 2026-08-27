@@ -1,0 +1,63 @@
+# Deploying Altrium Recruitment to Render (render.com).
+#
+# One web service runs everything: `npm start` boots Express, which also
+# serves the built React app, so there is no separate front end to host.
+# The database stays where it is - Supabase - so nothing has to move.
+#
+# In Render: New -> Blueprint -> pick this repository. It reads this file
+# and creates the service. Then fill in the secrets it asks for; they are
+# marked sync:false below, which means Render prompts rather than storing
+# them in this file. Nothing secret belongs in here - it is committed.
+services:
+  - type: web
+    name: altrium-recruitment
+    runtime: node
+    plan: free
+    # The free plan sleeps after 15 minutes idle, so the first visit
+    # after a quiet spell takes ~50 seconds to wake. Fine for a demo;
+    # worth knowing before somebody marks it and thinks it is broken.
+    region: singapore
+    buildCommand: npm install && npm --prefix client install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Generated once by Render and kept. Every session cookie is signed
+      # with it, so changing it signs everybody out.
+      - key: JWT_SECRET
+        generateValue: true
+
+      # Supabase connection string. Use the POOLER host
+      # (...pooler.supabase.com:6543), not db.<ref>.supabase.co - the
+      # direct host is IPv6-only and will not connect.
+      - key: DATABASE_URL
+        sync: false
+
+      # Must be the service's own https:// address once Render has
+      # assigned one. The accept/decline links in interview emails are
+      # built from this, so if it is wrong they point at localhost.
+      - key: CLIENT_URL
+        sync: false
+
+      # CV storage. Leave blank and CVs are written to the container's
+      # disk, which Render wipes on every deploy - so on a hosted
+      # instance these are effectively required.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_CV_BUCKET
+        value: candidate-cvs
+
+      # Email. Optional - without them, messages wait in the Outbox.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+
+      - key: COMPANY_NAME
+        value: Altrium
+      - key: REQUIRE_FEEDBACK_TO_ADVANCE
+        value: "true"
