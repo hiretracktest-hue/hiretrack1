@@ -138,6 +138,37 @@ the bell that opened it.
 politeness — for people with vestibular disorders, motion they did not ask for
 causes real nausea. Focus outlines are visible for keyboard users too.
 
+### Sending to real candidates
+
+HR adds a candidate with whatever email address they actually have — a real
+Gmail is fine, and that is the point. When HR schedules the interview, the
+invitation goes to that address for real.
+
+Two providers, either optional:
+
+| | |
+| --- | --- |
+| **Resend** | `RESEND_API_KEY` + `RESEND_FROM_EMAIL`. An HTTP API, so it works on networks that block outbound SMTP ports. Preferred when both are set. |
+| **SMTP** | `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`. Any mailbox, including Gmail with an App Password. |
+| **Neither** | Messages wait in the Outbox for HR to send by hand, as before. |
+
+**A Resend account with no verified domain will only deliver to the address
+that owns the account.** Everything else comes back 403. That is a sandbox
+restriction, not a bug in this project — and it means an assignment demo using
+`onboarding@resend.dev` can only email one address. Two ways past it: verify a
+domain at [resend.com/domains](https://resend.com/domains), or use Gmail SMTP,
+which has no such limit.
+
+Whatever happens, **nothing is ever marked sent unless a provider accepted it**.
+When a send is refused the reason is written onto the outbox entry and shown to
+HR in full, because a refused email that merely looks unsent is
+indistinguishable from one nobody tried to send. HR can then fix the cause and
+press **Send now**, or send it by hand and mark it sent.
+
+The automated tests run with **no** mail provider and **no** Storage bucket,
+whatever is in `.env`. Otherwise `npm test` would fire real messages at real
+addresses and write throw-away CVs into the production bucket.
+
 ### Where CVs are stored
 
 HR uploads a CV; the hiring manager, the interviewer and management can open

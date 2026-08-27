@@ -226,6 +226,10 @@ CREATE TABLE notifications (
   interview_id    BIGINT      REFERENCES interviews (id) ON DELETE CASCADE,
   read_at         TIMESTAMPTZ,
   sent_at         TIMESTAMPTZ,
+  -- Why a send failed, when it did. Without this a refused email
+  -- just sits in the outbox looking unsent, and nobody can tell
+  -- whether it was never tried or actively rejected.
+  send_error      TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

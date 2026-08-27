@@ -38,14 +38,48 @@ function getTransport() {
  * that triggered it. Booking an interview should still succeed when the
  * confirmation email cannot go out; the caller records what happened.
  */
-export async function sendMail({ to, name, subject, text, html }) {
-  if (!config.smtp.enabled) {
-    return { sent: false, reason: "SMTP is not configured" };
-  }
-  if (!to) {
-    return { sent: false, reason: "no email address on file" };
-  }
+/** True when there is any way at all to send email. */
+export function mailEnabled() {
+  return config.resend.enabled || config.smtp.enabled;
+}
 
+/** Which one is actually in use, for the startup banner. */
+export function mailProvider() {
+  if (config.resend.enabled) return "resend";
+  if (config.smtp.enabled) return "smtp";
+  return "none";
+}
+
+async function sendViaResend({ to, name, subject, text, html }) {
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + config.resend.apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: config.resend.from,
+      // The bare address, with no display name. On a sandbox account
+      // Resend compares this string against the address that owns the
+      // account, and "Name <addr>" does not match even when addr does -
+      // so a display name here silently breaks every send. The
+      // recipient's name is in the body of the message anyway.
+      to: [to],
+      subject,
+      text,
+      ...(html ? { html } : {}),
+    }),
+  });
+
+  const body = await response.json().catch(() => ({}));
+  if (response.ok && body.id) return { sent: true, id: body.id };
+
+  // Resend's own wording is better than anything we would invent, and
+  // it is what HR needs to see - it names the address it will accept.
+  return { sent: false, reason: body.message || "Resend returned " + response.status };
+}
+
+async function sendViaSmtp({ to, name, subject, text, html }) {
   try {
     const info = await getTransport().sendMail({
       from: config.smtp.from,
@@ -56,6 +90,27 @@ export async function sendMail({ to, name, subject, text, html }) {
     });
     return { sent: true, id: info.messageId };
   } catch (err) {
+    return { sent: false, reason: err.message };
+  }
+}
+
+export async function sendMail({ to, name, subject, text, html }) {
+  if (!to) return { sent: false, reason: "no email address on file" };
+  if (!mailEnabled()) {
+    return { sent: false, reason: "no mail provider is configured" };
+  }
+
+  // Resend first when both are set - it is an HTTP call, so it works
+  // from networks that block outbound SMTP ports.
+  const send = config.resend.enabled ? sendViaResend : sendViaSmtp;
+
+  try {
+    const result = await send({ to, name, subject, text, html });
+    if (!result.sent) {
+      console.warn("[mail] refused for " + to + ": " + result.reason);
+    }
+    return result;
+  } catch (err) {
     console.error("[mail] could not send to " + to + ": " + err.message);
     return { sent: false, reason: err.message };
   }
@@ -63,6 +118,7 @@ export async function sendMail({ to, name, subject, text, html }) {
 
 /** Checked once at startup so a broken password is obvious immediately. */
 export async function verifyMail() {
+  if (config.resend.enabled) return { ok: true, provider: "resend" };
   if (!config.smtp.enabled) return { ok: false, reason: "not configured" };
   try {
     await getTransport().verify();

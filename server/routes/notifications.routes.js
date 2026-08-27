@@ -2,7 +2,7 @@ import express from "express";
 import { one, many, run } from "../../database/index.js";
 import { asyncHandler, requireAuth, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
-import { sendMail } from "../mail.js";
+import { sendMail, mailEnabled } from "../mail.js";
 import { plainEmail } from "../mail-templates.js";
 import { config } from "../config.js";
 
@@ -33,6 +33,8 @@ function toJson(row) {
     interviewId: row.interview_id === null ? null : Number(row.interview_id),
     readAt: row.read_at,
     sentAt: row.sent_at,
+    // Why it did not go, when a provider refused it.
+    sendError: row.send_error || null,
     createdAt: row.created_at,
   };
 }
@@ -137,10 +139,10 @@ router.post(
     if (!row) throw httpError(404, "That message does not exist.");
     if (row.sent_at) throw httpError(400, "That message has already been sent.");
 
-    if (!config.smtp.enabled) {
+    if (!mailEnabled()) {
       throw httpError(
         400,
-        "No mail server is configured, so this cannot be sent from here. " +
+        "No mail provider is configured, so this cannot be sent from here. " +
           "Copy the message and send it yourself, then use 'Mark as sent'."
       );
     }
@@ -150,9 +152,12 @@ router.post(
       name: row.recipient_name,
       ...plainEmail({ subject: row.subject, body: row.body }),
     });
-    if (!result.sent) throw httpError(502, "The mail server refused it: " + result.reason);
+    if (!result.sent) {
+      await run("UPDATE notifications SET send_error = $1 WHERE id = $2", [result.reason, id]);
+      throw httpError(502, result.reason);
+    }
 
-    await run("UPDATE notifications SET sent_at = NOW() WHERE id = $1", [id]);
+    await run("UPDATE notifications SET sent_at = NOW(), send_error = NULL WHERE id = $1", [id]);
     res.json({ ok: true, sent: true });
   })
 );

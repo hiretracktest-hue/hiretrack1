@@ -1,6 +1,6 @@
 import { one, run, many } from "../database/index.js";
 import { config } from "./config.js";
-import { sendMail, inviteUrl } from "./mail.js";
+import { sendMail, mailEnabled, inviteUrl } from "./mail.js";
 import { interviewInviteEmail, interviewAnswerEmail, plainEmail } from "./mail-templates.js";
 
 /**
@@ -56,7 +56,7 @@ async function toOutbox(kind, to, subject, body, candidateId = null, interviewId
     ["EMAIL", kind, null, to.email, to.name, subject, body, candidateId, interviewId]
   );
 
-  if (!config.smtp.enabled || !to.email) return row;
+  if (!mailEnabled() || !to.email) return row;
 
   const result = await sendMail({
     to: to.email,
@@ -65,9 +65,12 @@ async function toOutbox(kind, to, subject, body, candidateId = null, interviewId
   });
 
   if (result.sent) {
-    await run("UPDATE notifications SET sent_at = NOW() WHERE id = $1", [row.id]);
+    await run("UPDATE notifications SET sent_at = NOW(), send_error = NULL WHERE id = $1", [row.id]);
   } else {
-    console.warn("[notify] could not email " + to.email + ": " + result.reason + " (left in the outbox)");
+    // Keep the reason on the row. A refused email that just sits in the
+    // outbox looking unsent is indistinguishable from one nobody tried
+    // to send, and HR cannot fix what they cannot see.
+    await run("UPDATE notifications SET send_error = $1 WHERE id = $2", [result.reason, row.id]);
   }
   return row;
 }

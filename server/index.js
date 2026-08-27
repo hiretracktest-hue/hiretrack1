@@ -1,5 +1,6 @@
 import { config } from "./config.js";
 import { ensureBucket } from "./storage.js";
+import { mailProvider } from "./mail.js";
 import { ping } from "../database/index.js";
 import { createApp, hasClientBuild } from "./app.js";
 
@@ -40,6 +41,15 @@ app.listen(config.port, () => {
   console.log("  Altrium API    ->  http://localhost:" + config.port);
   console.log("  Database       ->  Supabase PostgreSQL");
   console.log("  CV storage     ->  " + cvStorageLine);
+  const provider = mailProvider();
+  console.log(
+    "  Email          ->  " +
+      (provider === "resend"
+        ? "Resend, from " + config.resend.from
+        : provider === "smtp"
+          ? "SMTP via " + config.smtp.host
+          : "not configured (messages wait in the Outbox)")
+  );
   console.log(
     "  Google sign-in ->  " +
       (config.google.enabled ? "enabled" : "disabled (email + password only)")

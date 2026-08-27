@@ -51,6 +51,22 @@ export default function Outbox() {
     }
   }
 
+  // Send it for real, when a mail provider is configured. The failure
+  // is worth showing in full: it is usually the provider telling you
+  // exactly what is wrong (an unverified domain, a blocked address).
+  async function sendNow(id) {
+    setBusy(true);
+    setError("");
+    try {
+      await api.sendEmailNow(id);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function mailtoLink(message) {
     return (
       "mailto:" +
@@ -131,6 +147,14 @@ export default function Outbox() {
                 )}
               </div>
 
+              {/* A refused email that just looks unsent is
+                  indistinguishable from one nobody tried to send. */}
+              {!message.sentAt && message.sendError && (
+                <p className="send-error">
+                  <strong>Could not be sent automatically.</strong> {message.sendError}
+                </p>
+              )}
+
               {openId === message.id ? (
                 <pre className="email-body">{message.body}</pre>
               ) : (
@@ -151,13 +175,22 @@ export default function Outbox() {
                   Copy text
                 </button>
                 {!message.sentAt && (
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => markSent(message.id)}
-                    disabled={busy}
-                  >
-                    Mark as sent
-                  </button>
+                  <>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => sendNow(message.id)}
+                      disabled={busy}
+                    >
+                      Send now
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => markSent(message.id)}
+                      disabled={busy}
+                    >
+                      Mark as sent
+                    </button>
+                  </>
                 )}
               </div>
             </div>

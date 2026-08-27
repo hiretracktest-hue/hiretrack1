@@ -41,6 +41,21 @@ export const config = {
       return Boolean(this.clientId && this.clientSecret);
     },
   },
+  // Resend (https://resend.com) - an HTTP email API, no SMTP server
+  // needed. Takes precedence over SMTP when both are set.
+  //
+  // On a free account with no verified domain, Resend will ONLY deliver
+  // to the address that owns the account. Everything else comes back
+  // 403. That refusal is recorded against the outbox row so HR can see
+  // why a candidate never heard from us, rather than it vanishing.
+  resend: {
+    apiKey: process.env.RESEND_API_KEY || "",
+    from: process.env.RESEND_FROM_EMAIL || "",
+    get enabled() {
+      return Boolean(this.apiKey && this.from);
+    },
+  },
+
   // Real email. Leave SMTP_HOST blank and nothing is sent - every
   // message still lands in the outbox for a person to send by hand,
   // which is how this project worked before mail was wired up.

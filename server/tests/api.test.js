@@ -55,6 +55,19 @@ process.env.DATABASE_SCHEMA = TEST_SCHEMA;
 process.env.JWT_SECRET = "test-secret-not-used-anywhere-else";
 process.env.NODE_ENV = "test";
 
+// Whatever is in .env, the tests get no mail provider and no Storage
+// bucket. Without this, `npm test` would fire real messages at real
+// addresses through a real account, and write throw-away CVs into the
+// production bucket. Both must be off before config.js is imported,
+// because it reads the environment once at module load.
+delete process.env.RESEND_API_KEY;
+delete process.env.RESEND_FROM_EMAIL;
+delete process.env.SMTP_HOST;
+delete process.env.SMTP_USER;
+delete process.env.SMTP_PASS;
+delete process.env.SUPABASE_URL;
+delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
 const TEST_UPLOADS = path.join(os.tmpdir(), "hiretrack-test-uploads-" + Date.now());
 fs.mkdirSync(TEST_UPLOADS, { recursive: true });
 process.env.UPLOAD_DIR = TEST_UPLOADS;
@@ -853,9 +866,9 @@ describe("answering the invitation from the email link", () => {
     assert.equal((await call("GET", "/api/invites/" + token)).status, 403);
   });
 
-  test("with no mail server, sending from the outbox is refused rather than faked", async () => {
-    // The tests run without SMTP configured. Nothing may be marked sent
-    // when no mail server was ever reached.
+  test("with no mail provider, sending from the outbox is refused rather than faked", async () => {
+    // The tests deliberately run with no mail provider (see the top of
+    // this file). Nothing may be marked sent when nothing was reached.
     await signIn("hr@example.com");
     const { data } = await call("GET", "/api/notifications/outbox?pending=1");
     const message = data.messages[0];
@@ -864,7 +877,7 @@ describe("answering the invitation from the email link", () => {
       "/api/notifications/outbox/" + message.id + "/send"
     );
     assert.equal(status, 400);
-    assert.match(body.error, /No mail server is configured/);
+    assert.match(body.error, /No mail provider is configured/);
 
     const after = await one("SELECT sent_at FROM notifications WHERE id = $1", [message.id]);
     assert.equal(after.sent_at, null, "it must not look delivered");
