@@ -153,3 +153,77 @@ export function plainEmail({ subject, body }) {
     ),
   };
 }
+
+/**
+ * "Altrium has invited you to apply."
+ *
+ * The first thing a candidate ever hears from us. They have no account
+ * and did not fill in a form — HR picked them out and put them into the
+ * process — so this has to explain who we are, what it is about, and
+ * what happens next, without asking them to sign up for anything.
+ */
+export function candidateInviteEmail({ candidate, job, addedBy }) {
+  const rows = [
+    ["Position", job.title],
+    ["Department", job.department],
+    ["Location", job.location],
+    ["Type", job.employment_type],
+  ];
+
+  const html = shell(
+    config.companyName + " has invited you to apply",
+    `<p style="margin:0 0 4px 0;">Hello ${esc(candidate.full_name)},</p>
+    <p style="margin:10px 0 0 0;">
+      <strong style="color:${INK};">${esc(config.companyName)}</strong> would like to
+      consider you for the role below. Your details are now with our hiring team.
+    </p>
+    ${detailRows(rows)}
+    ${
+      job.description
+        ? `<p style="margin:0 0 14px 0;color:${BODY};">${esc(
+            String(job.description).slice(0, 400)
+          )}</p>`
+        : ""
+    }
+    <p style="margin:0 0 6px 0;"><strong style="color:${INK};">What happens next</strong></p>
+    <p style="margin:0 0 14px 0;">
+      We are reviewing your application now. If we would like to take it further we will
+      email you again to arrange an interview, with the date, the time and who you will be
+      meeting. There is nothing for you to do in the meantime, and no account to create —
+      we will come to you.
+    </p>
+    <p style="margin:0;color:${BODY};font-size:13px;">
+      If you would rather not be considered, just reply to this email and we will remove
+      your details.
+    </p>
+    <p style="margin:16px 0 0 0;">Kind regards,<br />
+      <strong style="color:${INK};">${esc(addedBy?.name || "The hiring team")}</strong><br />
+      ${esc(config.companyName)}
+    </p>`
+  );
+
+  const text = [
+    "Hello " + candidate.full_name + ",",
+    "",
+    config.companyName + " would like to consider you for the role below.",
+    "",
+    ...rows.filter(([, v]) => v).map(([label, value]) => label + ": " + value),
+    "",
+    "WHAT HAPPENS NEXT",
+    "We are reviewing your application now. If we would like to take it further we",
+    "will email you again to arrange an interview. There is nothing for you to do in",
+    "the meantime, and no account to create - we will come to you.",
+    "",
+    "If you would rather not be considered, just reply and we will remove your details.",
+    "",
+    "Kind regards,",
+    addedBy?.name || "The hiring team",
+    config.companyName,
+  ].join("\n");
+
+  return {
+    subject: config.companyName + " has invited you to apply - " + job.title,
+    text,
+    html,
+  };
+}

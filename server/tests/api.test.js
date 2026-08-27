@@ -307,8 +307,9 @@ describe("HR adds candidates", () => {
     const note = data.messages.find(
       (m) => m.kind === "candidate.added" && m.recipientEmail === "dilshan@example.com"
     );
-    assert.ok(note, "the candidate is told we have their application");
-    assert.match(note.subject, /We have your application/);
+    assert.ok(note, "the candidate is told they are being considered");
+    assert.match(note.subject, /has invited you to apply/);
+    assert.match(note.body, /What happens next/i, "it says what to expect, not just hello");
     assert.equal(note.sentAt, null, "no mail provider in tests, so it waits in the outbox");
   });
 

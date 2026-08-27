@@ -1,7 +1,12 @@
 import { one, run, many } from "../database/index.js";
 import { config } from "./config.js";
 import { sendMail, mailEnabled, inviteUrl } from "./mail.js";
-import { interviewInviteEmail, interviewAnswerEmail, plainEmail } from "./mail-templates.js";
+import {
+  interviewInviteEmail,
+  interviewAnswerEmail,
+  candidateInviteEmail,
+  plainEmail,
+} from "./mail-templates.js";
 
 /**
  * "How are candidates and interviewers told about a scheduled interview?"
@@ -50,7 +55,7 @@ function toUser(kind, user, subject, body, candidateId = null, interviewId = nul
  * pending and HR sends it by hand from the Outbox. Nothing is ever
  * marked sent unless a mail server accepted it.
  */
-async function toOutbox(kind, to, subject, body, candidateId = null, interviewId = null) {
+async function toOutbox(kind, to, subject, body, candidateId = null, interviewId = null, template = null) {
   const row = await one(
     INSERT + " RETURNING id",
     ["EMAIL", kind, null, to.email, to.name, subject, body, candidateId, interviewId]
@@ -60,10 +65,13 @@ async function toOutbox(kind, to, subject, body, candidateId = null, interviewId
     return { id: row.id, sent: false, reason: "no mail provider is configured" };
   }
 
+  // The outbox row always holds the plain text - that is the record, and
+  // it is what HR reads and can copy. `template` only changes what the
+  // recipient actually receives.
   const result = await sendMail({
     to: to.email,
     name: to.name,
-    ...plainEmail({ subject, body }),
+    ...(template || plainEmail({ subject, body })),
   });
 
   if (result.sent) {
@@ -504,27 +512,15 @@ export async function notifyOutcome({ candidate, job, outcome, decidedBy }) {
  * strange.
  */
 export async function notifyCandidateAdded({ candidate, job, addedBy }) {
+  const template = candidateInviteEmail({ candidate, job, addedBy });
+
   return toOutbox(
     "candidate.added",
     { email: candidate.email, name: candidate.full_name },
-    "We have your application - " + job.title,
-    "Dear " +
-      candidate.full_name +
-      ",\n\n" +
-      "Thank you for your interest in the " +
-      job.title +
-      " position at " +
-      config.companyName +
-      ".\n\n" +
-      "Your application is now with our hiring team and we are reviewing it. If we " +
-      "would like to take it further, we will email you to arrange an interview.\n\n" +
-      "You do not need to do anything for now, and there is no account to create — " +
-      "we will come to you.\n\n" +
-      "Kind regards,\n" +
-      (addedBy?.name || "The hiring team") +
-      "\n" +
-      config.companyName,
+    template.subject,
+    template.text,
     candidate.id,
-    null
+    null,
+    template
   );
 }
