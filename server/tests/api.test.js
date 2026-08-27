@@ -328,6 +328,41 @@ describe("HR adds candidates", () => {
     assert.match(added.data.email.reason, /no mail provider/);
   });
 
+  test("HR can send a link and a time with the invitation", async () => {
+    const added = await call("POST", "/api/candidates", {
+      jobId,
+      fullName: "Linked Invite",
+      email: "linked@example.com",
+      inviteLink: "meet.google.com/abc-defg",
+      inviteAt: "2027-05-04T10:30",
+    });
+    assert.equal(added.status, 201);
+    // A bare host is what people actually paste, so it is completed
+    // rather than rejected.
+    assert.equal(added.data.candidate.inviteLink, "https://meet.google.com/abc-defg");
+    assert.ok(added.data.candidate.inviteAt);
+
+    const { data } = await call("GET", "/api/notifications/outbox");
+    const note = data.messages.find((m) => m.recipientEmail === "linked@example.com");
+    assert.match(note.body, /meet\.google\.com\/abc-defg/, "the link travels with the message");
+  });
+
+  test("a link that is not http(s) is refused", async () => {
+    // This link becomes a button in an email. A javascript: or data: URL
+    // there is a script waiting for somebody to click it, and some mail
+    // clients will follow one.
+    for (const bad of ["javascript:alert(1)", "data:text/html,<script>alert(1)</script>"]) {
+      const { status, data } = await call("POST", "/api/candidates", {
+        jobId,
+        fullName: "Bad Link",
+        email: "badlink@example.com",
+        inviteLink: bad,
+      });
+      assert.equal(status, 400, bad + " must be refused");
+      assert.match(data.error, /http/);
+    }
+  });
+
   test("notify:false adds them silently", async () => {
     // A name copied off a CV pile has not necessarily applied, and
     // emailing them would be strange.

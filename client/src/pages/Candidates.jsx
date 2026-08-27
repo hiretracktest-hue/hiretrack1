@@ -158,6 +158,8 @@ export default function Candidates() {
         email: form.email,
         phone: form.phone,
         source: form.source,
+        inviteLink: form.inviteLink,
+        inviteAt: form.inviteAt,
         notify: form.notify,
       });
       // Straight to their page. Adding somebody is never the whole
@@ -297,6 +299,32 @@ export default function Candidates() {
                     placeholder="LinkedIn, referral, email application…"
                     value={form.source}
                     onChange={updateForm("source")}
+                  />
+                </Field>
+                <Field
+                  label="Link to send them (optional)"
+                  htmlFor="add-link"
+                  hint="A meeting link, a form, anything they should open. It becomes a button in their email."
+                >
+                  <input
+                    id="add-link"
+                    className="input"
+                    placeholder="meet.google.com/abc-defg"
+                    value={form.inviteLink}
+                    onChange={updateForm("inviteLink")}
+                  />
+                </Field>
+                <Field
+                  label="Time to tell them (optional)"
+                  htmlFor="add-when"
+                  hint="Included in the email, and they are asked to reply if it does not suit."
+                >
+                  <input
+                    id="add-when"
+                    className="input"
+                    type="datetime-local"
+                    value={form.inviteAt}
+                    onChange={updateForm("inviteAt")}
                   />
                 </Field>
               </div>

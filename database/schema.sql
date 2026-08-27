@@ -136,6 +136,13 @@ CREATE TABLE candidates (
   cv_banded_by   BIGINT            REFERENCES users (id) ON DELETE SET NULL,
   cv_banded_at   TIMESTAMPTZ,
   cv_filename    TEXT,
+  -- Optional extras HR can put in the invitation: somewhere for the
+  -- candidate to go, and a time to be there. Kept on the candidate
+  -- rather than as an interview, because at this point no interviewer
+  -- has been booked - it is "come and talk to us", not a fixed slot.
+  invite_link    TEXT              NOT NULL DEFAULT '',
+  invite_at      TIMESTAMPTZ,
+
   cv_stored_name TEXT,
   -- 'supabase' (a key in the private CV bucket) or 'local' (a file in
   -- server/uploads). Recorded per candidate so rows stored before the

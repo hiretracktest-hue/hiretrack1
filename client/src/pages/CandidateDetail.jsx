@@ -455,6 +455,24 @@ export default function CandidateDetail() {
                     <div className="detail-label">Current stage</div>
                     <div className="detail-value">{candidate.currentStage}</div>
                   </div>
+                  {/* What went out in their invitation, so HR can see
+                      what the candidate was actually told. */}
+                  {candidate.inviteAt && (
+                    <div>
+                      <div className="detail-label">Time we gave them</div>
+                      <div className="detail-value">{formatDateTime(candidate.inviteAt)}</div>
+                    </div>
+                  )}
+                  {candidate.inviteLink && (
+                    <div>
+                      <div className="detail-label">Link we sent them</div>
+                      <div className="detail-value">
+                        <a href={candidate.inviteLink} target="_blank" rel="noreferrer noopener">
+                          {candidate.inviteLink}
+                        </a>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-3">

@@ -163,12 +163,26 @@ export function plainEmail({ subject, body }) {
  * what happens next, without asking them to sign up for anything.
  */
 export function candidateInviteEmail({ candidate, job, addedBy }) {
+  const when = candidate.invite_at
+    ? new Date(candidate.invite_at).toLocaleString("en-GB", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "";
+
   const rows = [
     ["Position", job.title],
     ["Department", job.department],
     ["Location", job.location],
     ["Type", job.employment_type],
+    ["When", when],
   ];
+
+  const link = candidate.invite_link || "";
 
   const html = shell(
     config.companyName + " has invited you to apply",
@@ -185,12 +199,24 @@ export function candidateInviteEmail({ candidate, job, addedBy }) {
           )}</p>`
         : ""
     }
+    ${
+      link
+        ? `<p style="margin:0 0 10px 0;"><strong style="color:${INK};">${
+            when ? "Join us at the time above" : "Somewhere to start"
+          }</strong></p>${button(link, when ? "Join" : "Open the link")}
+           <p style="margin:6px 0 16px 0;font-size:12px;color:#aab0bc;word-break:break-all;">
+             If the button does not work, paste this into your browser:<br />${esc(link)}
+           </p>`
+        : ""
+    }
     <p style="margin:0 0 6px 0;"><strong style="color:${INK};">What happens next</strong></p>
     <p style="margin:0 0 14px 0;">
-      We are reviewing your application now. If we would like to take it further we will
-      email you again to arrange an interview, with the date, the time and who you will be
-      meeting. There is nothing for you to do in the meantime, and no account to create —
-      we will come to you.
+      ${
+        when
+          ? "Please keep the time above free. If it does not suit you, reply to this email and we will find another."
+          : "We are reviewing your application now. If we would like to take it further we will email you again to arrange an interview, with the date, the time and who you will be meeting."
+      }
+      There is nothing else for you to do, and no account to create — we will come to you.
     </p>
     <p style="margin:0;color:${BODY};font-size:13px;">
       If you would rather not be considered, just reply to this email and we will remove
@@ -209,10 +235,14 @@ export function candidateInviteEmail({ candidate, job, addedBy }) {
     "",
     ...rows.filter(([, v]) => v).map(([label, value]) => label + ": " + value),
     "",
+    ...(link ? ["Link: " + link, ""] : []),
     "WHAT HAPPENS NEXT",
-    "We are reviewing your application now. If we would like to take it further we",
-    "will email you again to arrange an interview. There is nothing for you to do in",
-    "the meantime, and no account to create - we will come to you.",
+    when
+      ? "Please keep the time above free. If it does not suit you, reply to this email"
+      : "We are reviewing your application now. If we would like to take it further we",
+    when
+      ? "and we will find another. There is no account to create - we will come to you."
+      : "will email you again to arrange an interview. There is no account to create.",
     "",
     "If you would rather not be considered, just reply and we will remove your details.",
     "",

@@ -51,6 +51,8 @@ function toJson(row) {
     notes: row.notes,
     currentStage: row.current_stage,
     outcome: row.outcome,
+    inviteLink: row.invite_link || "",
+    inviteAt: row.invite_at,
     cvBand: row.cv_band,
     cvBandNote: row.cv_band_note,
     bandedByName: row.banded_by_name ?? null,
@@ -235,6 +237,18 @@ router.post(
     const source = v.str(req.body.source, { field: "Source", max: 80 });
     const notes = v.str(req.body.notes, { field: "Notes", max: 2000 });
 
+    // Optional, and both end up in the invitation email.
+    const inviteLink = v.url(req.body.inviteLink, { field: "Link" });
+    const inviteAtRaw = v.str(req.body.inviteAt, { field: "Date and time", max: 40 });
+    let inviteAt = null;
+    if (inviteAtRaw) {
+      const parsed = new Date(inviteAtRaw);
+      if (Number.isNaN(parsed.getTime())) {
+        throw httpError(400, "That date and time could not be read.");
+      }
+      inviteAt = parsed.toISOString();
+    }
+
     const duplicate = await one(
       "SELECT id FROM candidates WHERE job_id = $1 AND email = $2",
       [jobId, emailValue]
@@ -244,9 +258,21 @@ router.post(
     }
 
     const created = await one(
-      "INSERT INTO candidates (job_id, full_name, email, phone, source, notes, current_stage, added_by) " +
-        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
-      [jobId, fullName, emailValue, phone, source, notes, stages[0], req.user.id]
+      "INSERT INTO candidates (job_id, full_name, email, phone, source, notes, current_stage, " +
+        "invite_link, invite_at, added_by) " +
+        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
+      [
+        jobId,
+        fullName,
+        emailValue,
+        phone,
+        source,
+        notes,
+        stages[0],
+        inviteLink,
+        inviteAt,
+        req.user.id,
+      ]
     );
 
     const candidate = await loadOr404(created.id);

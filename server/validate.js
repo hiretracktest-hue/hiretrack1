@@ -59,3 +59,48 @@ export function stageList(value, { fallback } = {}) {
   if (cleaned.length > 12) throw httpError(400, "A vacancy can have at most 12 stages.");
   return cleaned;
 }
+
+/**
+ * A link we are going to put in an email, as something the recipient
+ * clicks.
+ *
+ * Only http and https. A "javascript:" or "data:" URL in a mail template
+ * is a script waiting for somebody to run it, and some mail clients will
+ * happily follow one. Anything else is refused rather than quietly
+ * stripped, so HR finds out at the point they typed it.
+ */
+export function url(value, { field = "Link", required = false } = {}) {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    if (required) {
+      const err = new Error(field + " is required.");
+      err.status = 400;
+      err.expose = true;
+      throw err;
+    }
+    return "";
+  }
+
+  // A bare "meet.google.com/abc" is what people actually paste.
+  const candidate = /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : "https://" + raw;
+
+  let parsed;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    parsed = null;
+  }
+  if (!parsed || (parsed.protocol !== "http:" && parsed.protocol !== "https:")) {
+    const err = new Error(field + " must be a web address starting with http:// or https://");
+    err.status = 400;
+    err.expose = true;
+    throw err;
+  }
+  if (parsed.href.length > 500) {
+    const err = new Error(field + " is too long.");
+    err.status = 400;
+    err.expose = true;
+    throw err;
+  }
+  return parsed.href;
+}
