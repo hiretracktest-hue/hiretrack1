@@ -56,7 +56,9 @@ async function toOutbox(kind, to, subject, body, candidateId = null, interviewId
     ["EMAIL", kind, null, to.email, to.name, subject, body, candidateId, interviewId]
   );
 
-  if (!mailEnabled() || !to.email) return row;
+  if (!mailEnabled() || !to.email) {
+    return { id: row.id, sent: false, reason: "no mail provider is configured" };
+  }
 
   const result = await sendMail({
     to: to.email,
@@ -72,7 +74,9 @@ async function toOutbox(kind, to, subject, body, candidateId = null, interviewId
     // to send, and HR cannot fix what they cannot see.
     await run("UPDATE notifications SET send_error = $1 WHERE id = $2", [result.reason, row.id]);
   }
-  return row;
+  // The caller needs the outcome, not the row: telling HR "we emailed
+  // them" when the provider refused it is worse than saying nothing.
+  return { id: row.id, sent: result.sent, reason: result.reason };
 }
 
 /**
@@ -500,7 +504,7 @@ export async function notifyOutcome({ candidate, job, outcome, decidedBy }) {
  * strange.
  */
 export async function notifyCandidateAdded({ candidate, job, addedBy }) {
-  await toOutbox(
+  return toOutbox(
     "candidate.added",
     { email: candidate.email, name: candidate.full_name },
     "We have your application - " + job.title,

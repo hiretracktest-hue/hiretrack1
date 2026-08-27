@@ -100,7 +100,8 @@ export default function JobDetail() {
       navigate("/candidates/" + result.candidate.id, {
         state: {
           justAdded: true,
-          emailed: form.notify ? result.candidate.email : null,
+          email: result.email,
+          address: result.candidate.email,
         },
       });
     } catch (err) {

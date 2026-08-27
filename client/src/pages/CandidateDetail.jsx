@@ -45,11 +45,25 @@ export default function CandidateDetail() {
   useEffect(() => {
     const state = location.state;
     if (!state?.justAdded) return;
-    setMessage(
-      "Added." +
-        (state.emailed ? " We have emailed " + state.emailed + " to confirm." : "") +
-        " Upload their CV below, and book an interview when you are ready."
-    );
+    const next = " Upload their CV below, and book an interview when you are ready.";
+    const mail = state.email;
+
+    if (!mail?.attempted) {
+      setMessage("Added." + next);
+    } else if (mail.sent) {
+      setMessage("Added, and " + state.address + " has been emailed." + next);
+    } else {
+      // Never claim a delivery that did not happen. Say who was not
+      // reached, why, and where the message is waiting.
+      setError(
+        "Added, but the email to " +
+          state.address +
+          " could not be sent: " +
+          (mail.reason || "the mail provider refused it") +
+          " It is waiting in the Outbox, where you can fix the cause and press Send now."
+      );
+      setMessage("Added." + next);
+    }
     // Clear it so a refresh does not show the message again.
     window.history.replaceState({}, "");
   }, [location.state]);
@@ -781,13 +795,12 @@ export default function CandidateDetail() {
                 <Field
                   label={candidate.cv ? "Replace the CV" : "Upload their CV"}
                   htmlFor="cv"
-                  hint="PDF, DOC or DOCX · maximum 5 MB."
+                  hint="Any file type · maximum 15 MB."
                 >
                   <input
                     id="cv"
                     className="input"
                     type="file"
-                    accept=".pdf,.doc,.docx"
                     onChange={(event) => setCvFile(event.target.files?.[0] || null)}
                   />
                 </Field>

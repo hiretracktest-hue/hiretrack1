@@ -312,6 +312,21 @@ describe("HR adds candidates", () => {
     assert.equal(note.sentAt, null, "no mail provider in tests, so it waits in the outbox");
   });
 
+  test("the reply says whether the email really went, not whether it was asked for", async () => {
+    // Telling HR "we emailed them" when the provider refused it is worse
+    // than saying nothing: they believe the candidate has been contacted
+    // and stop chasing it.
+    const added = await call("POST", "/api/candidates", {
+      jobId,
+      fullName: "Honest Reporting",
+      email: "honest@example.com",
+    });
+    assert.equal(added.status, 201);
+    assert.equal(added.data.email.attempted, true);
+    assert.equal(added.data.email.sent, false, "no provider in tests, so nothing was sent");
+    assert.match(added.data.email.reason, /no mail provider/);
+  });
+
   test("notify:false adds them silently", async () => {
     // A name copied off a CV pile has not necessarily applied, and
     // emailing them would be strange.

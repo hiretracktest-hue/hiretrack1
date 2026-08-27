@@ -255,11 +255,14 @@ router.post(
     // somebody who applied should hear back, and the case for silence is
     // the unusual one - a name copied off a CV pile who has not actually
     // applied yet. Pass notify: false for that.
+    let email = { attempted: false, sent: false, reason: null };
     if (req.body.notify !== false) {
-      await notifyCandidateAdded({ candidate, job, addedBy: req.user });
+      const outcome = await notifyCandidateAdded({ candidate, job, addedBy: req.user });
+      email = { attempted: true, sent: outcome.sent, reason: outcome.reason || null };
     }
 
-    res.status(201).json({ candidate: toJson(candidate) });
+    // The front end says what actually happened, not what was asked for.
+    res.status(201).json({ candidate: toJson(candidate), email });
   })
 );
 
