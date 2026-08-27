@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
 import {
@@ -26,6 +26,7 @@ const OUTCOMES = ["ACTIVE", "ON_HOLD", "HIRED", "REJECTED"];
  */
 export default function Candidates() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const canBand = Boolean(user?.permissions?.["candidate:band"]);
   const isInterviewer = !canBand;
@@ -159,14 +160,16 @@ export default function Candidates() {
         source: form.source,
         notify: form.notify,
       });
-      setAdded(
-        result.candidate.fullName +
-          " was added." +
-          (form.notify ? " An email has gone to " + result.candidate.email + "." : "")
-      );
-      setForm({ jobId: form.jobId, fullName: "", email: "", phone: "", source: "", notify: true });
-      setShowAdd(false);
-      await load();
+      // Straight to their page. Adding somebody is never the whole
+      // job - their CV still has to go on, and an interview booked -
+      // and both of those live there. Sending HR back to a list they
+      // would immediately have to search just adds a step.
+      navigate("/candidates/" + result.candidate.id, {
+        state: {
+          justAdded: true,
+          emailed: form.notify ? result.candidate.email : null,
+        },
+      });
     } catch (err) {
       setError(err.message);
     } finally {

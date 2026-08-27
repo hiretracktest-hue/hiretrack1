@@ -37,6 +37,9 @@ export default function JobDetail() {
     phone: "",
     source: "",
     notes: "",
+    // Same rule as the Candidates page: on by default, because somebody
+    // who applied should hear back.
+    notify: true,
   });
 
   const load = useCallback(async () => {
@@ -94,7 +97,12 @@ export default function JobDetail() {
     try {
       const result = await api.addCandidate({ jobId: Number(id), ...form });
       // Straight to their record so the CV can be uploaded next.
-      navigate("/candidates/" + result.candidate.id);
+      navigate("/candidates/" + result.candidate.id, {
+        state: {
+          justAdded: true,
+          emailed: form.notify ? result.candidate.email : null,
+        },
+      });
     } catch (err) {
       setError(err.message);
       setBusy(false);
@@ -224,7 +232,24 @@ export default function JobDetail() {
               />
             </Field>
 
-            <button className="btn btn-primary" disabled={busy}>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={form.notify}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, notify: event.target.checked }))
+                }
+              />
+              <span>
+                Email them to confirm we have their application
+                <span className="muted small">
+                  {" "}
+                  — turn this off for a name taken off a CV pile who has not applied yet.
+                </span>
+              </span>
+            </label>
+
+            <button className="btn btn-primary mt-2" disabled={busy}>
               {busy ? "Adding…" : "Add candidate"}
             </button>
           </form>

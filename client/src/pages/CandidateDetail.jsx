@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
 import {
@@ -38,6 +38,21 @@ export default function CandidateDetail() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+
+  // Arriving straight from "Add candidate". Say what just happened, and
+  // what is left to do - the CV and the interview are both on this page.
+  const location = useLocation();
+  useEffect(() => {
+    const state = location.state;
+    if (!state?.justAdded) return;
+    setMessage(
+      "Added." +
+        (state.emailed ? " We have emailed " + state.emailed + " to confirm." : "") +
+        " Upload their CV below, and book an interview when you are ready."
+    );
+    // Clear it so a refresh does not show the message again.
+    window.history.replaceState({}, "");
+  }, [location.state]);
 
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
