@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
 import {
@@ -24,6 +24,19 @@ const RECOMMENDATIONS = ["ADVANCE", "HOLD", "REJECT"];
 
 /** One candidate: their CV, where they are in the process, the feedback
  *  from each interviewer, and the interviews booked for them. */
+/**
+ * An API timestamp in the shape a datetime-local input needs
+ * ("YYYY-MM-DDTHH:MM", local time). Anything missing, unreadable or
+ * already past comes back as "" so nothing invalid is pre-filled.
+ */
+function forDateInput(value) {
+  if (!value) return "";
+  const when = new Date(value);
+  if (Number.isNaN(when.getTime()) || when.getTime() < Date.now()) return "";
+  const local = new Date(when.getTime() - when.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
 export default function CandidateDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -38,35 +51,6 @@ export default function CandidateDetail() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-
-  // Arriving straight from "Add candidate". Say what just happened, and
-  // what is left to do - the CV and the interview are both on this page.
-  const location = useLocation();
-  useEffect(() => {
-    const state = location.state;
-    if (!state?.justAdded) return;
-    const next = " Upload their CV below, and book an interview when you are ready.";
-    const mail = state.email;
-
-    if (!mail?.attempted) {
-      setMessage("Added." + next);
-    } else if (mail.sent) {
-      setMessage("Added, and " + state.address + " has been emailed." + next);
-    } else {
-      // Never claim a delivery that did not happen. Say who was not
-      // reached, why, and where the message is waiting.
-      setError(
-        "Added, but the email to " +
-          state.address +
-          " could not be sent: " +
-          (mail.reason || "the mail provider refused it") +
-          " It is waiting in the Outbox, where you can fix the cause and press Send now."
-      );
-      setMessage("Added." + next);
-    }
-    // Clear it so a refresh does not show the message again.
-    window.history.replaceState({}, "");
-  }, [location.state]);
 
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
@@ -115,6 +99,12 @@ export default function CandidateDetail() {
         // right answer nearly every time, and still changeable.
         interviewerId:
           current.interviewerId || (result.candidate.assignedInterviewerId ?? "") || "",
+        // HR already gave a time when they added this person, so do not
+        // ask for it twice - fill it in and let them change it if the
+        // plan has moved on. A time that has since passed is dropped,
+        // because pre-filling a date the form will only refuse is worse
+        // than leaving it empty.
+        scheduledAt: current.scheduledAt || forDateInput(result.candidate.inviteAt),
       }));
       setFeedbackForm((current) => ({
         ...current,

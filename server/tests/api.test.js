@@ -1472,3 +1472,92 @@ describe("an invitation time in the past is refused", () => {
     assert.equal(status, 201);
   });
 });
+
+// ---------------------------------------------------------------------
+// Adding a candidate is one step now: the record, the CV and the email
+// all happen from a single form. These pin the parts of that the front
+// end depends on.
+// ---------------------------------------------------------------------
+describe("adding a candidate is one step", () => {
+  let jobId;
+
+  before(async () => {
+    await signIn("hr@example.com");
+    const { data } = await call("POST", "/api/jobs", {
+      title: "One step vacancy",
+      stages: ["Applied", "Interview"],
+    });
+    jobId = data.job.id;
+  });
+
+  test("the email goes out without being asked for", async () => {
+    // The form no longer has a tick box, so it sends no notify flag at
+    // all. Silence has to be the thing you opt into, not the default.
+    const { status, data } = await call("POST", "/api/candidates", {
+      jobId,
+      fullName: "Auto Mailed",
+      email: "auto.mailed@example.com",
+    });
+    assert.equal(status, 201);
+    assert.equal(data.email.attempted, true, "nobody had to tick anything");
+  });
+
+  test("notify: false is still honoured for a name off a CV pile", async () => {
+    const { data } = await call("POST", "/api/candidates", {
+      jobId,
+      fullName: "Not Mailed",
+      email: "not.mailed@example.com",
+      notify: false,
+    });
+    assert.equal(data.email.attempted, false);
+  });
+
+  test("the time given while adding comes back, so it can be reused", async () => {
+    const soon = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
+    const { data } = await call("POST", "/api/candidates", {
+      jobId,
+      fullName: "Timed Entry",
+      email: "timed.entry@example.com",
+      inviteAt: soon,
+      inviteLink: "https://meet.google.com/abc-defg",
+    });
+    // The booking form fills its date box from this, so HR is not asked
+    // for the same time twice.
+    assert.equal(new Date(data.candidate.inviteAt).toISOString(), soon);
+    assert.equal(data.candidate.inviteLink, "https://meet.google.com/abc-defg");
+  });
+
+  test("the CV goes on straight after, and the record then has it", async () => {
+    const created = await call("POST", "/api/candidates", {
+      jobId,
+      fullName: "With CV",
+      email: "with.cv@example.com",
+    });
+    assert.equal(created.data.candidate.cv, null, "nothing attached yet");
+
+    const form = new FormData();
+    form.append("cv", new Blob(["%PDF-1.4 cv"], { type: "application/pdf" }), "with-cv.pdf");
+    const upload = await call(
+      "POST",
+      "/api/candidates/" + created.data.candidate.id + "/cv",
+      form,
+      true
+    );
+
+    assert.equal(upload.status, 200);
+    assert.equal(upload.data.candidate.cv.filename, "with-cv.pdf");
+
+    const { data } = await call("GET", "/api/candidates/" + created.data.candidate.id);
+    assert.equal(data.candidate.cv.filename, "with-cv.pdf");
+  });
+
+  test("only HR can put a CV on, so the one-step form is HR's alone", async () => {
+    const row = await one("SELECT id FROM candidates WHERE email = $1", ["with.cv@example.com"]);
+    await signIn("interviewer@example.com");
+    const form = new FormData();
+    form.append("cv", new Blob(["%PDF-1.4 cv"], { type: "application/pdf" }), "sneaky.pdf");
+    const { status } = await call("POST", "/api/candidates/" + row.id + "/cv", form, true);
+    assert.equal(status, 403);
+    await signIn("hr@example.com");
+  });
+});

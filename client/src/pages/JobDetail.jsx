@@ -13,8 +13,20 @@ import {
   Pipeline,
   StatusBadge,
   describeEmailProblem,
+  formatBytes,
   formatDate,
 } from "../components/ui.jsx";
+
+// Matches UPLOAD_MAX_MB on the server.
+const MAX_CV_BYTES = 15 * 1024 * 1024;
+
+const BLANK_FORM = {
+  fullName: "",
+  email: "",
+  phone: "",
+  source: "",
+  notes: "",
+};
 
 /** One vacancy: its description, its interview process, and everyone
  *  HR has added to it. */
@@ -34,16 +46,11 @@ export default function JobDetail() {
   const [message, setMessage] = useState("");
   const [showAdd, setShowAdd] = useState(false);
 
-  const [form, setForm] = useState({
-    fullName: "",
-    email: "",
-    phone: "",
-    source: "",
-    notes: "",
-    // Same rule as the Candidates page: on by default, because somebody
-    // who applied should hear back.
-    notify: true,
-  });
+  const [form, setForm] = useState(BLANK_FORM);
+  // Picked in the same form as everything else - see Candidates.jsx for
+  // why the File is held apart from the rest.
+  const [cvFile, setCvFile] = useState(null);
+  const [cvKey, setCvKey] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,23 +110,56 @@ export default function JobDetail() {
     const emailProblem = describeEmailProblem(form.email);
     if (emailProblem) problems.email = emailProblem;
 
+    // Asked for here, not on a second screen.
+    if (!cvFile) {
+      problems.cv = "Choose their CV - it is what the shortlist is worked out from.";
+    } else if (cvFile.size > MAX_CV_BYTES) {
+      problems.cv = "That file is " + formatBytes(cvFile.size) + ". The limit is 15 MB.";
+    }
+
     setFormErrors(problems);
     if (Object.keys(problems).length > 0) return;
 
     setBusy(true);
     setError("");
     try {
+      // No notify flag: the confirmation always goes out.
       const result = await api.addCandidate({ jobId: Number(id), ...form });
-      // Straight to their record so the CV can be uploaded next.
-      navigate("/candidates/" + result.candidate.id, {
-        state: {
-          justAdded: true,
-          email: result.email,
-          address: result.candidate.email,
-        },
-      });
+
+      // Needs the id, so it follows the record. A failure here does not
+      // undo the record - it is reported instead.
+      let cvProblem = "";
+      try {
+        await api.uploadCv(result.candidate.id, cvFile);
+      } catch (err) {
+        cvProblem = err.message;
+      }
+
+      const posted = result.email?.sent
+        ? "their confirmation has been emailed to " + result.candidate.email + "."
+        : "their confirmation is waiting in the outbox.";
+
+      setMessage(
+        cvProblem
+          ? result.candidate.fullName +
+              " was added and " +
+              posted +
+              " The CV did not upload (" +
+              cvProblem +
+              ") - open their page to try that part again."
+          : result.candidate.fullName + " was added with their CV, and " + posted
+      );
+
+      // Stay on the vacancy. The candidate table below picks them up.
+      setForm(BLANK_FORM);
+      setCvFile(null);
+      setCvKey((n) => n + 1);
+      setFormErrors({});
+      setShowAdd(false);
+      await load();
     } catch (err) {
       setError(err.message);
+    } finally {
       setBusy(false);
     }
   }
@@ -198,7 +238,8 @@ export default function JobDetail() {
           <div className="card-title">
             <h2>Add a candidate</h2>
             <span className="muted small">
-              They start at “{job.stages?.[0]}”. You can upload their CV on the next screen.
+              Everything in one go - their CV included. They start at “{job.stages?.[0]}” and are
+              emailed as soon as you save.
             </span>
           </div>
 
@@ -208,7 +249,7 @@ export default function JobDetail() {
               available" rather than "Value must be ... or later". */}
           <form onSubmit={addCandidate} noValidate>
             <div className="grid grid-2">
-              <Field label="Full name" htmlFor="fullName">
+              <Field label="Full name" htmlFor="fullName" error={formErrors.fullName}>
                 <input
                   id="fullName"
                   className={"input" + (formErrors.fullName ? " input-error" : "")}
@@ -248,6 +289,29 @@ export default function JobDetail() {
                   onChange={update("source")}
                 />
               </Field>
+              <Field
+                label="Their CV"
+                htmlFor="cv"
+                hint="Any file type - maximum 15 MB."
+                error={formErrors.cv}
+              >
+                <input
+                  id="cv"
+                  key={cvKey}
+                  className={"input" + (formErrors.cv ? " input-error" : "")}
+                  type="file"
+                  onChange={(event) => {
+                    setCvFile(event.target.files?.[0] || null);
+                    setFormErrors((current) => {
+                      if (!current.cv) return current;
+                      const next = { ...current };
+                      delete next.cv;
+                      return next;
+                    });
+                  }}
+                  aria-invalid={Boolean(formErrors.cv)}
+                />
+              </Field>
             </div>
 
             <Field label="Notes" htmlFor="notes" hint="Internal only - the candidate never sees this.">
@@ -260,25 +324,8 @@ export default function JobDetail() {
               />
             </Field>
 
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={form.notify}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, notify: event.target.checked }))
-                }
-              />
-              <span>
-                Email them to confirm we have their application
-                <span className="muted small">
-                  {" "}
-                  — turn this off for a name taken off a CV pile who has not applied yet.
-                </span>
-              </span>
-            </label>
-
             <button className="btn btn-primary mt-2" disabled={busy}>
-              {busy ? "Adding…" : "Add candidate"}
+              {busy ? "Saving…" : "Save candidate"}
             </button>
           </form>
         </div>

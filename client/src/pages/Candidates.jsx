@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
 import {
@@ -16,11 +16,29 @@ import {
   Stars,
   describeEmailProblem,
   describeFutureDateProblem,
+  formatBytes,
   formatDate,
   nowForDateInput,
 } from "../components/ui.jsx";
 
 const OUTCOMES = ["ACTIVE", "ON_HOLD", "HIRED", "REJECTED"];
+
+// Matches UPLOAD_MAX_MB on the server. Checked here as well so a
+// 40 MB scan is refused before it is uploaded, not after.
+const MAX_CV_BYTES = 15 * 1024 * 1024;
+
+// Everything the add form holds. inviteLink and inviteAt belong here
+// too - left out, React treats those two inputs as uncontrolled and
+// warns the first time anything is typed into them.
+const BLANK_FORM = {
+  jobId: "",
+  fullName: "",
+  email: "",
+  phone: "",
+  source: "",
+  inviteLink: "",
+  inviteAt: "",
+};
 
 /**
  * Every candidate across every vacancy. The band filter is what makes
@@ -29,7 +47,6 @@ const OUTCOMES = ["ACTIVE", "ON_HOLD", "HIRED", "REJECTED"];
  */
 export default function Candidates() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const { user } = useAuth();
   const canBand = Boolean(user?.permissions?.["candidate:band"]);
   const isInterviewer = !canBand;
@@ -38,17 +55,13 @@ export default function Candidates() {
   const [showAdd, setShowAdd] = useState(false);
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState("");
-  const [form, setForm] = useState({
-    jobId: "",
-    fullName: "",
-    email: "",
-    phone: "",
-    source: "",
-    // Somebody who applied should hear back, so telling them is the
-    // default. HR turns it off for a name copied off a CV pile who has
-    // not actually applied yet.
-    notify: true,
-  });
+  const [form, setForm] = useState(BLANK_FORM);
+  // The CV is picked in the same form. A File cannot live in the object
+  // above - it is not a value an input can be set back from - so it is
+  // held on its own, and the file input is left uncontrolled and reset
+  // through a key change once the candidate is saved.
+  const [cvFile, setCvFile] = useState(null);
+  const [cvKey, setCvKey] = useState(0);
 
   const [candidates, setCandidates] = useState([]);
   const [bandCounts, setBandCounts] = useState(null);
@@ -180,6 +193,14 @@ export default function Candidates() {
     });
     if (whenProblem) problems.inviteAt = whenProblem;
 
+    // The CV is asked for here rather than on a second screen, because
+    // it is the thing the shortlist is actually worked out from.
+    if (!cvFile) {
+      problems.cv = "Choose their CV - it is what the shortlist is worked out from.";
+    } else if (cvFile.size > MAX_CV_BYTES) {
+      problems.cv = "That file is " + formatBytes(cvFile.size) + ". The limit is 15 MB.";
+    }
+
     setFormErrors(problems);
     if (Object.keys(problems).length > 0) return;
 
@@ -187,6 +208,8 @@ export default function Candidates() {
     setError("");
     setAdded("");
     try {
+      // notify is not passed, so the server sends. There is no tick box
+      // any more - somebody who applied always hears back.
       const result = await api.addCandidate({
         jobId: Number(form.jobId),
         fullName: form.fullName,
@@ -195,19 +218,47 @@ export default function Candidates() {
         source: form.source,
         inviteLink: form.inviteLink,
         inviteAt: form.inviteAt,
-        notify: form.notify,
       });
-      // Straight to their page. Adding somebody is never the whole
-      // job - their CV still has to go on, and an interview booked -
-      // and both of those live there. Sending HR back to a list they
-      // would immediately have to search just adds a step.
-      navigate("/candidates/" + result.candidate.id, {
-        state: {
-          justAdded: true,
-          email: result.email,
-          address: result.candidate.email,
-        },
-      });
+
+      // The CV needs the id, so it can only go up once the record
+      // exists. If this half fails the person IS still added - say so
+      // plainly, because re-submitting the form to "try again" would
+      // only be refused as a duplicate.
+      let cvProblem = "";
+      try {
+        await api.uploadCv(result.candidate.id, cvFile);
+      } catch (err) {
+        cvProblem = err.message;
+      }
+
+      const name = result.candidate.fullName;
+      const posted = result.email?.sent
+        ? "their confirmation has been emailed to " + result.candidate.email + "."
+        : "their confirmation is waiting in the outbox.";
+
+      setAdded(
+        cvProblem
+          ? name +
+              " was added and " +
+              posted +
+              " The CV did not upload (" +
+              cvProblem +
+              ") - open their page to try that part again."
+          : name + " was added with their CV, and " + posted
+      );
+
+      // Stay on this page. The list underneath refreshes with them in
+      // it, so the next one can be typed straight away.
+      setForm(BLANK_FORM);
+      setCvFile(null);
+      setCvKey((n) => n + 1);
+      setFormErrors({});
+      setShowAdd(false);
+
+      const refreshed = await fetchCandidates();
+      setCandidates(refreshed.candidates);
+      setBandCounts(refreshed.bandCounts || null);
+      setSelected([]);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -265,7 +316,7 @@ export default function Candidates() {
           <div className="card-title">
             <h2>Add a candidate</h2>
             <span className="muted small">
-              They start at the first stage of the vacancy. Upload their CV on their own page.
+              Everything in one go - their CV included. They are emailed as soon as you save.
             </span>
           </div>
 
@@ -357,7 +408,7 @@ export default function Candidates() {
                 <Field
                   label="Time to tell them (optional)"
                   htmlFor="add-when"
-                  hint="Included in the email, and they are asked to reply if it does not suit."
+                  hint="Set it once here. It goes in their email, and it is filled in for you when an interview is booked."
                   error={formErrors.inviteAt}
                 >
                   <input
@@ -370,22 +421,34 @@ export default function Candidates() {
                     aria-invalid={Boolean(formErrors.inviteAt)}
                   />
                 </Field>
+                <Field
+                  label="Their CV"
+                  htmlFor="add-cv"
+                  hint="Any file type - maximum 15 MB."
+                  error={formErrors.cv}
+                >
+                  <input
+                    id="add-cv"
+                    key={cvKey}
+                    className={"input" + (formErrors.cv ? " input-error" : "")}
+                    type="file"
+                    onChange={(event) => {
+                      setCvFile(event.target.files?.[0] || null);
+                      setFormErrors((current) => {
+                        if (!current.cv) return current;
+                        const next = { ...current };
+                        delete next.cv;
+                        return next;
+                      });
+                    }}
+                    aria-invalid={Boolean(formErrors.cv)}
+                  />
+                </Field>
               </div>
-
-              <label className="check">
-                <input type="checkbox" checked={form.notify} onChange={updateForm("notify")} />
-                <span>
-                  Email them to confirm we have their application
-                  <span className="muted small">
-                    {" "}
-                    — turn this off for a name taken off a CV pile who has not applied yet.
-                  </span>
-                </span>
-              </label>
 
               <div className="btn-row mt-2">
                 <button className="btn btn-primary" type="submit" disabled={adding}>
-                  {adding ? "Adding…" : "Add candidate"}
+                  {adding ? "Saving…" : "Save candidate"}
                 </button>
                 <button
                   className="btn btn-secondary"
