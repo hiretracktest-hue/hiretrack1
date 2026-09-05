@@ -68,6 +68,13 @@ export default function CandidateDetail() {
   // at the date box instead of appearing as one banner at the top.
   const [interviewErrors, setInterviewErrors] = useState({});
   const [assigning, setAssigning] = useState(false);
+  // The three long forms start folded away. HR's job on this page is to
+  // read the CV and screen it; booking a slot and writing feedback are
+  // occasional, and leaving all three open is what made this page run
+  // off the bottom of the screen.
+  const [showBooking, setShowBooking] = useState(false);
+  const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+  const [showCvForm, setShowCvForm] = useState(false);
   const [feedbackForm, setFeedbackForm] = useState({
     stage: "",
     rating: 4,
@@ -181,6 +188,7 @@ export default function CandidateDetail() {
     if (result) {
       setCvFile(null);
       form.reset();
+      setShowCvForm(false);
     }
   }
 
@@ -207,6 +215,7 @@ export default function CandidateDetail() {
         ...current.filter((item) => item.id !== result.feedback.id),
       ]);
       setFeedbackForm((current) => ({ ...current, strengths: "", concerns: "", comment: "" }));
+      setShowFeedbackForm(false);
       await load();
     }
   }
@@ -265,6 +274,7 @@ export default function CandidateDetail() {
       );
       setInterviewForm((current) => ({ ...current, scheduledAt: "", location: "", notes: "" }));
       setInterviewErrors({});
+      setShowBooking(false);
     }
   }
 
@@ -364,10 +374,10 @@ export default function CandidateDetail() {
         {message}
       </Alert>
 
-      {/* ---- progress ---- */}
-      <div className="card">
-        <div className="card-title">
-          <h2>Progress</h2>
+      {/* ---- progress: one strip, not a section ---- */}
+      <div className="card card-tight">
+        <div className="row-between">
+          <Pipeline stages={stages} currentStage={candidate.currentStage} />
           <span className="muted small">
             Stage {stageIndex + 1} of {stages.length}
             {averageRating !== null && averageRating !== undefined
@@ -376,52 +386,47 @@ export default function CandidateDetail() {
           </span>
         </div>
 
-        <Pipeline stages={stages} currentStage={candidate.currentStage} />
-
         {(p["candidate:advance"] || p["candidate:outcome"]) && (
-          <>
-            <div className="btn-row mt-3">
-              {p["candidate:advance"] && (
-                <button className="btn btn-primary" onClick={advance} disabled={busy || !nextStage}>
-                  {nextStage ? "Move to " + nextStage : "Final stage reached"}
-                </button>
-              )}
-              {needsFeedbackFirst && (
-                <span className="badge badge-amber">
-                  Needs feedback for {candidate.currentStage} first
-                </span>
-              )}
+          <div className="btn-row mt-2">
+            {p["candidate:advance"] && (
+              <button className="btn btn-primary" onClick={advance} disabled={busy || !nextStage}>
+                {nextStage ? "Move to " + nextStage : "Final stage reached"}
+              </button>
+            )}
 
-              {p["candidate:outcome"] && (
-                <>
-                  <select
-                    className="select"
-                    style={{ width: "auto" }}
-                    value={outcome}
-                    onChange={(event) => setOutcome(event.target.value)}
-                    aria-label="Outcome"
-                  >
-                    {OUTCOMES.map((value) => (
-                      <option key={value} value={value}>
-                        {OUTCOME_LABEL[value]}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={saveOutcome}
-                    disabled={busy || outcome === candidate.outcome}
-                  >
-                    Record outcome
-                  </button>
-                </>
-              )}
-            </div>
-            <p className="field-hint">
-              Nobody moves forward on missing information: feedback for the current stage has to be
-              submitted first. Hiring or rejecting a candidate also writes an email to the outbox.
-            </p>
-          </>
+            {p["candidate:outcome"] && (
+              <>
+                <select
+                  className="select"
+                  style={{ width: "auto" }}
+                  value={outcome}
+                  onChange={(event) => setOutcome(event.target.value)}
+                  aria-label="Outcome"
+                >
+                  {OUTCOMES.map((value) => (
+                    <option key={value} value={value}>
+                      {OUTCOME_LABEL[value]}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="btn btn-secondary"
+                  onClick={saveOutcome}
+                  disabled={busy || outcome === candidate.outcome}
+                >
+                  Record outcome
+                </button>
+              </>
+            )}
+
+            {/* Only says why the button is dead when it actually is -
+                the rule does not need explaining the rest of the time. */}
+            {needsFeedbackFirst && (
+              <span className="badge badge-amber">
+                Feedback for {candidate.currentStage} has to be in first
+              </span>
+            )}
+          </div>
         )}
       </div>
 
@@ -535,6 +540,45 @@ export default function CandidateDetail() {
                     {candidate.notes || "—"}
                   </p>
                 </div>
+
+                {/* Who owns this candidate. They see them under “Only
+                    mine” on the Candidates page straight away, before
+                    any interview has been booked. */}
+                <div className="mt-3">
+                  <div className="detail-label">Assigned interviewer</div>
+                  {p["candidate:assign"] ? (
+                    <div className="btn-row mt-1">
+                      <select
+                        className="select"
+                        style={{ width: "auto", minWidth: 240 }}
+                        value={candidate.assignedInterviewerId ?? ""}
+                        onChange={(event) => assignInterviewer(event.target.value)}
+                        disabled={assigning || busy}
+                        aria-label="Assign an interviewer to this candidate"
+                      >
+                        <option value="">Nobody assigned</option>
+                        {interviewers.map((person) => (
+                          <option key={person.id} value={person.id}>
+                            {person.name} ({person.roleLabel})
+                          </option>
+                        ))}
+                      </select>
+                      {candidate.assignedInterviewerName && (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => assignInterviewer("")}
+                          disabled={assigning || busy}
+                        >
+                          Unassign
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="detail-value">
+                      {candidate.assignedInterviewerName || "Nobody yet"}
+                    </p>
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -543,9 +587,19 @@ export default function CandidateDetail() {
           <div className="card">
             <div className="card-title">
               <h2>Interview feedback</h2>
-              <span className="muted small">
-                {feedback.length} review{feedback.length === 1 ? "" : "s"}
-              </span>
+              <div className="btn-row">
+                <span className="muted small">
+                  {feedback.length} review{feedback.length === 1 ? "" : "s"}
+                </span>
+                {p["feedback:write"] && (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setShowFeedbackForm((c) => !c)}
+                  >
+                    {showFeedbackForm ? "Cancel" : "+ Leave feedback"}
+                  </button>
+                )}
+              </div>
             </div>
 
             {feedback.length > 0 && (
@@ -592,7 +646,11 @@ export default function CandidateDetail() {
               </div>
             )}
 
-            {p["feedback:write"] ? (
+            {!p["feedback:write"] && feedback.length === 0 && (
+              <p className="muted small">Your role can read feedback but not write it.</p>
+            )}
+
+            {p["feedback:write"] && showFeedbackForm && (
               <form onSubmit={submitFeedback}>
                 <div className="grid grid-3">
                   <Field label="Stage" htmlFor="feedbackStage">
@@ -680,64 +738,10 @@ export default function CandidateDetail() {
                   side-by-side comparison fair. Saving again updates the score you already left.
                 </p>
               </form>
-            ) : (
-              <p className="muted small">Your role can read feedback but not write it.</p>
-            )}
-          </div>
-
-          {/* ---- assigned interviewer ---- */}
-          <div className="card">
-            <div className="card-title">
-              <h2>Assigned interviewer</h2>
-              {candidate.assignedInterviewerName ? (
-                <span className="badge badge-green">{candidate.assignedInterviewerName}</span>
-              ) : (
-                <span className="badge badge-grey">Nobody yet</span>
-              )}
-            </div>
-
-            <p className="field-hint">
-              Who owns this candidate through the process. They see them under “Only mine” on the
-              Candidates page straight away, before any interview has been booked.
-            </p>
-
-            {p["candidate:assign"] ? (
-              <div className="btn-row mt-2">
-                <select
-                  className="select"
-                  style={{ width: "auto", minWidth: 240 }}
-                  value={candidate.assignedInterviewerId ?? ""}
-                  onChange={(event) => assignInterviewer(event.target.value)}
-                  disabled={assigning || busy}
-                  aria-label="Assign an interviewer to this candidate"
-                >
-                  <option value="">Nobody assigned</option>
-                  {interviewers.map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {person.name} ({person.roleLabel})
-                    </option>
-                  ))}
-                </select>
-                {candidate.assignedInterviewerName && (
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => assignInterviewer("")}
-                    disabled={assigning || busy}
-                  >
-                    Unassign
-                  </button>
-                )}
-              </div>
-            ) : (
-              <p className="muted small mt-2">
-                {candidate.assignedInterviewerName
-                  ? candidate.assignedInterviewerName + " is looking after this candidate."
-                  : "HR has not assigned an interviewer yet."}
-              </p>
             )}
 
-            {candidate.assignedAt && (
-              <p className="field-hint">Assigned {formatDateTime(candidate.assignedAt)}.</p>
+            {feedback.length === 0 && !showFeedbackForm && p["feedback:write"] && (
+              <p className="muted small">No reviews yet.</p>
             )}
           </div>
 
@@ -745,8 +749,22 @@ export default function CandidateDetail() {
           <div className="card">
             <div className="card-title">
               <h2>Interviews</h2>
-              <span className="muted small">{interviews.length} booked</span>
+              <div className="btn-row">
+                <span className="muted small">{interviews.length} booked</span>
+                {p["interview:schedule"] && (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setShowBooking((c) => !c)}
+                  >
+                    {showBooking ? "Cancel" : "+ Book interview"}
+                  </button>
+                )}
+              </div>
             </div>
+
+            {interviews.length === 0 && !showBooking && (
+              <p className="muted small">Nothing booked yet.</p>
+            )}
 
             {interviews.length > 0 && (
               <ul className="list mb-2">
@@ -780,7 +798,7 @@ export default function CandidateDetail() {
                 carry min/type so the picker and keyboard behave, but the
                 message the person reads is ours - "that date is not
                 available" rather than "Value must be ... or later". */}
-            {p["interview:schedule"] && (
+            {p["interview:schedule"] && showBooking && (
               <form onSubmit={scheduleInterview} noValidate>
                 <div className="grid grid-2">
                   <Field label="Stage" htmlFor="stage">
@@ -936,7 +954,19 @@ export default function CandidateDetail() {
               </div>
             )}
 
-            {p["candidate:uploadCv"] && (
+            {/* A CV is put on when the candidate is added, so this is
+                only ever a replacement - folded away unless it is
+                actually missing, or asked for. */}
+            {p["candidate:uploadCv"] && candidate.cv && !showCvForm && (
+              <button
+                className="btn btn-ghost btn-sm mt-2"
+                onClick={() => setShowCvForm(true)}
+              >
+                Replace the CV
+              </button>
+            )}
+
+            {p["candidate:uploadCv"] && (!candidate.cv || showCvForm) && (
               <form onSubmit={uploadCv} className="mt-3">
                 <Field
                   label={candidate.cv ? "Replace the CV" : "Upload their CV"}
@@ -958,13 +988,14 @@ export default function CandidateDetail() {
           </div>
 
           {p["candidate:delete"] && (
-            <div className="card">
-              <h2>Danger zone</h2>
-              <button className="btn btn-danger btn-block mt-2" onClick={removeCandidate} disabled={busy}>
-                Delete candidate
-              </button>
-              <p className="field-hint">Removes their record, CV, interviews and feedback.</p>
-            </div>
+            <button
+              className="btn btn-ghost btn-sm btn-danger-text mt-2"
+              onClick={removeCandidate}
+              disabled={busy}
+              title="Removes their record, CV, interviews and feedback."
+            >
+              Delete candidate
+            </button>
           )}
         </div>
       </div>

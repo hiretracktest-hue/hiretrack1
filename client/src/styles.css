@@ -1515,3 +1515,21 @@ textarea:focus-visible,
   flex: none;
   cursor: pointer;
 }
+
+/* A card that is one strip of controls rather than a whole section -
+   the progress bar at the top of a candidate, for instance. Without
+   this that single row cost the same 22px of padding as a form. */
+.card-tight {
+  padding: 14px 18px;
+}
+
+/* Delete, as a quiet link rather than a red block. Destructive, but it
+   is not the point of the page, and a full-width red button shouted
+   over everything above it. */
+.btn-danger-text {
+  color: var(--red-fg);
+}
+.btn-danger-text:hover:not(:disabled) {
+  background: var(--red-bg);
+  color: var(--red-fg);
+}
