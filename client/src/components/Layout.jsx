@@ -11,7 +11,7 @@ import { initials } from "./ui.jsx";
  */
 const LINKS = [
   { to: "/dashboard", label: "Dashboard" },
-  { to: "/positions", label: "Positions", need: "position:view" },
+  { to: "/vacancies", label: "Vacancies", need: "position:view" },
   { to: "/candidates", label: "Candidates", need: "candidate:view" },
   { to: "/interviews", label: "Interviews", need: "interview:view" },
   { to: "/outbox", label: "Outbox", need: "outbox:view" },

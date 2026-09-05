@@ -152,15 +152,23 @@ CREATE TABLE candidates (
   cv_size        BIGINT,
   cv_uploaded_at TIMESTAMPTZ,
   added_by       BIGINT            REFERENCES users (id) ON DELETE SET NULL,
+  -- The interviewer who owns this candidate through the whole process.
+  -- Different from interviews.interviewer_id, which is who runs one
+  -- particular slot: this is set once by HR, so an interviewer can find
+  -- their own candidates before anything has been booked.
+  assigned_interviewer_id BIGINT    REFERENCES users (id) ON DELETE SET NULL,
+  assigned_at    TIMESTAMPTZ,
+  assigned_by    BIGINT            REFERENCES users (id) ON DELETE SET NULL,
   created_at     TIMESTAMPTZ       NOT NULL DEFAULT NOW(),
   updated_at     TIMESTAMPTZ       NOT NULL DEFAULT NOW(),
-  -- the same person cannot be added twice to one position
+  -- the same person cannot be added twice to one vacancy
   UNIQUE (job_id, email)
 );
 
 CREATE INDEX idx_candidates_job     ON candidates (job_id);
 CREATE INDEX idx_candidates_outcome ON candidates (outcome);
 CREATE INDEX idx_candidates_band    ON candidates (job_id, cv_band);
+CREATE INDEX idx_candidates_assigned ON candidates (assigned_interviewer_id);
 
 -- -------------------------------------------------------------------
 -- interviews - booked against a candidate at a stage

@@ -2,16 +2,30 @@ import { useState } from "react";
 
 /** Small building blocks reused by every page. */
 
-export function Field({ label, hint, htmlFor, children }) {
+/**
+ * One form field. Pass `error` to show what is wrong underneath it -
+ * next to the input that caused it, rather than as a banner at the top
+ * of the page where it is easy to miss.
+ *
+ * role="alert" means a screen reader announces the message when it
+ * appears, instead of leaving it silent until the field is tabbed to.
+ */
+export function Field({ label, hint, htmlFor, error, children }) {
   return (
-    <div className="field">
+    <div className={"field" + (error ? " field-invalid" : "")}>
       {label && (
         <label className="field-label" htmlFor={htmlFor}>
           {label}
         </label>
       )}
       {children}
-      {hint && <p className="field-hint">{hint}</p>}
+      {error ? (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      ) : (
+        hint && <p className="field-hint">{hint}</p>
+      )}
     </div>
   );
 }
@@ -231,6 +245,61 @@ export function formatBytes(bytes) {
   if (bytes < 1024) return bytes + " B";
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + " KB";
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+/**
+ * Says what is wrong with an email address, or null when it is fine.
+ *
+ * Deliberately mirrors server/validate.js. The server is the one that
+ * decides - this exists so the person is told before a round trip, and
+ * gets the same wording either way.
+ */
+export function describeEmailProblem(value, { field = "Email address", required = true } = {}) {
+  const raw = typeof value === "string" ? value.trim() : "";
+
+  if (!raw) return required ? field + " is required." : null;
+  if (raw.length > 160) return field + " is too long.";
+  if (/\s/.test(raw)) return field + " cannot contain spaces.";
+  if (!raw.includes("@")) return field + " needs an @ - for example name@example.com";
+  if (raw.split("@").length > 2) return field + " can only contain one @.";
+
+  const [local, domain] = raw.split("@");
+  if (!local) return field + " is missing the part before the @.";
+  if (!domain) return field + " is missing the part after the @ - for example gmail.com";
+  if (!domain.includes(".")) return field + " needs a domain ending - for example .com or .lk";
+  if (domain.startsWith(".") || domain.endsWith(".") || domain.includes("..")) {
+    return field + " has a misplaced dot after the @.";
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) return field + " is not a valid email address.";
+  return null;
+}
+
+/**
+ * Says what is wrong with a date and time that has to be in the future,
+ * or null when it is fine. Same three answers as the server: missing,
+ * not a real date, or already past.
+ */
+export function describeFutureDateProblem(value, { field = "Date and time", required = true } = {}) {
+  const raw = typeof value === "string" ? value.trim() : "";
+
+  if (!raw) return required ? field + " is missing." : null;
+
+  const when = new Date(raw);
+  if (Number.isNaN(when.getTime())) {
+    return "That is not a real date. Use the picker to choose one.";
+  }
+  // A minute of slack, so "now" is not refused by the second it takes
+  // to press the button.
+  if (when.getTime() < Date.now() - 60000) {
+    return "That date is not available - it has already passed. Choose a future date and time.";
+  }
+  return null;
+}
+
+/** Now, in the format a datetime-local input wants for its `min`. */
+export function nowForDateInput() {
+  const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
+  return now.toISOString().slice(0, 16);
 }
 
 export function initials(name = "") {

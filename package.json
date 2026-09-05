@@ -17,7 +17,8 @@
     "seed": "node database/seed.js",
     "seed:reset": "node database/seed.js --reset",
     "test": "node --test server/tests/*.test.js",
-    "db:migrate": "node database/migrate.js"
+    "db:migrate": "node database/migrate.js",
+    "db:upgrade": "node database/upgrade.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",

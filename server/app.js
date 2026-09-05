@@ -29,10 +29,10 @@ export function createApp({ log = true } = {}) {
 
   app.disable("x-powered-by");
 
-  // Behind a host's TLS proxy (Render, Railway, Fly), the connection to
-  // this process is plain HTTP even though the visitor is on HTTPS.
-  // Without this, Express reports req.protocol as "http" and treats the
-  // request as insecure, which breaks the Secure session cookie.
+  // Once this is deployed, the host terminates HTTPS and forwards plain
+  // HTTP to this process. Without trusting that proxy, Express reports
+  // req.protocol as "http", treats the request as insecure and refuses
+  // to set the Secure session cookie - so nobody can stay signed in.
   if (config.isProduction) app.set("trust proxy", 1);
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: true }));

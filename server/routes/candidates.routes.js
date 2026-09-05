@@ -27,11 +27,13 @@ const SELECT_COLUMNS =
   "(SELECT COUNT(*) FROM feedback f WHERE f.candidate_id = c.id) AS feedback_count, " +
   "(SELECT ROUND(AVG(f.rating), 1) FROM feedback f WHERE f.candidate_id = c.id) AS average_rating, " +
   "(SELECT COUNT(*) FROM feedback f WHERE f.candidate_id = c.id AND f.stage = c.current_stage) " +
-  "  AS stage_feedback_count " +
+  "  AS stage_feedback_count, " +
+  "i.name AS assigned_interviewer_name, i.role AS assigned_interviewer_role " +
   "FROM candidates c " +
   "JOIN jobs j ON j.id = c.job_id " +
   "LEFT JOIN users a ON a.id = c.added_by " +
-  "LEFT JOIN users b ON b.id = c.cv_banded_by ";
+  "LEFT JOIN users b ON b.id = c.cv_banded_by " +
+  "LEFT JOIN users i ON i.id = c.assigned_interviewer_id ";
 
 const num = (value) => (value === null || value === undefined ? null : Number(value));
 
@@ -53,6 +55,10 @@ function toJson(row) {
     outcome: row.outcome,
     inviteLink: row.invite_link || "",
     inviteAt: row.invite_at,
+    assignedInterviewerId: num(row.assigned_interviewer_id),
+    assignedInterviewerName: row.assigned_interviewer_name ?? null,
+    assignedInterviewerRole: row.assigned_interviewer_role ?? null,
+    assignedAt: row.assigned_at,
     cvBand: row.cv_band,
     cvBandNote: row.cv_band_note,
     bandedByName: row.banded_by_name ?? null,
@@ -88,9 +94,13 @@ router.get(
   asyncHandler(async (req, res) => {
     const where = [];
     const params = [];
+    // replaceAll, not replace: a clause may use the same value twice
+    // (see the "mine" filter below). PostgreSQL is happy to have one
+    // parameter referenced more than once, but a leftover literal "$?"
+    // would be a syntax error.
     const add = (clause, value) => {
       params.push(value);
-      where.push(clause.replace("$?", "$" + params.length));
+      where.push(clause.replaceAll("$?", "$" + params.length));
     };
 
     if (req.query.job) add("c.job_id = $?", v.id(req.query.job, { field: "position id" }));
@@ -111,13 +121,23 @@ router.get(
       where.push("(c.full_name ILIKE $" + n + " OR c.email::text ILIKE $" + n + ")");
     }
 
-    // An interviewer only needs the people they are actually meeting.
+    // An interviewer's own people: the ones assigned to them, plus
+    // anyone they have an interview booked with. Before this, a
+    // candidate handed over by HR did not show up here until a slot had
+    // been booked, which is exactly when they most need to see them.
     if (req.query.mine === "1") {
       add(
-        "EXISTS (SELECT 1 FROM interviews i WHERE i.candidate_id = c.id AND i.interviewer_id = $?)",
+        "(c.assigned_interviewer_id = $? OR EXISTS " +
+          "(SELECT 1 FROM interviews i WHERE i.candidate_id = c.id AND i.interviewer_id = $?))",
         req.user.id
       );
     }
+
+    // Whoever a named interviewer is responsible for.
+    if (req.query.assignedTo) {
+      add("c.assigned_interviewer_id = $?", v.id(req.query.assignedTo, { field: "interviewer" }));
+    }
+    if (req.query.unassigned === "1") where.push("c.assigned_interviewer_id IS NULL");
 
     const SORTS = {
       newest: "c.created_at DESC",
@@ -239,15 +259,13 @@ router.post(
 
     // Optional, and both end up in the invitation email.
     const inviteLink = v.url(req.body.inviteLink, { field: "Link" });
-    const inviteAtRaw = v.str(req.body.inviteAt, { field: "Date and time", max: 40 });
-    let inviteAt = null;
-    if (inviteAtRaw) {
-      const parsed = new Date(inviteAtRaw);
-      if (Number.isNaN(parsed.getTime())) {
-        throw httpError(400, "That date and time could not be read.");
-      }
-      inviteAt = parsed.toISOString();
-    }
+    // Optional here, but if one is given it has to be a real future
+    // date - the same rule an interview slot gets.
+    const parsedInviteAt = v.futureDateTime(req.body.inviteAt, {
+      field: "Invitation date and time",
+      required: false,
+    });
+    const inviteAt = parsedInviteAt ? parsedInviteAt.toISOString() : null;
 
     const duplicate = await one(
       "SELECT id FROM candidates WHERE job_id = $1 AND email = $2",
@@ -390,6 +408,51 @@ router.patch(
         decidedBy: req.user,
       });
     }
+
+    res.json({ candidate: toJson(await loadOr404(id)) });
+  })
+);
+
+// --- Assign an interviewer to a candidate -------------------------------
+// Booking an interview says who runs one slot. This says who owns the
+// candidate for the whole process, so an interviewer can find their own
+// people before anything has been booked.
+router.post(
+  "/:id/assign",
+  requirePermission("candidate:assign"),
+  asyncHandler(async (req, res) => {
+    const id = v.id(req.params.id, { field: "candidate id" });
+    await loadOr404(id);
+
+    // An empty value un-assigns, which is how a candidate is handed back.
+    if (!req.body.interviewerId) {
+      await run(
+        "UPDATE candidates SET assigned_interviewer_id = NULL, assigned_at = NULL, " +
+          "assigned_by = NULL WHERE id = $1",
+        [id]
+      );
+      return res.json({ candidate: toJson(await loadOr404(id)) });
+    }
+
+    const interviewerId = v.id(req.body.interviewerId, { field: "interviewer" });
+    const person = await one(
+      "SELECT id, name, role FROM users WHERE id = $1 AND is_active",
+      [interviewerId]
+    );
+    if (!person) {
+      throw httpError(404, "That interviewer does not exist, or their account is closed.");
+    }
+    // Management is oversight only - handing them a candidate to
+    // interview would contradict what that role is for.
+    if (person.role === "management") {
+      throw httpError(400, "Management accounts do not carry out interviews.");
+    }
+
+    await run(
+      "UPDATE candidates SET assigned_interviewer_id = $1, assigned_at = NOW(), " +
+        "assigned_by = $2 WHERE id = $3",
+      [interviewerId, req.user.id, id]
+    );
 
     res.json({ candidate: toJson(await loadOr404(id)) });
   })

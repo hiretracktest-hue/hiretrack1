@@ -106,31 +106,33 @@ router.post(
       fallback: candidate.current_stage,
     });
 
-    const scheduledAt = v.str(req.body.scheduledAt, {
-      field: "Date and time",
-      required: true,
-      max: 40,
-    });
-    const when = new Date(scheduledAt);
-    if (Number.isNaN(when.getTime())) throw httpError(400, "Enter a valid date and time.");
+    // Missing, unreal and already-past dates each get their own message.
+    const when = v.futureDateTime(req.body.scheduledAt, { field: "Date and time" });
 
-    // The interviewer is picked from the staff list, so the notification
-    // has somewhere to go and the feedback can be attributed.
-    let interviewerId = null;
-    let interviewerName = v.str(req.body.interviewerName, { field: "Interviewer", max: 120 });
-    let interviewerEmail = req.body.interviewerEmail
-      ? v.email(req.body.interviewerEmail, { field: "Interviewer email" })
-      : "";
+    // The interviewer has to be somebody with an account: they are the
+    // one who gets notified, and whose name the feedback is filed under.
+    // Booking a slot with nobody running it just loses the candidate.
+    if (!req.body.interviewerId) {
+      throw httpError(400, "Choose the interviewer who will run this interview.");
+    }
 
-    if (req.body.interviewerId) {
-      interviewerId = v.id(req.body.interviewerId, { field: "interviewer" });
-      const person = await one(
-        "SELECT id, name, email FROM users WHERE id = $1 AND is_active",
-        [interviewerId]
-      );
-      if (!person) throw httpError(404, "That interviewer does not exist.");
-      interviewerName = person.name;
-      interviewerEmail = person.email;
+    const interviewerId = v.id(req.body.interviewerId, { field: "interviewer" });
+    const person = await one(
+      "SELECT id, name, email FROM users WHERE id = $1 AND is_active",
+      [interviewerId]
+    );
+    if (!person) throw httpError(404, "That interviewer does not exist, or their account is closed.");
+    const interviewerName = person.name;
+    const interviewerEmail = person.email;
+
+    // Two interviews for the same candidate at the same moment is
+    // always a mistake - usually a double-submitted form.
+    const clash = await one(
+      "SELECT id FROM interviews WHERE candidate_id = $1 AND scheduled_at = $2",
+      [candidateId, when.toISOString()]
+    );
+    if (clash) {
+      throw httpError(409, "This candidate already has an interview booked at that exact time.");
     }
 
     const location = v.str(req.body.location, { field: "Location", max: 200 });

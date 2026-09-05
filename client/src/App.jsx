@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { useAuth } from "./AuthContext.jsx";
 import Layout from "./components/Layout.jsx";
 import { Loading } from "./components/ui.jsx";
@@ -31,6 +31,13 @@ function Protected({ children, need }) {
   // convenience for the user, not the security boundary.
   if (need && !user.permissions?.[need]) return <Navigate to="/dashboard" replace />;
   return <Layout>{children}</Layout>;
+}
+
+/** Carries the :id across when an old /jobs/12 or /positions/12 link is
+ *  opened, so it lands on the same vacancy rather than the list. */
+function LegacyRedirect({ to }) {
+  const { id } = useParams();
+  return <Navigate to={to + "/" + id} replace />;
 }
 
 /** Signed-in users should not see the sign-in screen again. */
@@ -76,9 +83,9 @@ export default function App() {
         }
       />
 
-      {/* --- open positions ------------------------------------------- */}
+      {/* --- open vacancies ------------------------------------------- */}
       <Route
-        path="/positions"
+        path="/vacancies"
         element={
           <Protected need="position:view">
             <Jobs />
@@ -86,7 +93,7 @@ export default function App() {
         }
       />
       <Route
-        path="/positions/new"
+        path="/vacancies/new"
         element={
           <Protected need="position:create">
             <JobEditor mode="create" />
@@ -94,7 +101,7 @@ export default function App() {
         }
       />
       <Route
-        path="/positions/:id"
+        path="/vacancies/:id"
         element={
           <Protected need="position:view">
             <JobDetail />
@@ -102,7 +109,7 @@ export default function App() {
         }
       />
       <Route
-        path="/positions/:id/edit"
+        path="/vacancies/:id/edit"
         element={
           <Protected need="position:edit">
             <JobEditor mode="edit" />
@@ -110,7 +117,7 @@ export default function App() {
         }
       />
       <Route
-        path="/positions/:id/compare"
+        path="/vacancies/:id/compare"
         element={
           <Protected need="candidate:compare">
             <Compare />
@@ -178,8 +185,12 @@ export default function App() {
         }
       />
 
-      {/* Old vacancy addresses still work. */}
-      <Route path="/jobs" element={<Navigate to="/positions" replace />} />
+      {/* Older addresses still work, so a bookmarked or shared link
+          from before the rename does not dead-end. */}
+      <Route path="/jobs" element={<Navigate to="/vacancies" replace />} />
+      <Route path="/jobs/:id" element={<LegacyRedirect to="/vacancies" />} />
+      <Route path="/positions" element={<Navigate to="/vacancies" replace />} />
+      <Route path="/positions/:id" element={<LegacyRedirect to="/vacancies" />} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

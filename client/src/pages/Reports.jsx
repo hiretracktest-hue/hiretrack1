@@ -36,7 +36,7 @@ export default function Reports() {
     );
   }
 
-  const { summary, positions, byStage, byBand, interviewerActivity } = data;
+  const { summary, vacancies, byStage, byBand, interviewerActivity } = data;
 
   const ExportButton = ({ report, label }) =>
     canExport ? (
@@ -53,7 +53,7 @@ export default function Reports() {
         <div>
           <h1>Reports</h1>
           <p className="subtitle">
-            A live view of recruitment across every position. {canExport
+            A live view of recruitment across every vacancy. {canExport
               ? "Each table can be downloaded as CSV for a slide or a spreadsheet."
               : "Ask HR or management if you need a CSV export."}
           </p>
@@ -65,7 +65,7 @@ export default function Reports() {
       </Alert>
 
       <div className="grid grid-4">
-        <Stat label="Open positions" value={summary.openPositions} />
+        <Stat label="Vacancies" value={summary.openVacancies} />
         <Stat label="Candidates" value={summary.totalCandidates} />
         <Stat label="In progress" value={summary.activeCandidates} />
         <Stat label="Hired" value={summary.hired} />
@@ -81,21 +81,21 @@ export default function Reports() {
         />
       </div>
 
-      {/* ---- per position ---- */}
+      {/* ---- per vacancy ---- */}
       <div className="card mt-3">
         <div className="card-title">
-          <h2>By position</h2>
-          <ExportButton report="positions" label="" />
+          <h2>By vacancy</h2>
+          <ExportButton report="vacancies" label="" />
         </div>
 
-        {positions.length === 0 ? (
-          <Empty title="No positions yet" />
+        {vacancies.length === 0 ? (
+          <Empty title="No vacancies yet" />
         ) : (
           <div className="table-wrap" style={{ border: "none", boxShadow: "none" }}>
             <table>
               <thead>
                 <tr>
-                  <th>Position</th>
+                  <th>Vacancy</th>
                   <th>Department</th>
                   <th>Status</th>
                   <th>Candidates</th>
@@ -108,10 +108,10 @@ export default function Reports() {
                 </tr>
               </thead>
               <tbody>
-                {positions.map((row) => (
+                {vacancies.map((row) => (
                   <tr key={row.id}>
                     <td>
-                      <Link className="cell-title" to={"/positions/" + row.id}>
+                      <Link className="cell-title" to={"/vacancies/" + row.id}>
                         {row.title}
                       </Link>
                       <div className="cell-sub">Opened {formatDate(row.openedOn)}</div>
@@ -242,7 +242,7 @@ export default function Reports() {
         <div className="card mt-2">
           <h2>Full candidate export</h2>
           <p className="field-hint">
-            Every candidate across every position, with their stage, outcome, CV band and average
+            Every candidate across every vacancy, with their stage, outcome, CV band and average
             interview score.
           </p>
           <a className="btn btn-primary mt-2" href={api.reportCsvUrl("candidates")}>

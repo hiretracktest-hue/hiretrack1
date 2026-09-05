@@ -228,8 +228,8 @@ export default function Team() {
                 <div className="detail-value small">{member.email}</div>
               </div>
               <div>
-                <div className="detail-label">Positions opened</div>
-                <div className="detail-value">{member.positionsOpened}</div>
+                <div className="detail-label">Vacancies opened</div>
+                <div className="detail-value">{member.vacanciesOpened}</div>
               </div>
               <div>
                 <div className="detail-label">Interviews</div>

@@ -10,10 +10,90 @@ export function str(value, { field, required = false, max = 255, min = 0 } = {})
   return out;
 }
 
-export function email(value, { field = "Email", required = true } = {}) {
-  const out = str(value, { field, required, max: 160 }).toLowerCase();
-  if (out && !EMAIL_RE.test(out)) throw httpError(400, "Enter a valid email address.");
+/**
+ * An email address, with a message that says what is actually wrong
+ * rather than just "invalid". Somebody who has mistyped their address
+ * can fix it from the message without guessing.
+ */
+export function email(value, { field = "Email address", required = true } = {}) {
+  const raw = typeof value === "string" ? value.trim() : "";
+
+  if (!raw) {
+    if (required) throw httpError(400, `${field} is required.`);
+    return "";
+  }
+  if (raw.length > 160) throw httpError(400, `${field} is too long.`);
+
+  if (/\s/.test(raw)) {
+    throw httpError(400, `${field} cannot contain spaces.`);
+  }
+  if (!raw.includes("@")) {
+    throw httpError(400, `${field} needs an @ - for example name@example.com`);
+  }
+  if (raw.split("@").length > 2) {
+    throw httpError(400, `${field} can only contain one @.`);
+  }
+
+  const [local, domain] = raw.split("@");
+  if (!local) throw httpError(400, `${field} is missing the part before the @.`);
+  if (!domain) throw httpError(400, `${field} is missing the part after the @ - for example gmail.com`);
+  if (!domain.includes(".")) {
+    throw httpError(400, `${field} needs a domain ending - for example .com or .lk`);
+  }
+  if (domain.startsWith(".") || domain.endsWith(".") || domain.includes("..")) {
+    throw httpError(400, `${field} has a misplaced dot after the @.`);
+  }
+
+  const out = raw.toLowerCase();
+  if (!EMAIL_RE.test(out)) throw httpError(400, `${field} is not a valid email address.`);
   return out;
+}
+
+/**
+ * A date and time that has to be in the future - an interview slot.
+ *
+ * Three separate answers, because "invalid date" tells the person
+ * nothing about which of the three things they did:
+ *   nothing chosen, not a real date, or a date that has already passed.
+ */
+export function futureDateTime(value, { field = "Date and time", required = true } = {}) {
+  const raw = typeof value === "string" ? value.trim() : "";
+
+  if (!raw) {
+    if (required) {
+      throw httpError(400, `${field} is missing. Choose when the interview will take place.`);
+    }
+    return null;
+  }
+
+  const when = new Date(raw);
+  if (Number.isNaN(when.getTime())) {
+    throw httpError(400, `${field} is not a real date. Use the date picker to choose one.`);
+  }
+
+  // A minute of slack, so a slot chosen "now" is not refused by the
+  // second or two it takes to press the button.
+  if (when.getTime() < Date.now() - 60_000) {
+    throw httpError(
+      400,
+      `That date is not available - ${when.toLocaleString("en-GB", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })} has already passed. Choose a future date and time.`
+    );
+  }
+
+  // Guards against a typo like the year 20265 creating a row that sorts
+  // to the end of every list forever.
+  const tenYears = Date.now() + 10 * 365 * 24 * 60 * 60 * 1000;
+  if (when.getTime() > tenYears) {
+    throw httpError(400, `${field} is too far in the future. Check the year.`);
+  }
+
+  return when;
 }
 
 export function password(value, { field = "Password" } = {}) {

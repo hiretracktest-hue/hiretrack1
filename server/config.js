@@ -165,6 +165,9 @@ export const PERMISSIONS = {
   "candidate:advance": [ROLE_HR, ROLE_HIRING_MANAGER],
   "candidate:outcome": [ROLE_HR, ROLE_HIRING_MANAGER],
   "candidate:compare": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_MANAGEMENT],
+  // Handing a candidate to an interviewer. HR runs the process, and the
+  // hiring manager owns the shortlist, so both may assign.
+  "candidate:assign": [ROLE_HR, ROLE_HIRING_MANAGER],
 
   // Interviews and feedback
   "interview:schedule": [ROLE_HR, ROLE_HIRING_MANAGER],

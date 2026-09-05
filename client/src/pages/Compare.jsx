@@ -35,9 +35,9 @@ export default function Compare() {
   if (!data) {
     return (
       <div className="page">
-        <Alert kind="error">{error || "That position could not be found."}</Alert>
-        <Link className="btn btn-secondary" to="/positions">
-          Back to positions
+        <Alert kind="error">{error || "That vacancy could not be found."}</Alert>
+        <Link className="btn btn-secondary" to="/vacancies">
+          Back to vacancies
         </Link>
       </div>
     );
@@ -50,7 +50,7 @@ export default function Compare() {
     <div className="page">
       <div className="page-head">
         <div>
-          <Link className="small" to={"/positions/" + job.id}>
+          <Link className="small" to={"/vacancies/" + job.id}>
             ← {job.title}
           </Link>
           <h1 className="mt-1">Compare candidates</h1>
@@ -67,8 +67,8 @@ export default function Compare() {
 
       {candidates.length === 0 ? (
         <div className="table-wrap">
-          <Empty title="No candidates for this position yet">
-            <p>Add candidates to this position and they will appear here side by side once feedback is in.</p>
+          <Empty title="No candidates for this vacancy yet">
+            <p>Add candidates to this vacancy and they will appear here side by side once feedback is in.</p>
           </Empty>
         </div>
       ) : (

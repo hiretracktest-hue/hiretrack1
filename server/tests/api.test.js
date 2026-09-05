@@ -1193,3 +1193,282 @@ describe("the database enforces its own rules", () => {
     );
   });
 });
+
+// =====================================================================
+// The fixes asked for after the Sprint 2 walkthrough.
+// =====================================================================
+
+describe("booking an interview refuses bad input", () => {
+  let candidateId;
+  let interviewerId;
+  // One fixed slot shared by the last two tests. It has to be the SAME
+  // instant in both, because the clash check is about the same booking
+  // being submitted twice - which is what a double-clicked form sends.
+  const slot = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+
+  before(async () => {
+    await signIn("hr@example.com");
+
+    const job = await one(
+      "INSERT INTO jobs (title, created_by) VALUES ($1, (SELECT id FROM users WHERE email = $2)) " +
+        "RETURNING id",
+      ["Booking rules vacancy", "hr@example.com"]
+    );
+    await run("INSERT INTO job_stages (job_id, name, position) VALUES ($1, $2, $3)", [
+      job.id,
+      "Applied",
+      0,
+    ]);
+    await run("INSERT INTO job_stages (job_id, name, position) VALUES ($1, $2, $3)", [
+      job.id,
+      "Interview",
+      1,
+    ]);
+
+    const candidate = await one(
+      "INSERT INTO candidates (job_id, full_name, email, current_stage) " +
+        "VALUES ($1, $2, $3, $4) RETURNING id",
+      [job.id, "Booking Rules", "booking.rules@example.com", "Applied"]
+    );
+    candidateId = Number(candidate.id);
+    interviewerId = await userId("interviewer@example.com");
+  });
+
+  test("no date at all is refused, and says it is missing", async () => {
+    const { status, data } = await call("POST", "/api/interviews", {
+      candidateId,
+      stage: "Interview",
+      interviewerId,
+    });
+    assert.equal(status, 400);
+    assert.match(data.error, /missing/i);
+  });
+
+  test("an empty date is refused the same way", async () => {
+    const { status, data } = await call("POST", "/api/interviews", {
+      candidateId,
+      stage: "Interview",
+      scheduledAt: "",
+      interviewerId,
+    });
+    assert.equal(status, 400);
+    assert.match(data.error, /missing/i);
+  });
+
+  test("a date in the past says it is not available", async () => {
+    const lastYear = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+    const { status, data } = await call("POST", "/api/interviews", {
+      candidateId,
+      stage: "Interview",
+      scheduledAt: lastYear,
+      interviewerId,
+    });
+    assert.equal(status, 400);
+    assert.match(data.error, /not available/i);
+    assert.match(data.error, /already passed/i);
+  });
+
+  test("text that is not a date is refused", async () => {
+    const { status, data } = await call("POST", "/api/interviews", {
+      candidateId,
+      stage: "Interview",
+      scheduledAt: "next tuesday-ish",
+      interviewerId,
+    });
+    assert.equal(status, 400);
+    assert.match(data.error, /not a real date/i);
+  });
+
+  test("a year far in the future is refused", async () => {
+    const { status, data } = await call("POST", "/api/interviews", {
+      candidateId,
+      stage: "Interview",
+      scheduledAt: "2999-01-01T10:00",
+      interviewerId,
+    });
+    assert.equal(status, 400);
+    assert.match(data.error, /too far in the future/i);
+  });
+
+  test("booking with nobody to run it is refused", async () => {
+    const soon = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    const { status, data } = await call("POST", "/api/interviews", {
+      candidateId,
+      stage: "Interview",
+      scheduledAt: soon,
+    });
+    assert.equal(status, 400);
+    assert.match(data.error, /interviewer/i);
+  });
+
+  test("a valid future booking is accepted", async () => {
+    const { status, data } = await call("POST", "/api/interviews", {
+      candidateId,
+      stage: "Interview",
+      scheduledAt: slot,
+      interviewerId,
+      location: "Meeting room 1",
+    });
+    assert.equal(status, 201);
+    assert.equal(data.interview.interviewerName, "Test Interviewer");
+  });
+
+  test("the same slot twice is refused, so a double click cannot book two", async () => {
+    const { status, data } = await call("POST", "/api/interviews", {
+      candidateId,
+      stage: "Interview",
+      scheduledAt: slot,
+      interviewerId,
+    });
+    assert.equal(status, 409);
+    assert.match(data.error, /already has an interview/i);
+  });
+});
+
+describe("assigning an interviewer to a candidate", () => {
+  let candidateId;
+  let interviewerId;
+
+  before(async () => {
+    await signIn("hr@example.com");
+    const row = await one("SELECT id FROM candidates WHERE email = $1", [
+      "booking.rules@example.com",
+    ]);
+    candidateId = Number(row.id);
+    interviewerId = await userId("interviewer@example.com");
+  });
+
+  test("a new candidate starts with nobody assigned", async () => {
+    const { data } = await call("GET", "/api/candidates/" + candidateId);
+    assert.equal(data.candidate.assignedInterviewerId, null);
+  });
+
+  test("HR assigns one, and the name comes back with the candidate", async () => {
+    const { status, data } = await call("POST", "/api/candidates/" + candidateId + "/assign", {
+      interviewerId,
+    });
+    assert.equal(status, 200);
+    assert.equal(data.candidate.assignedInterviewerId, interviewerId);
+    assert.equal(data.candidate.assignedInterviewerName, "Test Interviewer");
+    assert.ok(data.candidate.assignedAt, "the time it happened is recorded");
+  });
+
+  test("the interviewer now finds them under their own candidates", async () => {
+    await signIn("interviewer@example.com");
+    const { data } = await call("GET", "/api/candidates?mine=1");
+    assert.ok(
+      data.candidates.some((c) => c.id === candidateId),
+      "an assigned candidate shows up before any interview is booked"
+    );
+  });
+
+  test("an interviewer cannot assign candidates to themselves", async () => {
+    const { status } = await call("POST", "/api/candidates/" + candidateId + "/assign", {
+      interviewerId,
+    });
+    assert.equal(status, 403);
+  });
+
+  test("management cannot be assigned to interview anyone", async () => {
+    await signIn("hr@example.com");
+    const { status, data } = await call("POST", "/api/candidates/" + candidateId + "/assign", {
+      interviewerId: await userId("management@example.com"),
+    });
+    assert.equal(status, 400);
+    assert.match(data.error, /Management/i);
+  });
+
+  test("an unknown interviewer is refused", async () => {
+    const { status } = await call("POST", "/api/candidates/" + candidateId + "/assign", {
+      interviewerId: 999999,
+    });
+    assert.equal(status, 404);
+  });
+
+  test("sending nothing hands the candidate back to the pool", async () => {
+    const { status, data } = await call("POST", "/api/candidates/" + candidateId + "/assign", {
+      interviewerId: null,
+    });
+    assert.equal(status, 200);
+    assert.equal(data.candidate.assignedInterviewerId, null);
+  });
+
+  test("the unassigned filter finds them again", async () => {
+    const { data } = await call("GET", "/api/candidates?unassigned=1");
+    assert.ok(data.candidates.some((c) => c.id === candidateId));
+  });
+});
+
+describe("email addresses are answered specifically", () => {
+  let jobId;
+
+  before(async () => {
+    await signIn("hr@example.com");
+    const row = await one("SELECT id FROM jobs WHERE title = $1", ["Booking rules vacancy"]);
+    jobId = Number(row.id);
+  });
+
+  const cases = [
+    ["", /required/i, "nothing typed"],
+    ["dilshan", /needs an @/i, "no @ at all"],
+    ["dilshan@@gmail.com", /only contain one @/i, "two @ signs"],
+    ["@gmail.com", /before the @/i, "nothing before the @"],
+    ["dilshan@", /after the @/i, "nothing after the @"],
+    ["dilshan@gmail", /domain ending/i, "no dot in the domain"],
+    ["dilshan@.com", /misplaced dot/i, "a domain starting with a dot"],
+    ["dil shan@gmail.com", /cannot contain spaces/i, "a space in the middle"],
+  ];
+
+  for (const [value, expected, description] of cases) {
+    test("rejects " + description + ", saying what is wrong", async () => {
+      const { status, data } = await call("POST", "/api/candidates", {
+        jobId,
+        fullName: "Email Test",
+        email: value,
+      });
+      assert.equal(status, 400, "for " + JSON.stringify(value));
+      assert.match(data.error, expected);
+    });
+  }
+
+  test("a good address is accepted", async () => {
+    const { status } = await call("POST", "/api/candidates", {
+      jobId,
+      fullName: "Good Address",
+      email: "good.address@gmail.com",
+    });
+    assert.equal(status, 201);
+  });
+});
+
+describe("an invitation time in the past is refused", () => {
+  let jobId;
+
+  before(async () => {
+    await signIn("hr@example.com");
+    const row = await one("SELECT id FROM jobs WHERE title = $1", ["Booking rules vacancy"]);
+    jobId = Number(row.id);
+  });
+
+  test("a past invitation time says it is not available", async () => {
+    const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { status, data } = await call("POST", "/api/candidates", {
+      jobId,
+      fullName: "Past Invite",
+      email: "past.invite@example.com",
+      inviteAt: lastWeek,
+    });
+    assert.equal(status, 400);
+    assert.match(data.error, /not available/i);
+  });
+
+  test("leaving it empty is still fine - it is optional", async () => {
+    const { status } = await call("POST", "/api/candidates", {
+      jobId,
+      fullName: "No Invite Time",
+      email: "no.invite.time@example.com",
+      inviteAt: "",
+    });
+    assert.equal(status, 201);
+  });
+});

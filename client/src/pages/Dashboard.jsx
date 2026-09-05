@@ -15,7 +15,7 @@ import {
 
 /**
  * The "live view" the brief asks for: where every candidate is and how
- * each position is progressing. What is shown depends on the role - an
+ * each vacancy is progressing. What is shown depends on the role - an
  * interviewer sees their own schedule first, HR sees the whole pipeline.
  */
 export default function Dashboard() {
@@ -78,8 +78,8 @@ export default function Dashboard() {
             </Link>
           )}
           {p["position:create"] && (
-            <Link className="btn btn-primary" to="/positions/new">
-              + Open a position
+            <Link className="btn btn-primary" to="/vacancies/new">
+              + New vacancy
             </Link>
           )}
         </div>
@@ -98,7 +98,7 @@ export default function Dashboard() {
       )}
 
       <div className="grid grid-4">
-        <Stat label="Open positions" value={stats?.openPositions ?? 0} />
+        <Stat label="Vacancies" value={stats?.openVacancies ?? 0} />
         <Stat label="Candidates" value={stats?.totalCandidates ?? 0} />
         <Stat label="In progress" value={stats?.activeCandidates ?? 0} />
         <Stat label="Upcoming interviews" value={stats?.upcomingInterviews ?? 0} />
@@ -127,7 +127,7 @@ export default function Dashboard() {
               <Empty title="No candidates yet">
                 <p>
                   {p["candidate:add"]
-                    ? "Open a position and add your first candidate."
+                    ? "New vacancy and add your first candidate."
                     : "HR has not added anyone yet."}
                 </p>
               </Empty>
@@ -158,20 +158,20 @@ export default function Dashboard() {
           {p["position:view"] && (
             <div className="card">
               <div className="card-title">
-                <h2>Open positions</h2>
-                <Link className="small" to="/positions">
+                <h2>Vacancies</h2>
+                <Link className="small" to="/vacancies">
                   View all
                 </Link>
               </div>
 
               {openJobs.length === 0 ? (
-                <p className="muted small">No open positions right now.</p>
+                <p className="muted small">No open vacancies right now.</p>
               ) : (
                 <ul className="list">
                   {openJobs.map((job) => (
                     <li key={job.id}>
                       <div>
-                        <Link className="cell-title" to={"/positions/" + job.id}>
+                        <Link className="cell-title" to={"/vacancies/" + job.id}>
                           {job.title}
                         </Link>
                         <div className="cell-sub">

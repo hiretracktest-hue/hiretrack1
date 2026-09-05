@@ -80,6 +80,10 @@ export default function CandidateDetail() {
     location: "",
     notes: "",
   });
+  // Per-field messages for the booking form, so "date is missing" points
+  // at the date box instead of appearing as one banner at the top.
+  const [interviewErrors, setInterviewErrors] = useState({});
+  const [assigning, setAssigning] = useState(false);
   const [feedbackForm, setFeedbackForm] = useState({
     stage: "",
     rating: 4,
@@ -107,6 +111,10 @@ export default function CandidateDetail() {
       setInterviewForm((current) => ({
         ...current,
         stage: current.stage || result.candidate.currentStage,
+        // Default the booking to whoever owns this candidate. It is the
+        // right answer nearly every time, and still changeable.
+        interviewerId:
+          current.interviewerId || (result.candidate.assignedInterviewerId ?? "") || "",
       }));
       setFeedbackForm((current) => ({
         ...current,
@@ -219,14 +227,43 @@ export default function CandidateDetail() {
     if (result) setFeedback((current) => current.filter((item) => item.id !== feedbackId));
   }
 
+  /**
+   * Checks the booking form before anything is sent. The server checks
+   * all of this again - this exists so the person gets the answer next
+   * to the field they got wrong, instead of a round trip and a banner.
+   */
+  function validateInterview() {
+    const problems = {};
+
+    if (!interviewForm.scheduledAt) {
+      problems.scheduledAt = "Choose the date and time of the interview.";
+    } else {
+      const when = new Date(interviewForm.scheduledAt);
+      if (Number.isNaN(when.getTime())) {
+        problems.scheduledAt = "That is not a real date. Use the picker to choose one.";
+      } else if (when.getTime() < Date.now() - 60_000) {
+        problems.scheduledAt =
+          "That date is not available - it has already passed. Choose a future date and time.";
+      }
+    }
+
+    if (!interviewForm.interviewerId) {
+      problems.interviewerId = "Choose who will run this interview.";
+    }
+
+    setInterviewErrors(problems);
+    return Object.keys(problems).length === 0;
+  }
+
   async function scheduleInterview(event) {
     event.preventDefault();
+    if (!validateInterview()) return;
+
     const result = await run(
       () =>
         api.scheduleInterview({
           candidateId: Number(id),
           ...interviewForm,
-          interviewerId: interviewForm.interviewerId || undefined,
         }),
       "Interview booked. The interviewer has been notified and the candidate's email is in the outbox."
     );
@@ -237,7 +274,19 @@ export default function CandidateDetail() {
         )
       );
       setInterviewForm((current) => ({ ...current, scheduledAt: "", location: "", notes: "" }));
+      setInterviewErrors({});
     }
+  }
+
+  /** Hand the candidate to an interviewer, or back to the pool. */
+  async function assignInterviewer(interviewerId) {
+    setAssigning(true);
+    const chosen = interviewers.find((person) => String(person.id) === String(interviewerId));
+    await run(
+      () => api.assignInterviewer(id, interviewerId),
+      interviewerId ? "Assigned to " + (chosen?.name || "the interviewer") + "." : "Assignment removed."
+    );
+    setAssigning(false);
   }
 
   async function cancelInterview(interviewId) {
@@ -254,8 +303,23 @@ export default function CandidateDetail() {
 
   const updateEdit = (key) => (event) =>
     setEditForm((current) => ({ ...current, [key]: event.target.value }));
-  const updateInterview = (key) => (event) =>
+  const updateInterview = (key) => (event) => {
     setInterviewForm((current) => ({ ...current, [key]: event.target.value }));
+    // Take the message away as soon as they start fixing it, rather than
+    // leaving it there until the next submit.
+    setInterviewErrors((current) => {
+      if (!current[key]) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  };
+
+  /** Now, as the value a datetime-local input expects, for its `min`. */
+  function nowForInput() {
+    const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000);
+    return now.toISOString().slice(0, 16);
+  }
   const updateFeedback = (key) => (event) =>
     setFeedbackForm((current) => ({ ...current, [key]: event.target.value }));
 
@@ -287,7 +351,7 @@ export default function CandidateDetail() {
           </Link>
           <h1 className="mt-1">{candidate.fullName}</h1>
           <p className="subtitle">
-            <Link to={"/positions/" + candidate.jobId}>{candidate.jobTitle}</Link> · added{" "}
+            <Link to={"/vacancies/" + candidate.jobId}>{candidate.jobTitle}</Link> · added{" "}
             {formatDate(candidate.createdAt)}
             {candidate.addedByName ? " by " + candidate.addedByName : ""}
           </p>
@@ -631,6 +695,62 @@ export default function CandidateDetail() {
             )}
           </div>
 
+          {/* ---- assigned interviewer ---- */}
+          <div className="card">
+            <div className="card-title">
+              <h2>Assigned interviewer</h2>
+              {candidate.assignedInterviewerName ? (
+                <span className="badge badge-green">{candidate.assignedInterviewerName}</span>
+              ) : (
+                <span className="badge badge-grey">Nobody yet</span>
+              )}
+            </div>
+
+            <p className="field-hint">
+              Who owns this candidate through the process. They see them under “Only mine” on the
+              Candidates page straight away, before any interview has been booked.
+            </p>
+
+            {p["candidate:assign"] ? (
+              <div className="btn-row mt-2">
+                <select
+                  className="select"
+                  style={{ width: "auto", minWidth: 240 }}
+                  value={candidate.assignedInterviewerId ?? ""}
+                  onChange={(event) => assignInterviewer(event.target.value)}
+                  disabled={assigning || busy}
+                  aria-label="Assign an interviewer to this candidate"
+                >
+                  <option value="">Nobody assigned</option>
+                  {interviewers.map((person) => (
+                    <option key={person.id} value={person.id}>
+                      {person.name} ({person.roleLabel})
+                    </option>
+                  ))}
+                </select>
+                {candidate.assignedInterviewerName && (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => assignInterviewer("")}
+                    disabled={assigning || busy}
+                  >
+                    Unassign
+                  </button>
+                )}
+              </div>
+            ) : (
+              <p className="muted small mt-2">
+                {candidate.assignedInterviewerName
+                  ? candidate.assignedInterviewerName + " is looking after this candidate."
+                  : "HR has not assigned an interviewer yet."}
+              </p>
+            )}
+
+            {candidate.assignedAt && (
+              <p className="field-hint">Assigned {formatDateTime(candidate.assignedAt)}.</p>
+            )}
+          </div>
+
           {/* ---- interviews ---- */}
           <div className="card">
             <div className="card-title">
@@ -666,8 +786,12 @@ export default function CandidateDetail() {
               </ul>
             )}
 
+            {/* noValidate turns the browser's own pop-up off. The inputs still
+                carry min/type so the picker and keyboard behave, but the
+                message the person reads is ours - "that date is not
+                available" rather than "Value must be ... or later". */}
             {p["interview:schedule"] && (
-              <form onSubmit={scheduleInterview}>
+              <form onSubmit={scheduleInterview} noValidate>
                 <div className="grid grid-2">
                   <Field label="Stage" htmlFor="stage">
                     <select
@@ -683,26 +807,40 @@ export default function CandidateDetail() {
                       ))}
                     </select>
                   </Field>
-                  <Field label="Date and time" htmlFor="scheduledAt">
+                  <Field
+                    label="Date and time"
+                    htmlFor="scheduledAt"
+                    error={interviewErrors.scheduledAt}
+                  >
                     <input
                       id="scheduledAt"
-                      className="input"
+                      className={"input" + (interviewErrors.scheduledAt ? " input-error" : "")}
                       type="datetime-local"
-                      required
+                      // Stops most past dates at the picker. It is not the
+                      // safeguard - the server checks again - but it means
+                      // the mistake is usually impossible to make.
+                      min={nowForInput()}
                       value={interviewForm.scheduledAt}
                       onChange={updateInterview("scheduledAt")}
+                      aria-invalid={Boolean(interviewErrors.scheduledAt)}
                     />
                   </Field>
                   <Field
                     label="Interviewer"
                     htmlFor="interviewerId"
-                    hint="They are notified in the app straight away."
+                    hint={
+                      interviewErrors.interviewerId
+                        ? undefined
+                        : "They are notified in the app straight away."
+                    }
+                    error={interviewErrors.interviewerId}
                   >
                     <select
                       id="interviewerId"
-                      className="select"
+                      className={"select" + (interviewErrors.interviewerId ? " input-error" : "")}
                       value={interviewForm.interviewerId}
                       onChange={updateInterview("interviewerId")}
+                      aria-invalid={Boolean(interviewErrors.interviewerId)}
                     >
                       <option value="">Choose an interviewer…</option>
                       {interviewers.map((person) => (

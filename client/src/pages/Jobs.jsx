@@ -4,7 +4,7 @@ import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
 import { Alert, Empty, Loading, StatusBadge, formatDate } from "../components/ui.jsx";
 
-/** Open positions. Only HR can open, edit or close one. */
+/** Vacancies. Only HR can open, edit or close one. */
 export default function Jobs() {
   const { user } = useAuth();
   const canCreate = Boolean(user?.permissions?.["position:create"]);
@@ -33,14 +33,14 @@ export default function Jobs() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>Open positions</h1>
+          <h1>Vacancies</h1>
           <p className="subtitle">
             Every role we are recruiting for, its interview process and how many candidates it has.
           </p>
         </div>
         {canCreate && (
-          <Link className="btn btn-primary" to="/positions/new">
-            + Open a position
+          <Link className="btn btn-primary" to="/vacancies/new">
+            + New vacancy
           </Link>
         )}
       </div>
@@ -69,14 +69,14 @@ export default function Jobs() {
       </div>
 
       {loading ? (
-        <Loading what="positions" />
+        <Loading what="vacancies" />
       ) : jobs.length === 0 ? (
         <div className="table-wrap">
-          <Empty title="No positions found">
-            <p>Try a different search{canCreate ? ", or open your first position." : "."}</p>
+          <Empty title="No vacancies found">
+            <p>Try a different search{canCreate ? ", or open your first vacancy." : "."}</p>
             {canCreate && (
-              <Link className="btn btn-primary mt-2" to="/positions/new">
-                + Open a position
+              <Link className="btn btn-primary mt-2" to="/vacancies/new">
+                + New vacancy
               </Link>
             )}
           </Empty>
@@ -86,7 +86,7 @@ export default function Jobs() {
           <table>
             <thead>
               <tr>
-                <th>Position</th>
+                <th>Vacancy</th>
                 <th>Department</th>
                 <th>Location</th>
                 <th>Type</th>
@@ -101,7 +101,7 @@ export default function Jobs() {
               {jobs.map((job) => (
                 <tr key={job.id}>
                   <td>
-                    <Link className="cell-title" to={"/positions/" + job.id}>
+                    <Link className="cell-title" to={"/vacancies/" + job.id}>
                       {job.title}
                     </Link>
                     <div className="cell-sub">{job.stages?.length || 0} stage process</div>
@@ -116,7 +116,7 @@ export default function Jobs() {
                   </td>
                   <td className="cell-sub">{formatDate(job.createdAt)}</td>
                   <td className="cell-right">
-                    <Link className="btn btn-secondary btn-sm" to={"/positions/" + job.id}>
+                    <Link className="btn btn-secondary btn-sm" to={"/vacancies/" + job.id}>
                       Open
                     </Link>
                   </td>

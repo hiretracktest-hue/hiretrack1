@@ -14,13 +14,16 @@ import {
   OUTCOME_LABEL,
   OutcomeBadge,
   Stars,
+  describeEmailProblem,
+  describeFutureDateProblem,
   formatDate,
+  nowForDateInput,
 } from "../components/ui.jsx";
 
 const OUTCOMES = ["ACTIVE", "ON_HOLD", "HIRED", "REJECTED"];
 
 /**
- * Every candidate across every position. The band filter is what makes
+ * Every candidate across every vacancy. The band filter is what makes
  * a large pile workable: screen each CV once, then work through the
  * High band first instead of re-reading everything.
  */
@@ -140,14 +143,46 @@ export default function Candidates() {
 
   const allVisibleSelected = candidates.length > 0 && selected.length === candidates.length;
 
+  // Per-field messages, so a bad email is flagged on the email box
+  // rather than as one banner above the whole form.
+  const [formErrors, setFormErrors] = useState({});
+
   const updateForm = (key) => (event) =>
-    setForm((current) => ({
-      ...current,
-      [key]: event.target.type === "checkbox" ? event.target.checked : event.target.value,
-    }));
+    setForm((current) => {
+      setFormErrors((errors) => {
+        if (!errors[key]) return errors;
+        const next = { ...errors };
+        delete next[key];
+        return next;
+      });
+      return {
+        ...current,
+        [key]: event.target.type === "checkbox" ? event.target.checked : event.target.value,
+      };
+    });
 
   async function addCandidate(event) {
     event.preventDefault();
+
+    // The server checks all of this again. Doing it here means the
+    // answer appears on the field that caused it, with no round trip.
+    const problems = {};
+    if (!form.jobId) problems.jobId = "Choose which vacancy this candidate applied for.";
+    if (!form.fullName.trim()) problems.fullName = "Enter the candidate's full name.";
+
+    const emailProblem = describeEmailProblem(form.email);
+    if (emailProblem) problems.email = emailProblem;
+
+    // Optional, but if a time is given it cannot already have passed.
+    const whenProblem = describeFutureDateProblem(form.inviteAt, {
+      field: "That time",
+      required: false,
+    });
+    if (whenProblem) problems.inviteAt = whenProblem;
+
+    setFormErrors(problems);
+    if (Object.keys(problems).length > 0) return;
+
     setAdding(true);
     setError("");
     setAdded("");
@@ -230,26 +265,30 @@ export default function Candidates() {
           <div className="card-title">
             <h2>Add a candidate</h2>
             <span className="muted small">
-              They start at the first stage of the position. Upload their CV on their own page.
+              They start at the first stage of the vacancy. Upload their CV on their own page.
             </span>
           </div>
 
+          {/* noValidate turns the browser's own pop-up off. The inputs still
+              carry min/type so the picker and keyboard behave, but the
+              message the person reads is ours - "that date is not
+              available" rather than "Value must be ... or later". */}
           {openJobs.length === 0 ? (
             <p className="muted">
-              There are no open positions to add anyone to. Open one first.
+              There are no open vacancies to add anyone to. Open one first.
             </p>
           ) : (
-            <form onSubmit={addCandidate}>
+            <form onSubmit={addCandidate} noValidate>
               <div className="grid grid-2">
-                <Field label="Position" htmlFor="add-job">
+                <Field label="Vacancy" htmlFor="add-job" error={formErrors.jobId}>
                   <select
                     id="add-job"
-                    className="select"
-                    required
+                    className={"select" + (formErrors.jobId ? " input-error" : "")}
                     value={form.jobId}
                     onChange={updateForm("jobId")}
+                    aria-invalid={Boolean(formErrors.jobId)}
                   >
-                    <option value="">Choose a position…</option>
+                    <option value="">Choose a vacancy…</option>
                     {openJobs.map((j) => (
                       <option key={j.id} value={j.id}>
                         {j.title}
@@ -257,30 +296,31 @@ export default function Candidates() {
                     ))}
                   </select>
                 </Field>
-                <Field label="Full name" htmlFor="add-name">
+                <Field label="Full name" htmlFor="add-name" error={formErrors.fullName}>
                   <input
                     id="add-name"
-                    className="input"
-                    required
+                    className={"input" + (formErrors.fullName ? " input-error" : "")}
                     minLength={2}
                     placeholder="Dilshan Herath"
                     value={form.fullName}
                     onChange={updateForm("fullName")}
+                    aria-invalid={Boolean(formErrors.fullName)}
                   />
                 </Field>
                 <Field
                   label="Email"
                   htmlFor="add-email"
                   hint="Their real address — this is where their invitation will go."
+                  error={formErrors.email}
                 >
                   <input
                     id="add-email"
-                    className="input"
+                    className={"input" + (formErrors.email ? " input-error" : "")}
                     type="email"
-                    required
                     placeholder="dilshan.herath@gmail.com"
                     value={form.email}
                     onChange={updateForm("email")}
+                    aria-invalid={Boolean(formErrors.email)}
                   />
                 </Field>
                 <Field label="Phone" htmlFor="add-phone">
@@ -318,13 +358,16 @@ export default function Candidates() {
                   label="Time to tell them (optional)"
                   htmlFor="add-when"
                   hint="Included in the email, and they are asked to reply if it does not suit."
+                  error={formErrors.inviteAt}
                 >
                   <input
                     id="add-when"
-                    className="input"
+                    className={"input" + (formErrors.inviteAt ? " input-error" : "")}
                     type="datetime-local"
+                    min={nowForDateInput()}
                     value={form.inviteAt}
                     onChange={updateForm("inviteAt")}
+                    aria-invalid={Boolean(formErrors.inviteAt)}
                   />
                 </Field>
               </div>
@@ -418,9 +461,9 @@ export default function Candidates() {
           className="select"
           value={job}
           onChange={(event) => setJob(event.target.value)}
-          aria-label="Filter by position"
+          aria-label="Filter by vacancy"
         >
-          <option value="">All positions</option>
+          <option value="">All vacancies</option>
           {jobs.map((item) => (
             <option key={item.id} value={item.id}>
               {item.title}
@@ -464,7 +507,7 @@ export default function Candidates() {
             <p>
               {isInterviewer
                 ? "You have nobody to interview at the moment."
-                : "Try clearing the filters, or add a candidate from a position."}
+                : "Try clearing the filters, or add a candidate from a vacancy."}
             </p>
           </Empty>
         </div>
@@ -486,7 +529,7 @@ export default function Candidates() {
                   </th>
                 )}
                 <th>Candidate</th>
-                <th>Position</th>
+                <th>Vacancy</th>
                 <th>CV band</th>
                 <th>Score</th>
                 <th>Stage</th>
@@ -516,7 +559,7 @@ export default function Candidates() {
                     <div className="cell-sub">{candidate.email}</div>
                   </td>
                   <td>
-                    <Link to={"/positions/" + candidate.jobId}>{candidate.jobTitle}</Link>
+                    <Link to={"/vacancies/" + candidate.jobId}>{candidate.jobTitle}</Link>
                     <div className="cell-sub">{candidate.jobDepartment || "—"}</div>
                   </td>
                   <td>

@@ -104,7 +104,7 @@ export default function Invite() {
 
         <dl className="invite-details">
           <Row label="Candidate" value={invite.candidateName} />
-          <Row label="Position" value={invite.jobTitle} />
+          <Row label="Vacancy" value={invite.jobTitle} />
           <Row label="Stage" value={invite.stage} />
           <Row label="Date and time" value={formatDateTime(invite.scheduledAt)} />
           <Row label="Location" value={invite.location || "To be confirmed"} />

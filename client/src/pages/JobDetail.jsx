@@ -12,10 +12,11 @@ import {
   OutcomeBadge,
   Pipeline,
   StatusBadge,
+  describeEmailProblem,
   formatDate,
 } from "../components/ui.jsx";
 
-/** One position: its description, its interview process, and everyone
+/** One vacancy: its description, its interview process, and everyone
  *  HR has added to it. */
 export default function JobDetail() {
   const { id } = useParams();
@@ -28,6 +29,8 @@ export default function JobDetail() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // Per-field messages for the add-candidate form.
+  const [formErrors, setFormErrors] = useState({});
   const [message, setMessage] = useState("");
   const [showAdd, setShowAdd] = useState(false);
 
@@ -69,7 +72,7 @@ export default function JobDetail() {
       const next = job.status === "ACTIVE" ? "CLOSED" : "ACTIVE";
       const result = await api.updateJob(id, { status: next });
       setJob(result.job);
-      setMessage(next === "CLOSED" ? "Position closed." : "Position reopened.");
+      setMessage(next === "CLOSED" ? "Vacancy closed." : "Vacancy reopened.");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -78,12 +81,12 @@ export default function JobDetail() {
   }
 
   async function removeJob() {
-    if (!window.confirm("Delete this position? This cannot be undone.")) return;
+    if (!window.confirm("Delete this vacancy? This cannot be undone.")) return;
     setBusy(true);
     setError("");
     try {
       await api.deleteJob(id);
-      navigate("/positions", { replace: true });
+      navigate("/vacancies", { replace: true });
     } catch (err) {
       setError(err.message);
       setBusy(false);
@@ -92,6 +95,17 @@ export default function JobDetail() {
 
   async function addCandidate(event) {
     event.preventDefault();
+
+    // Same check the server runs, so the answer arrives without a
+    // round trip and says what is actually wrong with the address.
+    const problems = {};
+    if (!form.fullName.trim()) problems.fullName = "Enter the candidate's full name.";
+    const emailProblem = describeEmailProblem(form.email);
+    if (emailProblem) problems.email = emailProblem;
+
+    setFormErrors(problems);
+    if (Object.keys(problems).length > 0) return;
+
     setBusy(true);
     setError("");
     try {
@@ -111,16 +125,25 @@ export default function JobDetail() {
   }
 
   function update(key) {
-    return (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
+    return (event) => {
+      setForm((current) => ({ ...current, [key]: event.target.value }));
+      // Clear the message as soon as they start fixing that field.
+      setFormErrors((current) => {
+        if (!current[key]) return current;
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    };
   }
 
-  if (loading) return <Loading what="this position" />;
+  if (loading) return <Loading what="this vacancy" />;
   if (!job) {
     return (
       <div className="page">
-        <Alert kind="error">{error || "That position could not be found."}</Alert>
-        <Link className="btn btn-secondary" to="/positions">
-          Back to positions
+        <Alert kind="error">{error || "That vacancy could not be found."}</Alert>
+        <Link className="btn btn-secondary" to="/vacancies">
+          Back to vacancies
         </Link>
       </div>
     );
@@ -130,8 +153,8 @@ export default function JobDetail() {
     <div className="page">
       <div className="page-head">
         <div>
-          <Link className="small" to="/positions">
-            ← All positions
+          <Link className="small" to="/vacancies">
+            ← All vacancies
           </Link>
           <h1 className="mt-1">{job.title}</h1>
           <p className="subtitle">
@@ -141,18 +164,18 @@ export default function JobDetail() {
         <div className="btn-row">
           <StatusBadge status={job.status} />
           {p["candidate:compare"] && (
-            <Link className="btn btn-secondary" to={"/positions/" + job.id + "/compare"}>
+            <Link className="btn btn-secondary" to={"/vacancies/" + job.id + "/compare"}>
               Compare candidates
             </Link>
           )}
           {p["position:edit"] && (
-            <Link className="btn btn-secondary" to={"/positions/" + job.id + "/edit"}>
+            <Link className="btn btn-secondary" to={"/vacancies/" + job.id + "/edit"}>
               Edit
             </Link>
           )}
           {p["position:close"] && (
             <button className="btn btn-secondary" onClick={toggleStatus} disabled={busy}>
-              {job.status === "ACTIVE" ? "Close position" : "Reopen position"}
+              {job.status === "ACTIVE" ? "Close vacancy" : "Reopen vacancy"}
             </button>
           )}
           {p["candidate:add"] && job.status === "ACTIVE" && (
@@ -179,28 +202,32 @@ export default function JobDetail() {
             </span>
           </div>
 
-          <form onSubmit={addCandidate}>
+          {/* noValidate turns the browser's own pop-up off. The inputs still
+              carry min/type so the picker and keyboard behave, but the
+              message the person reads is ours - "that date is not
+              available" rather than "Value must be ... or later". */}
+          <form onSubmit={addCandidate} noValidate>
             <div className="grid grid-2">
               <Field label="Full name" htmlFor="fullName">
                 <input
                   id="fullName"
-                  className="input"
-                  required
+                  className={"input" + (formErrors.fullName ? " input-error" : "")}
                   minLength={2}
                   placeholder="Maya Fernando"
                   value={form.fullName}
                   onChange={update("fullName")}
+                  aria-invalid={Boolean(formErrors.fullName)}
                 />
               </Field>
-              <Field label="Email" htmlFor="email">
+              <Field label="Email" htmlFor="email" error={formErrors.email}>
                 <input
                   id="email"
-                  className="input"
+                  className={"input" + (formErrors.email ? " input-error" : "")}
                   type="email"
-                  required
                   placeholder="maya.fernando@gmail.com"
                   value={form.email}
                   onChange={update("email")}
+                  aria-invalid={Boolean(formErrors.email)}
                 />
               </Field>
               <Field label="Phone" htmlFor="phone">
@@ -262,13 +289,13 @@ export default function JobDetail() {
           <div className="card">
             <h2>Job description</h2>
             <p className="mt-1" style={{ whiteSpace: "pre-wrap" }}>
-              {job.description || "No description was added for this position."}
+              {job.description || "No description was added for this vacancy."}
             </p>
 
             <div className="mt-3">
               <div className="detail-label">Interview process</div>
               <p className="field-hint">
-                Stages are set for this position on its own, so different roles can follow different
+                Stages are set for this vacancy on its own, so different roles can follow different
                 processes.
               </p>
               <div className="mt-1">
@@ -281,7 +308,7 @@ export default function JobDetail() {
             <div className="card-title">
               <h2>Candidates ({candidates.length})</h2>
               {p["candidate:compare"] && candidates.length > 0 && (
-                <Link className="small" to={"/positions/" + job.id + "/compare"}>
+                <Link className="small" to={"/vacancies/" + job.id + "/compare"}>
                   Compare side by side
                 </Link>
               )}
@@ -292,7 +319,7 @@ export default function JobDetail() {
                 <p>
                   {p["candidate:add"]
                     ? "Use “Add candidate” above to put someone into this pipeline."
-                    : "HR has not added anyone to this position yet."}
+                    : "HR has not added anyone to this vacancy yet."}
                 </p>
               </Empty>
             ) : (
@@ -385,10 +412,10 @@ export default function JobDetail() {
           {p["position:delete"] && (
             <div className="mt-3">
               <button className="btn btn-danger btn-block" onClick={removeJob} disabled={busy}>
-                Delete position
+                Delete vacancy
               </button>
               <p className="field-hint">
-                A position that already has candidates cannot be deleted — close it instead.
+                A vacancy that already has candidates cannot be deleted — close it instead.
               </p>
             </div>
           )}

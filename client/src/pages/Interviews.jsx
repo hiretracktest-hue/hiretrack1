@@ -176,7 +176,7 @@ export default function Interviews() {
               <tr>
                 <th>When</th>
                 <th>Candidate</th>
-                <th>Position</th>
+                <th>Vacancy</th>
                 <th>Stage</th>
                 <th>Interviewer</th>
                 <th>Where</th>

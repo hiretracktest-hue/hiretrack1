@@ -50,7 +50,7 @@ export default function SignIn() {
             Altrium
           </span>
           <h1>Welcome back</h1>
-          <p>Sign in to manage positions and candidates.</p>
+          <p>Sign in to manage vacancies and candidates.</p>
         </div>
 
         {justReset && <Alert kind="success">Password updated. Sign in with your new password.</Alert>}

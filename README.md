@@ -520,23 +520,21 @@ of uploads, and an audit log.
 
 ## 9b. Putting it online
 
-**GitHub Pages cannot host this.** Pages serves static files only — it cannot
+**GitHub Pages cannot host this.** Pages serves static files only - it cannot
 run Node, so it cannot run the API, the database connection, sign-in, uploads
-or email. Pointing Pages at this repository renders `README.md` as a web page,
+or email. Pointing Pages at this repository shows `README.md` as a web page,
 which is not the application.
 
-One service hosts the whole thing instead: `npm start` boots Express, which also
-serves the built React app. The database stays on Supabase.
+The whole thing runs as one service: `npm start` boots Express, which serves
+the built React app as well. The database stays on Supabase.
 
-**[render.yaml](render.yaml)** configures it. In Render: **New → Blueprint →**
-pick this repository. It asks for the secrets, which are never written into the
-repo. Set `CLIENT_URL` to the https address Render gives you — the accept and
-decline links in interview emails are built from it, and they point at localhost
-if it is wrong.
+A host has not been chosen yet. Whichever one is used, it needs to:
 
-The free plan sleeps after 15 minutes idle, so the first visit after a quiet
-spell takes about 50 seconds to wake. Worth knowing before somebody marks it and
-assumes it is broken.
+- run `npm install && npm run build` to build the React app, then `npm start`
+- be given the same environment variables that are in `.env` - never commit them
+- have `CLIENT_URL` set to the public https address. The accept and decline
+  links in interview emails are built from it and will point at localhost if it
+  is wrong.
 
 ### Before making it public
 

@@ -44,7 +44,7 @@ export const api = {
   resetPassword: (body) => request("/auth/reset-password", { method: "POST", body }),
   changePassword: (body) => request("/auth/change-password", { method: "POST", body }),
 
-  // open positions
+  // vacancies (open positions)
   listJobs: (params = {}) => request("/jobs" + query(params)),
   getJob: (id) => request("/jobs/" + id),
   createJob: (body) => request("/jobs", { method: "POST", body }),
@@ -57,6 +57,12 @@ export const api = {
   addCandidate: (body) => request("/candidates", { method: "POST", body }),
   updateCandidate: (id, body) => request("/candidates/" + id, { method: "PATCH", body }),
   advanceCandidate: (id) => request("/candidates/" + id + "/advance", { method: "POST" }),
+  // Pass null to hand the candidate back to the unassigned pool.
+  assignInterviewer: (id, interviewerId) =>
+    request("/candidates/" + id + "/assign", {
+      method: "POST",
+      body: { interviewerId: interviewerId || null },
+    }),
   bandCv: (id, band, note) =>
     request("/candidates/" + id + "/band", { method: "POST", body: { band, note } }),
   bandCvBulk: (ids, band) =>
