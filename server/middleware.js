@@ -1,5 +1,5 @@
 import { COOKIE_NAME, verifyToken, findUserById, publicUser } from "./auth.js";
-import { can, ROLE_LABELS } from "./config.js";
+import { can, config, ROLE_LABELS } from "./config.js";
 
 /**
  * Reads the login cookie and attaches req.user when it is valid.
@@ -64,7 +64,10 @@ export function errorHandler(err, _req, res, _next) {
   // Multer and PostgreSQL errors carry codes we can turn into friendly
   // messages instead of a bare 500.
   if (err?.code === "LIMIT_FILE_SIZE") {
-    return res.status(400).json({ error: "That file is too large. The limit is 5 MB." });
+    // Read from config, not typed in - this message said 15 MB while
+    // the limit was 5 for a while, which is worse than no message.
+    const mb = Math.round(config.upload.maxBytes / (1024 * 1024));
+    return res.status(400).json({ error: "That file is too large. The limit is " + mb + " MB." });
   }
   // 23505 = unique_violation, 23503 = foreign_key_violation,
   // 23514 = check_violation, 22P02 = invalid_text_representation

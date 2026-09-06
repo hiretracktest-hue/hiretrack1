@@ -247,6 +247,36 @@ export function formatBytes(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
+/** What a CV has to be. Mirrors config.upload on the server - one rule,
+ *  written twice, so the person is told before the upload as well as
+ *  after it. The server is still the one that decides. */
+export const CV_MAX_BYTES = 5 * 1024 * 1024;
+export const CV_ACCEPT = ".pdf,.docx";
+export const CV_HINT = "PDF or DOCX · maximum 5 MB.";
+
+/** Says what is wrong with a chosen CV, or null when it is fine. */
+export function describeCvProblem(file, { required = true } = {}) {
+  if (!file) {
+    return required ? "Choose their CV - it is what the shortlist is worked out from." : null;
+  }
+
+  const name = file.name || "";
+  const dot = name.lastIndexOf(".");
+  const ext = dot === -1 ? "" : name.slice(dot).toLowerCase();
+
+  if (!CV_ACCEPT.split(",").includes(ext)) {
+    return (
+      "Invalid format: " +
+      (ext || "a file with no extension") +
+      " is not accepted. A CV has to be a PDF or DOCX file."
+    );
+  }
+  if (file.size > CV_MAX_BYTES) {
+    return "That file is " + formatBytes(file.size) + ". The limit is 5 MB.";
+  }
+  return null;
+}
+
 /**
  * Says what is wrong with an email address, or null when it is fine.
  *

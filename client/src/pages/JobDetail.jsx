@@ -12,13 +12,12 @@ import {
   OutcomeBadge,
   Pipeline,
   StatusBadge,
+  CV_ACCEPT,
+  CV_HINT,
+  describeCvProblem,
   describeEmailProblem,
-  formatBytes,
   formatDate,
 } from "../components/ui.jsx";
-
-// Matches UPLOAD_MAX_MB on the server.
-const MAX_CV_BYTES = 15 * 1024 * 1024;
 
 const BLANK_FORM = {
   fullName: "",
@@ -111,11 +110,8 @@ export default function JobDetail() {
     if (emailProblem) problems.email = emailProblem;
 
     // Asked for here, not on a second screen.
-    if (!cvFile) {
-      problems.cv = "Choose their CV - it is what the shortlist is worked out from.";
-    } else if (cvFile.size > MAX_CV_BYTES) {
-      problems.cv = "That file is " + formatBytes(cvFile.size) + ". The limit is 15 MB.";
-    }
+    const cvProblemNow = describeCvProblem(cvFile);
+    if (cvProblemNow) problems.cv = cvProblemNow;
 
     setFormErrors(problems);
     if (Object.keys(problems).length > 0) return;
@@ -292,7 +288,7 @@ export default function JobDetail() {
               <Field
                 label="Their CV"
                 htmlFor="cv"
-                hint="Any file type - maximum 15 MB."
+                hint={CV_HINT}
                 error={formErrors.cv}
               >
                 <input
@@ -300,6 +296,7 @@ export default function JobDetail() {
                   key={cvKey}
                   className={"input" + (formErrors.cv ? " input-error" : "")}
                   type="file"
+                  accept={CV_ACCEPT}
                   onChange={(event) => {
                     setCvFile(event.target.files?.[0] || null);
                     setFormErrors((current) => {

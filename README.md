@@ -185,17 +185,20 @@ HR uploads a CV; the hiring manager, the interviewer and management can open
 and download it but cannot replace it. Candidates have no account at all — the
 system begins after HR has added them.
 
-**Any file type is accepted.** A CV arrives as whatever the candidate happened
-to send: a PDF, a Word file, an ODT, a phone photo of a printout, a zip of a
-portfolio. Making HR convert it first is a made-up obstacle. The cap is size
-(15 MB), not format.
+**PDF or `.docx` only, up to 5 MB.** Anything else is refused with *"Invalid
+format"*, naming the extension that was rejected. The size cap is
+`UPLOAD_MAX_MB` in `.env`; the format list is not configurable.
 
-That is only safe because of how a CV is served back. An `.html` or `.svg` CV
-would run its own scripts if a browser rendered it, and rendering one on this
-origin would be XSS straight through the app. So a CV always comes back as an
-**attachment**, with `X-Content-Type-Options: nosniff` and a locked-down CSP —
-it is saved, never executed. There is a test that uploads a file containing a
-`<script>` tag and checks it comes back as a download.
+The name alone is not trusted. The extension is checked first, and then the
+file's first bytes: a PDF has to start with `%PDF-`, and a `.docx` — which is a
+zip underneath — has to start with the zip signature. Renaming `notes.txt` to
+`notes.pdf` gets past the first check and stops at the second, so *"invalid
+format"* means the file really is the wrong format.
+
+A stored CV is also always served back as an **attachment**, with
+`X-Content-Type-Options: nosniff` and a locked-down CSP — saved, never
+executed. That is the second lock: even if something got in, a browser will not
+run it on this origin.
 
 Files go to a **private Supabase Storage bucket** when `SUPABASE_URL` and
 `SUPABASE_SERVICE_ROLE_KEY` are set, and to `server/uploads` when they are not.
@@ -496,6 +499,26 @@ are never touched. They are grouped by the questions in
 the brief: per-position stages, the feedback gate before advancing, fair
 comparison, interview notifications, the four roles, CV screening, and the
 reports (including a test that the totals are not double-counted).
+
+### The Sprint 1 test cases
+
+The four cases on the *Schedule Interview* slide run as part of `npm test`,
+under the suite **"Sprint 1 test cases - schedule interview"**, so the slide and
+a real run can be put side by side:
+
+| Case  | What it checks | Expected |
+|-------|----------------|----------|
+| TC-12 | Valid booking — date, stage, interviewer Sanduni | saved, and shown back on the candidate |
+| TC-14 | A date exactly one week before today | refused: *"that date is not available"* |
+| TC-15 | Interviewer left blank | refused: *"Choose the interviewer…"*, and nothing is written |
+| TC-16 | 10 consecutive bookings on a warm server | each confirmed in under 2 seconds |
+
+TC-16 prints the average and the slowest of its ten runs, so the number quoted
+on the slide comes from a real run rather than memory.
+
+TC-12's date is set a year past the one on the slide. The case is "a real
+working date", not "this exact day" — a test that expires is worse than no
+test.
 
 ---
 

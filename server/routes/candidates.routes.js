@@ -4,7 +4,7 @@ import { config, can } from "../config.js";
 import { asyncHandler, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 import { stagesFor } from "./jobs.routes.js";
-import { uploadCv, safeFilename } from "../upload.js";
+import { uploadCv, safeFilename, assertRealCv } from "../upload.js";
 import { putCv, getCv, removeCv } from "../storage.js";
 import { notifyCandidateAdded } from "../notify.js";
 import { notifyOutcome } from "../notify.js";
@@ -566,6 +566,10 @@ router.post(
     if (!existing) throw httpError(404, "That candidate does not exist.");
     if (!req.file) throw httpError(400, "Choose a CV file to upload.");
 
+    // The extension was checked before the file was accepted; this
+    // checks the bytes behind it, so a renamed file cannot slip in.
+    assertRealCv(req.file);
+
     const previous = { name: existing.cv_stored_name, storage: existing.cv_storage };
     const stored = await putCv(req.file);
 
@@ -606,12 +610,11 @@ router.get(
     // download flag, so Supabase serves it as an attachment too.
     if (found.kind === "supabase") return res.redirect(found.url);
 
-    // Any file type is accepted, so a CV could be an .html or an .svg.
-    // Both of those would run scripts if a browser rendered them, and
-    // rendering one on this origin would be an XSS hole straight through
-    // the app. res.download() sets Content-Disposition: attachment, and
-    // nosniff stops the browser second-guessing the type - together that
-    // means a stored file is never executed, only saved.
+    // Only PDFs and .docx files can get in now, but this stays: it is
+    // the second lock. res.download() sets Content-Disposition:
+    // attachment and nosniff stops the browser second-guessing the
+    // type, so even a stored file that turned out to be something else
+    // is saved rather than run on this origin.
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
     res.download(found.path, filename, (err) => {

@@ -14,18 +14,16 @@ import {
   OUTCOME_LABEL,
   OutcomeBadge,
   Stars,
+  CV_ACCEPT,
+  CV_HINT,
+  describeCvProblem,
   describeEmailProblem,
   describeFutureDateProblem,
-  formatBytes,
   formatDate,
   nowForDateInput,
 } from "../components/ui.jsx";
 
 const OUTCOMES = ["ACTIVE", "ON_HOLD", "HIRED", "REJECTED"];
-
-// Matches UPLOAD_MAX_MB on the server. Checked here as well so a
-// 40 MB scan is refused before it is uploaded, not after.
-const MAX_CV_BYTES = 15 * 1024 * 1024;
 
 // Everything the add form holds. inviteLink and inviteAt belong here
 // too - left out, React treats those two inputs as uncontrolled and
@@ -195,11 +193,8 @@ export default function Candidates() {
 
     // The CV is asked for here rather than on a second screen, because
     // it is the thing the shortlist is actually worked out from.
-    if (!cvFile) {
-      problems.cv = "Choose their CV - it is what the shortlist is worked out from.";
-    } else if (cvFile.size > MAX_CV_BYTES) {
-      problems.cv = "That file is " + formatBytes(cvFile.size) + ". The limit is 15 MB.";
-    }
+    const cvProblemNow = describeCvProblem(cvFile);
+    if (cvProblemNow) problems.cv = cvProblemNow;
 
     setFormErrors(problems);
     if (Object.keys(problems).length > 0) return;
@@ -424,7 +419,7 @@ export default function Candidates() {
                 <Field
                   label="Their CV"
                   htmlFor="add-cv"
-                  hint="Any file type - maximum 15 MB."
+                  hint={CV_HINT}
                   error={formErrors.cv}
                 >
                   <input
@@ -432,6 +427,7 @@ export default function Candidates() {
                     key={cvKey}
                     className={"input" + (formErrors.cv ? " input-error" : "")}
                     type="file"
+                    accept={CV_ACCEPT}
                     onChange={(event) => {
                       setCvFile(event.target.files?.[0] || null);
                       setFormErrors((current) => {

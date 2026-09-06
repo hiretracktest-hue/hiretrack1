@@ -4,6 +4,9 @@ import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
 import {
   Alert,
+  CV_ACCEPT,
+  CV_HINT,
+  describeCvProblem,
   BAND_LABEL,
   BANDS,
   BandBadge,
@@ -11,7 +14,6 @@ import {
   Loading,
   OUTCOME_LABEL,
   OutcomeBadge,
-  Pipeline,
   RecommendationBadge,
   Stars,
   formatBytes,
@@ -56,6 +58,7 @@ export default function CandidateDetail() {
   const [editForm, setEditForm] = useState({});
   const [outcome, setOutcome] = useState("ACTIVE");
   const [cvFile, setCvFile] = useState(null);
+  const [cvError, setCvError] = useState("");
 
   const [interviewForm, setInterviewForm] = useState({
     stage: "",
@@ -154,14 +157,6 @@ export default function CandidateDetail() {
     }
   }
 
-  async function advance() {
-    const result = await run(() => api.advanceCandidate(id), null);
-    if (result) {
-      setMessage("Moved to " + result.candidate.currentStage + ".");
-      await load();
-    }
-  }
-
   async function saveEdit(event) {
     event.preventDefault();
     const result = await run(() => api.updateCandidate(id, editForm), "Details saved.");
@@ -183,10 +178,17 @@ export default function CandidateDetail() {
   async function uploadCv(event) {
     event.preventDefault();
     if (!cvFile) return;
+
+    const problem = describeCvProblem(cvFile);
+    if (problem) {
+      setCvError(problem);
+      return;
+    }
     const form = event.target;
     const result = await run(() => api.uploadCv(id, cvFile), "CV uploaded.");
     if (result) {
       setCvFile(null);
+      setCvError("");
       form.reset();
       setShowCvForm(false);
     }
@@ -335,12 +337,9 @@ export default function CandidateDetail() {
     );
   }
 
+  // Still needed: the feedback form asks which stage the review is for.
   const stages = candidate.stages || [];
-  const stageIndex = stages.indexOf(candidate.currentStage);
-  const nextStage =
-    stageIndex >= 0 && stageIndex < stages.length - 1 ? stages[stageIndex + 1] : null;
   const averageRating = candidate.averageRating;
-  const needsFeedbackFirst = nextStage && candidate.stageFeedbackCount === 0 && stageIndex > 0;
 
   return (
     <div className="page">
@@ -374,61 +373,50 @@ export default function CandidateDetail() {
         {message}
       </Alert>
 
-      {/* ---- progress: one strip, not a section ---- */}
-      <div className="card card-tight">
-        <div className="row-between">
-          <Pipeline stages={stages} currentStage={candidate.currentStage} />
-          <span className="muted small">
-            Stage {stageIndex + 1} of {stages.length}
-            {averageRating !== null && averageRating !== undefined
-              ? " · average score " + averageRating + " / 5"
-              : ""}
-          </span>
-        </div>
+      {/* The stage pipeline used to sit here: Applied > Screening >
+          Interview > Offer, with a "Move to the next one" button. It is
+          gone from this screen on purpose. Opening somebody's profile is
+          for reading who they are, looking at their CV and putting an
+          interviewer on them - not for walking them through a process.
 
-        {(p["candidate:advance"] || p["candidate:outcome"]) && (
-          <div className="btn-row mt-2">
-            {p["candidate:advance"] && (
-              <button className="btn btn-primary" onClick={advance} disabled={busy || !nextStage}>
-                {nextStage ? "Move to " + nextStage : "Final stage reached"}
+          The stages themselves are untouched: each vacancy still defines
+          its own, the candidate still sits on one, and the rule that
+          feedback has to be in before anyone moves forward is still
+          enforced by the API. What is left here is the one decision this
+          page is actually for. */}
+      {p["candidate:outcome"] && (
+        <div className="card card-tight">
+          <div className="row-between">
+            <div className="btn-row">
+              <select
+                className="select"
+                style={{ width: "auto" }}
+                value={outcome}
+                onChange={(event) => setOutcome(event.target.value)}
+                aria-label="Outcome"
+              >
+                {OUTCOMES.map((value) => (
+                  <option key={value} value={value}>
+                    {OUTCOME_LABEL[value]}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="btn btn-primary"
+                onClick={saveOutcome}
+                disabled={busy || outcome === candidate.outcome}
+              >
+                Record outcome
               </button>
-            )}
-
-            {p["candidate:outcome"] && (
-              <>
-                <select
-                  className="select"
-                  style={{ width: "auto" }}
-                  value={outcome}
-                  onChange={(event) => setOutcome(event.target.value)}
-                  aria-label="Outcome"
-                >
-                  {OUTCOMES.map((value) => (
-                    <option key={value} value={value}>
-                      {OUTCOME_LABEL[value]}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  className="btn btn-secondary"
-                  onClick={saveOutcome}
-                  disabled={busy || outcome === candidate.outcome}
-                >
-                  Record outcome
-                </button>
-              </>
-            )}
-
-            {/* Only says why the button is dead when it actually is -
-                the rule does not need explaining the rest of the time. */}
-            {needsFeedbackFirst && (
-              <span className="badge badge-amber">
-                Feedback for {candidate.currentStage} has to be in first
-              </span>
-            )}
+            </div>
+            <span className="muted small">
+              {averageRating !== null && averageRating !== undefined
+                ? "Average score " + averageRating + " / 5"
+                : "No scores yet"}
+            </span>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="grid grid-sidebar mt-2">
         <div>
@@ -509,10 +497,6 @@ export default function CandidateDetail() {
                   <div>
                     <div className="detail-label">Source</div>
                     <div className="detail-value">{candidate.source || "—"}</div>
-                  </div>
-                  <div>
-                    <div className="detail-label">Current stage</div>
-                    <div className="detail-value">{candidate.currentStage}</div>
                   </div>
                   {/* What went out in their invitation, so HR can see
                       what the candidate was actually told. */}
@@ -971,16 +955,25 @@ export default function CandidateDetail() {
                 <Field
                   label={candidate.cv ? "Replace the CV" : "Upload their CV"}
                   htmlFor="cv"
-                  hint="Any file type · maximum 15 MB."
+                  hint={CV_HINT}
+                  error={cvError}
                 >
                   <input
                     id="cv"
-                    className="input"
+                    className={"input" + (cvError ? " input-error" : "")}
                     type="file"
-                    onChange={(event) => setCvFile(event.target.files?.[0] || null)}
+                    accept={CV_ACCEPT}
+                    onChange={(event) => {
+                      const chosen = event.target.files?.[0] || null;
+                      setCvFile(chosen);
+                      // Say so as soon as the wrong file is picked, not
+                      // after it has been sent up and refused.
+                      setCvError(chosen ? describeCvProblem(chosen) || "" : "");
+                    }}
+                    aria-invalid={Boolean(cvError)}
                   />
                 </Field>
-                <button className="btn btn-primary btn-block" disabled={busy || !cvFile}>
+                <button className="btn btn-primary btn-block" disabled={busy || !cvFile || Boolean(cvError)}>
                   {busy ? "Uploading…" : candidate.cv ? "Replace CV" : "Upload CV"}
                 </button>
               </form>

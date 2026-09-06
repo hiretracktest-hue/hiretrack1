@@ -88,16 +88,17 @@ export const config = {
   },
 
   upload: {
-    maxBytes: Number(process.env.UPLOAD_MAX_MB || 15) * 1024 * 1024,
-    // Any file type. A CV arrives as whatever the candidate happened to
-    // send - a PDF, a Word file, an ODT, a scan, a zip of a portfolio -
-    // and HR should not have to convert it before it can be filed.
+    maxBytes: Number(process.env.UPLOAD_MAX_MB || 5) * 1024 * 1024,
+    // A CV is a PDF or a Word .docx. Nothing else is accepted.
     //
-    // Accepting anything is only safe because of how it is served back:
-    // always as a download, never rendered in the page. See the note on
-    // the download route in candidates.routes.js.
-    allowedMime: null,
-    allowedExt: null,
+    // The extension is checked, and so are the file's first bytes - a
+    // name is only a name, and "invalid format" should mean the file is
+    // actually the wrong format, not that somebody renamed it. The MIME
+    // type the browser sends is deliberately NOT trusted: it gets .docx
+    // wrong often enough to reject real CVs.
+    allowedExt: [".pdf", ".docx"],
+    // What the file input offers, and what the error message says.
+    allowedLabel: "PDF or DOCX",
   },
   // "Should a candidate be blocked from advancing until the current
   // stage's feedback is in?" - yes. Set this to false in .env to lift it.

@@ -19,17 +19,58 @@ fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 // config.upload.maxBytes and one file per request.
 const storage = multer.memoryStorage();
 
+/** A 400 the client is allowed to see the message of. */
+function badFormat(message) {
+  const err = new Error(message);
+  err.status = 400;
+  err.expose = true;
+  return err;
+}
+
 function fileFilter(_req, file, cb) {
-  // Every file type is accepted - see config.upload for why. Size is
-  // still capped (multer limits, below), and an empty upload is not a
-  // file at all.
   if (!file.originalname) {
-    const err = new Error("That file has no name, so it cannot be stored.");
-    err.status = 400;
-    err.expose = true;
-    return cb(err);
+    return cb(badFormat("That file has no name, so it cannot be stored."));
   }
+
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (!config.upload.allowedExt.includes(ext)) {
+    return cb(
+      badFormat(
+        "Invalid format: " +
+          (ext || "a file with no extension") +
+          " is not accepted. A CV has to be a " +
+          config.upload.allowedLabel +
+          " file."
+      )
+    );
+  }
+
   cb(null, true);
+}
+
+/**
+ * The name said .pdf or .docx - this checks the file actually is one.
+ *
+ * A PDF starts with "%PDF-". A .docx is a zip, so it starts with the
+ * zip signature "PK". Renaming notes.txt to notes.pdf gets
+ * past the extension check and stops here, which is what keeps
+ * "invalid format" honest and keeps an .html file - which a browser
+ * would happily run - out of the CV store.
+ */
+export function assertRealCv(file) {
+  const ext = path.extname(file.originalname).toLowerCase();
+  const head = file.buffer;
+
+  const isPdf = head.subarray(0, 5).toString("latin1") === "%PDF-";
+  const isZip =
+    head[0] === 0x50 && head[1] === 0x4b && head[2] === 0x03 && head[3] === 0x04;
+
+  if (ext === ".pdf" && !isPdf) {
+    throw badFormat("Invalid format: that file is named .pdf but is not a PDF.");
+  }
+  if (ext === ".docx" && !isZip) {
+    throw badFormat("Invalid format: that file is named .docx but is not a Word document.");
+  }
 }
 
 export const uploadCv = multer({

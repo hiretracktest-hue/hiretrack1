@@ -56,7 +56,6 @@ export const api = {
   getCandidate: (id) => request("/candidates/" + id),
   addCandidate: (body) => request("/candidates", { method: "POST", body }),
   updateCandidate: (id, body) => request("/candidates/" + id, { method: "PATCH", body }),
-  advanceCandidate: (id) => request("/candidates/" + id + "/advance", { method: "POST" }),
   // Pass null to hand the candidate back to the unassigned pool.
   assignInterviewer: (id, interviewerId) =>
     request("/candidates/" + id + "/assign", {

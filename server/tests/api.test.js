@@ -68,6 +68,9 @@ delete process.env.SMTP_PASS;
 delete process.env.SUPABASE_URL;
 delete process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+const DOCX_MIME =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
 const TEST_UPLOADS = path.join(os.tmpdir(), "hiretrack-test-uploads-" + Date.now());
 fs.mkdirSync(TEST_UPLOADS, { recursive: true });
 process.env.UPLOAD_DIR = TEST_UPLOADS;
@@ -406,16 +409,13 @@ describe("HR adds candidates", () => {
     assert.equal(status, 409);
   });
 
-  test("a CV can be any kind of file", async () => {
-    // A CV arrives as whatever the candidate happened to send. HR should
-    // not have to convert a scan or an ODT before it can be filed.
+  test("a PDF and a .docx are accepted", async () => {
     const id = Number((await one("SELECT id FROM candidates WHERE email = $1", ["maya@example.com"])).id);
 
     const kinds = [
       ["maya.pdf", "%PDF-1.4 cv", "application/pdf"],
-      ["notes.txt", "plain notes", "text/plain"],
-      ["portfolio.zip", "PK\u0003\u0004", "application/zip"],
-      ["scan.png", "\u0089PNG", "image/png"],
+      // A .docx is a zip underneath, so it starts with the zip signature.
+      ["maya.docx", "PK\u0003\u0004 word", DOCX_MIME],
     ];
 
     for (const [name, body, type] of kinds) {
@@ -432,20 +432,62 @@ describe("HR adds candidates", () => {
     await call("POST", "/api/candidates/" + id + "/cv", finalForm, true);
   });
 
-  test("a CV is always served as a download, never rendered", async () => {
-    // This is what makes accepting any file type safe. An .html or .svg
-    // CV would run its own scripts if a browser rendered it, and
-    // rendering one on this origin would be XSS straight through the
-    // app. It must come back as an attachment every time.
+  test("anything that is not a PDF or a .docx is an invalid format", async () => {
     const id = Number((await one("SELECT id FROM candidates WHERE email = $1", ["maya@example.com"])).id);
 
-    const nasty = new FormData();
-    nasty.append(
-      "cv",
-      new Blob(["<script>alert(1)</script>"], { type: "text/html" }),
-      "cv.html"
-    );
-    assert.equal((await call("POST", "/api/candidates/" + id + "/cv", nasty, true)).status, 200);
+    const refused = [
+      ["notes.txt", "plain notes", "text/plain"],
+      ["portfolio.zip", "PK\u0003\u0004", "application/zip"],
+      ["scan.png", "\u0089PNG", "image/png"],
+      ["cv.html", "<script>alert(1)</script>", "text/html"],
+      ["cv.doc", "old word file", "application/msword"],
+      ["noextension", "something", "application/octet-stream"],
+    ];
+
+    for (const [name, body, type] of refused) {
+      const form = new FormData();
+      form.append("cv", new Blob([body], { type }), name);
+      const upload = await call("POST", "/api/candidates/" + id + "/cv", form, true);
+      assert.equal(upload.status, 400, name + " should be refused");
+      assert.match(upload.data.error, /Invalid format/i, "for " + name);
+    }
+  });
+
+  test("a file renamed to .pdf is caught by its own bytes", async () => {
+    // The extension is only a name. "Invalid format" has to mean the
+    // file really is the wrong format, or the check is theatre.
+    const id = Number((await one("SELECT id FROM candidates WHERE email = $1", ["maya@example.com"])).id);
+
+    const form = new FormData();
+    form.append("cv", new Blob(["<script>alert(1)</script>"], { type: "application/pdf" }), "sneaky.pdf");
+    const upload = await call("POST", "/api/candidates/" + id + "/cv", form, true);
+
+    assert.equal(upload.status, 400);
+    assert.match(upload.data.error, /named \.pdf but is not a PDF/i);
+  });
+
+  test("a CV over 5 MB is refused, and says the limit", async () => {
+    const id = Number((await one("SELECT id FROM candidates WHERE email = $1", ["maya@example.com"])).id);
+
+    const big = "%PDF-1.4 " + "x".repeat(6 * 1024 * 1024);
+    const form = new FormData();
+    form.append("cv", new Blob([big], { type: "application/pdf" }), "huge.pdf");
+    const upload = await call("POST", "/api/candidates/" + id + "/cv", form, true);
+
+    assert.equal(upload.status, 400);
+    assert.match(upload.data.error, /too large/i);
+    assert.match(upload.data.error, /5 MB/);
+  });
+
+  test("a CV is always served as a download, never rendered", async () => {
+    // The format check is the first lock; this is the second. Even a
+    // file that got in has to come back as an attachment, so nothing
+    // stored here can ever run on this origin.
+    const id = Number((await one("SELECT id FROM candidates WHERE email = $1", ["maya@example.com"])).id);
+
+    const restore = new FormData();
+    restore.append("cv", new Blob(["%PDF-1.4 cv"], { type: "application/pdf" }), "maya.pdf");
+    assert.equal((await call("POST", "/api/candidates/" + id + "/cv", restore, true)).status, 200);
 
     const response = await fetch(baseUrl + "/api/candidates/" + id + "/cv", {
       headers: { Cookie: cookie },
@@ -456,22 +498,12 @@ describe("HR adds candidates", () => {
       /^attachment/,
       "must be an attachment, not inline"
     );
-    assert.match(response.headers.get("content-disposition") || "", /cv\.html/);
+    assert.match(response.headers.get("content-disposition") || "", /maya\.pdf/);
     assert.equal(
       response.headers.get("x-content-type-options"),
       "nosniff",
       "the browser must not second-guess the type"
     );
-
-    // Put a normal CV back for the tests that follow.
-    const restore = new FormData();
-    restore.append("cv", new Blob(["%PDF-1.4 cv"], { type: "application/pdf" }), "maya.pdf");
-    await call("POST", "/api/candidates/" + id + "/cv", restore, true);
-
-    const again = await fetch(baseUrl + "/api/candidates/" + id + "/cv", {
-      headers: { Cookie: cookie },
-    });
-    assert.match(again.headers.get("content-disposition") || "", /maya\.pdf/);
   });
 
   test("an invalid id returns a clear 400, not a crash", async () => {
@@ -1559,5 +1591,171 @@ describe("adding a candidate is one step", () => {
     const { status } = await call("POST", "/api/candidates/" + row.id + "/cv", form, true);
     assert.equal(status, 403);
     await signIn("hr@example.com");
+  });
+});
+
+// =====================================================================
+// The four test cases on the Sprint 1 "Schedule Interview" slide, in
+// the order they appear on it. Named so a marker can put the slide and
+// the run side by side: TC-12, TC-14, TC-15, TC-16.
+// =====================================================================
+describe("Sprint 1 test cases - schedule interview", () => {
+  let candidateId;
+  let sanduniId;
+
+  before(async () => {
+    await signIn("hr@example.com");
+
+    const job = await one(
+      "INSERT INTO jobs (title, created_by) VALUES ($1, (SELECT id FROM users WHERE email = $2)) " +
+        "RETURNING id",
+      ["Test case vacancy", "hr@example.com"]
+    );
+    await run("INSERT INTO job_stages (job_id, name, position) VALUES ($1, $2, $3)", [
+      job.id,
+      "Applied",
+      0,
+    ]);
+    await run("INSERT INTO job_stages (job_id, name, position) VALUES ($1, $2, $3)", [
+      job.id,
+      "Interview",
+      1,
+    ]);
+
+    const candidate = await one(
+      "INSERT INTO candidates (job_id, full_name, email, current_stage) " +
+        "VALUES ($1, $2, $3, $4) RETURNING id",
+      [job.id, "Test Case Candidate", "test.case@example.com", "Applied"]
+    );
+    candidateId = Number(candidate.id);
+
+    // The slide names Sanduni as the interviewer.
+    await makeUser("Sanduni", "sanduni@example.com", "interviewer");
+    sanduniId = await userId("sanduni@example.com");
+  });
+
+  // TC-12 · VALID - ACTUAL DATA
+  // Steps:    open a candidate, schedule an interview, fill date, stage
+  //           and interviewer, save.
+  // Data:     2026-09-01 10:00, interviewer Sanduni.
+  // Expected: the interview is saved and shown correctly.
+  test("TC-12 schedules an interview with real data, and shows it back", async () => {
+    // The slide's date has passed since it was written, so the same
+    // date is used one year on - the case is "a real working date",
+    // not "this exact day", and a test that rots is worse than none.
+    const { status, data } = await call("POST", "/api/interviews", {
+      candidateId,
+      stage: "Interview",
+      scheduledAt: "2027-09-01T10:00",
+      interviewerId: sanduniId,
+      location: "Meeting room 1",
+    });
+
+    assert.equal(status, 201, "saved");
+    assert.equal(data.interview.interviewerName, "Sanduni");
+    assert.equal(data.interview.stage, "Interview");
+    assert.equal(data.interview.location, "Meeting room 1");
+    assert.equal(new Date(data.interview.scheduledAt).getFullYear(), 2027);
+
+    // "and shown correctly" - it comes back when the candidate is read.
+    const shown = await call("GET", "/api/candidates/" + candidateId);
+    const found = shown.data.interviews.find((i) => i.id === data.interview.id);
+    assert.ok(found, "the booking is on the candidate's record");
+    assert.equal(found.interviewerName, "Sanduni");
+  });
+
+  // TC-14 · INVALID DATA
+  // Steps:    open a candidate, schedule an interview, pick a prior
+  //           date, save.
+  // Data:     exactly one week before today.
+  // Expected: the system does not allow a date prior to today.
+  test("TC-14 refuses a date exactly one week in the past", async () => {
+    const aWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const { status, data } = await call("POST", "/api/interviews", {
+      candidateId,
+      stage: "Interview",
+      scheduledAt: aWeekAgo,
+      interviewerId: sanduniId,
+    });
+
+    assert.equal(status, 400, "cannot be booked");
+    assert.match(data.error, /not available/i);
+    assert.match(data.error, /already passed/i);
+
+    // Nothing was written - refusing has to mean refusing.
+    const rows = await many(
+      "SELECT id FROM interviews WHERE candidate_id = $1 AND scheduled_at < NOW()",
+      [candidateId]
+    );
+    assert.equal(rows.length, 0);
+  });
+
+  // TC-15 · VALIDATION
+  // Steps:    open schedule interview, fill date and stage only, leave
+  //           the interviewer empty, save.
+  // Data:     interviewer field blank.
+  // Expected: a validation message is shown; the form is not submitted.
+  test("TC-15 refuses a booking with no interviewer selected", async () => {
+    const soon = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString();
+
+    const { status, data } = await call("POST", "/api/interviews", {
+      candidateId,
+      stage: "Interview",
+      scheduledAt: soon,
+      interviewerId: "",
+    });
+
+    assert.equal(status, 400);
+    assert.match(data.error, /Choose the interviewer/i);
+
+    const rows = await many("SELECT id FROM interviews WHERE candidate_id = $1", [candidateId]);
+    assert.equal(rows.length, 1, "only TC-12's booking exists - nothing was saved");
+  });
+
+  // TC-16 · NON-FUNCTIONAL
+  // Steps:    submit a valid booking, time from save to confirmation.
+  // Data:     10 consecutive bookings, warm server.
+  // Expected: saved and confirmed within 2 seconds.
+  test("TC-16 confirms a booking within 2 seconds, over 10 runs", async () => {
+    // Warm first, as the case says - the first call through any path
+    // pays for connection set-up, which is not what is being measured.
+    await call("GET", "/api/candidates/" + candidateId);
+
+    const timings = [];
+    for (let n = 0; n < 10; n++) {
+      // A different slot each time: the same one twice is a 409 by
+      // design, and that would be measuring the wrong thing.
+      const when = new Date(Date.now() + (30 + n) * 24 * 60 * 60 * 1000).toISOString();
+
+      const started = performance.now();
+      const { status } = await call("POST", "/api/interviews", {
+        candidateId,
+        stage: "Interview",
+        scheduledAt: when,
+        interviewerId: sanduniId,
+      });
+      timings.push(performance.now() - started);
+      assert.equal(status, 201, "run " + (n + 1) + " saved");
+    }
+
+    const slowest = Math.max(...timings);
+    const quickest = Math.min(...timings);
+    const average = timings.reduce((a, b) => a + b, 0) / timings.length;
+
+    // Printed so the number on the slide can be filled in from a real
+    // run rather than remembered. All three, so a suspiciously flat
+    // result is visible rather than hidden behind one rounded figure.
+    console.log(
+      "      TC-16: 10 bookings - quickest " +
+        Math.round(quickest) +
+        "ms, average " +
+        Math.round(average) +
+        "ms, slowest " +
+        Math.round(slowest) +
+        "ms"
+    );
+
+    assert.ok(slowest < 2000, "the slowest of the ten was " + Math.round(slowest) + "ms");
   });
 });
