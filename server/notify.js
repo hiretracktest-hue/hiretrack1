@@ -189,8 +189,13 @@ export async function notifyInterviewScheduled({ interview, candidate, job, book
     }
   }
 
-  // 3. The candidate, by email - written to the outbox for HR to send.
-  await toOutbox(
+  // 3. The candidate, by email - written to the outbox, and sent from
+  //    there when a mail provider is configured. This is the message
+  //    that matters to them: nothing goes out when they are merely
+  //    added, so this is the first thing they hear. The outcome is
+  //    handed back so the screen can say what actually happened rather
+  //    than assume.
+  return await toOutbox(
     "interview.invitation",
     { email: candidate.email, name: candidate.full_name },
     "Interview invitation - " + job.title,

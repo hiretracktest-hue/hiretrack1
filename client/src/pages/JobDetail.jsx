@@ -131,28 +131,17 @@ export default function JobDetail() {
         cvProblem = err.message;
       }
 
-      const posted = result.email?.sent
-        ? "their confirmation has been emailed to " + result.candidate.email + "."
-        : "their confirmation is waiting in the outbox.";
-
-      setMessage(
-        cvProblem
-          ? result.candidate.fullName +
-              " was added and " +
-              posted +
-              " The CV did not upload (" +
-              cvProblem +
-              ") - open their page to try that part again."
-          : result.candidate.fullName + " was added with their CV, and " + posted
-      );
-
-      // Stay on the vacancy. The candidate table below picks them up.
       setForm(BLANK_FORM);
       setCvFile(null);
       setCvKey((n) => n + 1);
       setFormErrors({});
       setShowAdd(false);
-      await load();
+
+      // Same as the Candidates page: on to booking their interview,
+      // which is the step that actually emails them.
+      navigate("/candidates/" + result.candidate.id, {
+        state: { bookNow: true, cvProblem },
+      });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -234,8 +223,8 @@ export default function JobDetail() {
           <div className="card-title">
             <h2>Add a candidate</h2>
             <span className="muted small">
-              Everything in one go - their CV included. They start at “{job.stages?.[0]}” and are
-              emailed as soon as you save.
+              Everything in one go - their CV included. They start at “{job.stages?.[0]}”, and
+              saving takes you straight on to booking their interview.
             </span>
           </div>
 

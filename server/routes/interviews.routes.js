@@ -157,12 +157,26 @@ router.post(
 
     const interview = await one("SELECT * FROM interviews WHERE id = $1", [created.id]);
 
-    // Tell the interviewer in the app, and write the candidate's email
-    // into the outbox.
-    await notifyInterviewScheduled({ interview, candidate, job, bookedBy: req.user });
+    // Tell the interviewer in the app and by email, and send the
+    // candidate their invitation. This is the candidate's first
+    // message from us - being added does not email anybody - so the
+    // screen needs to know whether it really went.
+    const posted = await notifyInterviewScheduled({
+      interview,
+      candidate,
+      job,
+      bookedBy: req.user,
+    });
 
     const row = await one(BASE_SELECT + "WHERE i.id = $1", [created.id]);
-    res.status(201).json({ interview: toJson(row) });
+    res.status(201).json({
+      interview: toJson(row),
+      email: {
+        to: candidate.email,
+        sent: Boolean(posted?.sent),
+        reason: posted?.reason || null,
+      },
+    });
   })
 );
 

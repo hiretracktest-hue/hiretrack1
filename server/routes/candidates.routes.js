@@ -295,12 +295,24 @@ router.post(
 
     const candidate = await loadOr404(created.id);
 
-    // Tell them we have their application. Opt-out rather than opt-in:
-    // somebody who applied should hear back, and the case for silence is
-    // the unusual one - a name copied off a CV pile who has not actually
-    // applied yet. Pass notify: false for that.
+    // Nothing is emailed just for being added.
+    //
+    // A letter that says "we have your application" and nothing else
+    // wastes the one message the candidate will actually read, and it
+    // goes out before anybody has decided anything - there is no time,
+    // no interviewer, nothing to tell them yet. So the candidate hears
+    // from us when there is something to say:
+    //
+    //   - here, only if HR set a time while adding them, and
+    //   - properly when an interview is booked, which is the message
+    //     that carries the date, the place and the interviewer's name
+    //     (see notifyInterviewScheduled).
+    //
+    // notify: false still forces silence either way.
+    const wantsEmail = req.body.notify !== false && Boolean(inviteAt);
+
     let email = { attempted: false, sent: false, reason: null };
-    if (req.body.notify !== false) {
+    if (wantsEmail) {
       const outcome = await notifyCandidateAdded({ candidate, job, addedBy: req.user });
       email = { attempted: true, sent: outcome.sent, reason: outcome.reason || null };
     }

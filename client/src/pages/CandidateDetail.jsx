@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
 import {
@@ -75,7 +75,12 @@ export default function CandidateDetail() {
   // read the CV and screen it; booking a slot and writing feedback are
   // occasional, and leaving all three open is what made this page run
   // off the bottom of the screen.
-  const [showBooking, setShowBooking] = useState(false);
+  // Arriving straight from "Add candidate": open the booking form and
+  // say so, because picking the interviewer and the time is the reason
+  // we came here - and it is what finally emails the candidate.
+  const location = useLocation();
+  const arrivedToBook = Boolean(location.state?.bookNow);
+  const [showBooking, setShowBooking] = useState(arrivedToBook);
   const [showFeedbackForm, setShowFeedbackForm] = useState(false);
   const [showCvForm, setShowCvForm] = useState(false);
   const [feedbackForm, setFeedbackForm] = useState({
@@ -86,6 +91,23 @@ export default function CandidateDetail() {
     concerns: "",
     comment: "",
   });
+
+  useEffect(() => {
+    if (!location.state?.bookNow) return;
+
+    const cvProblem = location.state.cvProblem;
+    if (cvProblem) {
+      setError(
+        "They were added, but the CV did not upload (" +
+          cvProblem +
+          ") - use “Replace the CV” below to try that part again."
+      );
+    }
+    setMessage("Added. Now choose who will interview them, and when - that is what emails them.");
+
+    // Clear it so a refresh does not repeat the message.
+    window.history.replaceState({}, "");
+  }, [location.state]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -260,15 +282,29 @@ export default function CandidateDetail() {
     event.preventDefault();
     if (!validateInterview()) return;
 
+    // The message is written after the answer comes back, not before,
+    // because this is the point the candidate is actually emailed and
+    // claiming a delivery that did not happen is worse than saying
+    // nothing.
     const result = await run(
       () =>
         api.scheduleInterview({
           candidateId: Number(id),
           ...interviewForm,
         }),
-      "Interview booked. The interviewer has been notified and the candidate's email is in the outbox."
+      null
     );
+
     if (result?.interview) {
+      const posted = result.email;
+      setMessage(
+        "Interview booked, and the interviewer has been asked to confirm. " +
+          (posted?.sent
+            ? "The invitation has been emailed to " + posted.to + "."
+            : "The candidate's invitation is waiting in the Outbox" +
+              (posted?.reason ? " (" + posted.reason + ")" : "") +
+              ".")
+      );
       setInterviews((current) =>
         [...current, result.interview].sort(
           (a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt)

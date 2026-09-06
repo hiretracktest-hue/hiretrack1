@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
 import {
@@ -45,6 +45,7 @@ const BLANK_FORM = {
  */
 export default function Candidates() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const canBand = Boolean(user?.permissions?.["candidate:band"]);
   const isInterviewer = !canBand;
@@ -172,6 +173,13 @@ export default function Candidates() {
       };
     });
 
+  /** Off to the new candidate's page with the booking form open. */
+  function goToBooking(candidate, cvProblem) {
+    navigate("/candidates/" + candidate.id, {
+      state: { bookNow: true, cvProblem },
+    });
+  }
+
   async function addCandidate(event) {
     event.preventDefault();
 
@@ -226,34 +234,18 @@ export default function Candidates() {
         cvProblem = err.message;
       }
 
-      const name = result.candidate.fullName;
-      const posted = result.email?.sent
-        ? "their confirmation has been emailed to " + result.candidate.email + "."
-        : "their confirmation is waiting in the outbox.";
-
-      setAdded(
-        cvProblem
-          ? name +
-              " was added and " +
-              posted +
-              " The CV did not upload (" +
-              cvProblem +
-              ") - open their page to try that part again."
-          : name + " was added with their CV, and " + posted
-      );
-
-      // Stay on this page. The list underneath refreshes with them in
-      // it, so the next one can be typed straight away.
       setForm(BLANK_FORM);
       setCvFile(null);
       setCvKey((n) => n + 1);
       setFormErrors({});
       setShowAdd(false);
 
-      const refreshed = await fetchCandidates();
-      setCandidates(refreshed.candidates);
-      setBandCounts(refreshed.bandCounts || null);
-      setSelected([]);
+      // Straight to booking their interview. Adding somebody is never
+      // the point on its own - the next thing that has to happen is
+      // picking who sees them and when, and that is also what finally
+      // emails the candidate. Making HR find the person again in a
+      // list they just added them to is a step for no reason.
+      goToBooking(result.candidate, cvProblem);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -311,7 +303,8 @@ export default function Candidates() {
           <div className="card-title">
             <h2>Add a candidate</h2>
             <span className="muted small">
-              Everything in one go - their CV included. They are emailed as soon as you save.
+              Everything in one go - their CV included. Saving takes you straight on to
+              booking their interview, which is what emails them.
             </span>
           </div>
 
@@ -403,7 +396,7 @@ export default function Candidates() {
                 <Field
                   label="Time to tell them (optional)"
                   htmlFor="add-when"
-                  hint="Set it once here. It goes in their email, and it is filled in for you when an interview is booked."
+                  hint="Leave it empty and nothing is emailed yet. Fill it in and they are told this time now - either way it is filled in for you on the booking form next."
                   error={formErrors.inviteAt}
                 >
                   <input

@@ -295,14 +295,16 @@ describe("HR adds candidates", () => {
     assert.equal(data.candidate.addedByName, "Test HR");
   });
 
-  test("adding a candidate writes them an acknowledgement", async () => {
+  test("adding a candidate WITH a time writes them an acknowledgement", async () => {
     // The candidate has no account and did not put themselves here - HR
-    // typed their details in - so the first thing they hear from us
-    // should confirm their application exists.
+    // typed their details in. Nothing goes out for merely being added,
+    // but if HR sets a time while adding them then there is something
+    // worth saying, and this is it.
     const added = await call("POST", "/api/candidates", {
       jobId,
       fullName: "Dilshan Herath",
       email: "dilshan@example.com",
+      inviteAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
     });
     assert.equal(added.status, 201);
 
@@ -324,6 +326,7 @@ describe("HR adds candidates", () => {
       jobId,
       fullName: "Honest Reporting",
       email: "honest@example.com",
+      inviteAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
     });
     assert.equal(added.status, 201);
     assert.equal(added.data.email.attempted, true);
@@ -1522,26 +1525,75 @@ describe("adding a candidate is one step", () => {
     jobId = data.job.id;
   });
 
-  test("the email goes out without being asked for", async () => {
-    // The form no longer has a tick box, so it sends no notify flag at
-    // all. Silence has to be the thing you opt into, not the default.
+  test("adding somebody with no time set emails nobody", async () => {
+    // There is nothing to tell them yet. The candidate hears from us
+    // when an interview is booked, which is the message that carries
+    // the date, the place and who they are seeing.
     const { status, data } = await call("POST", "/api/candidates", {
       jobId,
-      fullName: "Auto Mailed",
-      email: "auto.mailed@example.com",
+      fullName: "Not Mailed Yet",
+      email: "not.mailed.yet@example.com",
     });
     assert.equal(status, 201);
-    assert.equal(data.email.attempted, true, "nobody had to tick anything");
+    assert.equal(data.email.attempted, false, "no time given, so no letter");
+
+    const waiting = await many(
+      "SELECT id FROM notifications WHERE recipient_email = $1",
+      ["not.mailed.yet@example.com"]
+    );
+    assert.equal(waiting.length, 0, "nothing queued either");
   });
 
-  test("notify: false is still honoured for a name off a CV pile", async () => {
+  test("adding somebody WITH a time does tell them that time", async () => {
+    const soon = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    const { data } = await call("POST", "/api/candidates", {
+      jobId,
+      fullName: "Told A Time",
+      email: "told.a.time@example.com",
+      inviteAt: soon,
+    });
+    assert.equal(data.email.attempted, true);
+  });
+
+  test("notify: false silences it even when a time is given", async () => {
+    const soon = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
     const { data } = await call("POST", "/api/candidates", {
       jobId,
       fullName: "Not Mailed",
       email: "not.mailed@example.com",
+      inviteAt: soon,
       notify: false,
     });
     assert.equal(data.email.attempted, false);
+  });
+
+  test("booking the interview is what finally emails the candidate", async () => {
+    // The whole point of the change: no letter on being added, one
+    // letter when there is something to say.
+    const person = await one("SELECT id FROM candidates WHERE email = $1", [
+      "not.mailed.yet@example.com",
+    ]);
+
+    const { status, data } = await call("POST", "/api/interviews", {
+      candidateId: Number(person.id),
+      stage: "Interview",
+      scheduledAt: new Date(Date.now() + 9 * 24 * 60 * 60 * 1000).toISOString(),
+      interviewerId: await userId("interviewer@example.com"),
+      location: "Meeting room 3",
+    });
+
+    assert.equal(status, 201);
+    // The response says who it was for and whether it really went, so
+    // the screen never claims a delivery that did not happen.
+    assert.equal(data.email.to, "not.mailed.yet@example.com");
+    assert.equal(data.email.sent, false, "no mail provider in the tests");
+
+    const queued = await many(
+      "SELECT subject FROM notifications WHERE recipient_email = $1",
+      ["not.mailed.yet@example.com"]
+    );
+    assert.equal(queued.length, 1, "exactly one letter, and this is it");
+    assert.match(queued[0].subject, /Interview invitation/);
   });
 
   test("the time given while adding comes back, so it can be reused", async () => {
