@@ -773,17 +773,6 @@ tbody tr:hover {
   background: var(--line);
 }
 
-.auth-note {
-  margin-top: 20px;
-  background: var(--brand-50);
-  border: 1px solid var(--brand-200);
-  border-radius: 10px;
-  padding: 12px 14px;
-  font-size: 0.82rem;
-  line-height: 1.55;
-  color: var(--ink-soft);
-}
-
 /* --- misc ------------------------------------------------------------ */
 .empty {
   text-align: center;

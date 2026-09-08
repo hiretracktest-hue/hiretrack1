@@ -1366,10 +1366,19 @@ describe("assigning an interviewer to a candidate", () => {
 
   before(async () => {
     await signIn("hr@example.com");
-    const row = await one("SELECT id FROM candidates WHERE email = $1", [
+
+    // Its own candidate, not the one the suite above books interviews
+    // for. Booking now assigns, so a shared candidate would arrive here
+    // already claimed and "starts with nobody assigned" would be a lie.
+    const neighbour = await one("SELECT job_id FROM candidates WHERE email = $1", [
       "booking.rules@example.com",
     ]);
-    candidateId = Number(row.id);
+    const fresh = await one(
+      "INSERT INTO candidates (job_id, full_name, email, current_stage) " +
+        "VALUES ($1, $2, $3, $4) RETURNING id",
+      [neighbour.job_id, "Assign Me", "assign.me@example.com", "Applied"]
+    );
+    candidateId = Number(fresh.id);
     interviewerId = await userId("interviewer@example.com");
   });
 
@@ -1431,6 +1440,41 @@ describe("assigning an interviewer to a candidate", () => {
   test("the unassigned filter finds them again", async () => {
     const { data } = await call("GET", "/api/candidates?unassigned=1");
     assert.ok(data.candidates.some((c) => c.id === candidateId));
+  });
+
+  test("booking an interview is what assigns them now", async () => {
+    // The separate dropdown is gone from the page: choosing who runs
+    // the interview is the only place an interviewer is picked, so it
+    // is also what puts the candidate under their "Only mine".
+    const before = await call("GET", "/api/candidates/" + candidateId);
+    assert.equal(before.data.candidate.assignedInterviewerId, null);
+
+    const { status } = await call("POST", "/api/interviews", {
+      candidateId,
+      stage: "Interview",
+      scheduledAt: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString(),
+      interviewerId,
+    });
+    assert.equal(status, 201);
+
+    const after = await call("GET", "/api/candidates/" + candidateId);
+    assert.equal(after.data.candidate.assignedInterviewerId, interviewerId);
+    assert.equal(after.data.candidate.assignedInterviewerName, "Test Interviewer");
+  });
+
+  test("a second booking does not hand the candidate to somebody else", async () => {
+    // A panel interview with a different person is normal. It must not
+    // quietly take the candidate off whoever already owns them.
+    const { status } = await call("POST", "/api/interviews", {
+      candidateId,
+      stage: "Interview",
+      scheduledAt: new Date(Date.now() + 22 * 24 * 60 * 60 * 1000).toISOString(),
+      interviewerId: await userId("manager@example.com"),
+    });
+    assert.equal(status, 201);
+
+    const { data } = await call("GET", "/api/candidates/" + candidateId);
+    assert.equal(data.candidate.assignedInterviewerName, "Test Interviewer", "still the first one");
   });
 });
 

@@ -155,6 +155,18 @@ router.post(
       ]
     );
 
+    // Booking is now the only place an interviewer is chosen, so it is
+    // also what records who owns this candidate. That is what puts them
+    // under "Only mine" on the interviewer's Candidates page, and it
+    // used to depend on a second dropdown that no longer exists.
+    // Only the first booking claims them - a later panel interview does
+    // not quietly hand the candidate to somebody else.
+    await run(
+      "UPDATE candidates SET assigned_interviewer_id = $1, assigned_at = NOW(), " +
+        "assigned_by = $2 WHERE id = $3 AND assigned_interviewer_id IS NULL",
+      [interviewerId, req.user.id, candidateId]
+    );
+
     const interview = await one("SELECT * FROM interviews WHERE id = $1", [created.id]);
 
     // Tell the interviewer in the app and by email, and send the

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
-import { Alert, Field, Loading, formatDateTime } from "../components/ui.jsx";
+import { Alert, Field, JoinButton, Loading, formatDateTime } from "../components/ui.jsx";
 
 /**
  * Where the Accept / Decline link in an interview email lands.
@@ -111,6 +111,16 @@ export default function Invite() {
           <Row label="Notes" value={invite.notes} />
           <Row label="Interviewer" value={invite.interviewerName} />
         </dl>
+
+        {/* The page reached from the invitation email, so this is where
+            the interviewer will be when it is time to go. `mine` is
+            true because this link is theirs - the token is for this one
+            booking and nobody else can open it. */}
+        {accepted && (
+          <div className="btn-row mt-2">
+            <JoinButton location={invite.location} mine size="" />
+          </div>
+        )}
 
         {!answered && (
           <>

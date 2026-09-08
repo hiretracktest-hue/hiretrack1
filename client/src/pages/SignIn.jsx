@@ -103,15 +103,6 @@ export default function SignIn() {
             </a>
           </>
         )}
-
-        <div className="auth-note">
-          <strong>There is no sign-up.</strong> Altrium Recruitment is an internal system. HR
-          creates every account and sets what it can do, so only an email address HR
-          has already added can sign in — any other address is turned away.
-          <br />
-          <br />
-          Job candidates do not get an account. HR adds them and uploads their CV.
-        </div>
       </div>
     </div>
   );

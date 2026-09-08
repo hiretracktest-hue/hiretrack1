@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
 import {
   Alert,
+  JoinButton,
   CV_ACCEPT,
   CV_HINT,
   describeCvProblem,
@@ -70,7 +71,6 @@ export default function CandidateDetail() {
   // Per-field messages for the booking form, so "date is missing" points
   // at the date box instead of appearing as one banner at the top.
   const [interviewErrors, setInterviewErrors] = useState({});
-  const [assigning, setAssigning] = useState(false);
   // The three long forms start folded away. HR's job on this page is to
   // read the CV and screen it; booking a slot and writing feedback are
   // occasional, and leaving all three open is what made this page run
@@ -316,17 +316,6 @@ export default function CandidateDetail() {
     }
   }
 
-  /** Hand the candidate to an interviewer, or back to the pool. */
-  async function assignInterviewer(interviewerId) {
-    setAssigning(true);
-    const chosen = interviewers.find((person) => String(person.id) === String(interviewerId));
-    await run(
-      () => api.assignInterviewer(id, interviewerId),
-      interviewerId ? "Assigned to " + (chosen?.name || "the interviewer") + "." : "Assignment removed."
-    );
-    setAssigning(false);
-  }
-
   async function cancelInterview(interviewId) {
     if (!window.confirm("Cancel this interview? The candidate will be emailed.")) return;
     const result = await run(() => api.cancelInterview(interviewId), "Interview cancelled.");
@@ -375,7 +364,6 @@ export default function CandidateDetail() {
 
   // Still needed: the feedback form asks which stage the review is for.
   const stages = candidate.stages || [];
-  const averageRating = candidate.averageRating;
 
   return (
     <div className="page">
@@ -408,51 +396,6 @@ export default function CandidateDetail() {
       <Alert kind="success" onDismiss={() => setMessage("")}>
         {message}
       </Alert>
-
-      {/* The stage pipeline used to sit here: Applied > Screening >
-          Interview > Offer, with a "Move to the next one" button. It is
-          gone from this screen on purpose. Opening somebody's profile is
-          for reading who they are, looking at their CV and putting an
-          interviewer on them - not for walking them through a process.
-
-          The stages themselves are untouched: each vacancy still defines
-          its own, the candidate still sits on one, and the rule that
-          feedback has to be in before anyone moves forward is still
-          enforced by the API. What is left here is the one decision this
-          page is actually for. */}
-      {p["candidate:outcome"] && (
-        <div className="card card-tight">
-          <div className="row-between">
-            <div className="btn-row">
-              <select
-                className="select"
-                style={{ width: "auto" }}
-                value={outcome}
-                onChange={(event) => setOutcome(event.target.value)}
-                aria-label="Outcome"
-              >
-                {OUTCOMES.map((value) => (
-                  <option key={value} value={value}>
-                    {OUTCOME_LABEL[value]}
-                  </option>
-                ))}
-              </select>
-              <button
-                className="btn btn-primary"
-                onClick={saveOutcome}
-                disabled={busy || outcome === candidate.outcome}
-              >
-                Record outcome
-              </button>
-            </div>
-            <span className="muted small">
-              {averageRating !== null && averageRating !== undefined
-                ? "Average score " + averageRating + " / 5"
-                : "No scores yet"}
-            </span>
-          </div>
-        </div>
-      )}
 
       <div className="grid grid-sidebar mt-2">
         <div>
@@ -561,44 +504,37 @@ export default function CandidateDetail() {
                   </p>
                 </div>
 
-                {/* Who owns this candidate. They see them under “Only
-                    mine” on the Candidates page straight away, before
-                    any interview has been booked. */}
-                <div className="mt-3">
-                  <div className="detail-label">Assigned interviewer</div>
-                  {p["candidate:assign"] ? (
+                {/* The outcome lives here now, with the rest of the
+                    facts about this person. It used to be a strip
+                    across the top of the page, which gave the one
+                    decision more room than everything it depends on. */}
+                {p["candidate:outcome"] && (
+                  <div className="mt-3">
+                    <div className="detail-label">Outcome</div>
                     <div className="btn-row mt-1">
                       <select
                         className="select"
-                        style={{ width: "auto", minWidth: 240 }}
-                        value={candidate.assignedInterviewerId ?? ""}
-                        onChange={(event) => assignInterviewer(event.target.value)}
-                        disabled={assigning || busy}
-                        aria-label="Assign an interviewer to this candidate"
+                        style={{ width: "auto" }}
+                        value={outcome}
+                        onChange={(event) => setOutcome(event.target.value)}
+                        aria-label="Outcome"
                       >
-                        <option value="">Nobody assigned</option>
-                        {interviewers.map((person) => (
-                          <option key={person.id} value={person.id}>
-                            {person.name} ({person.roleLabel})
+                        {OUTCOMES.map((value) => (
+                          <option key={value} value={value}>
+                            {OUTCOME_LABEL[value]}
                           </option>
                         ))}
                       </select>
-                      {candidate.assignedInterviewerName && (
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => assignInterviewer("")}
-                          disabled={assigning || busy}
-                        >
-                          Unassign
-                        </button>
-                      )}
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={saveOutcome}
+                        disabled={busy || outcome === candidate.outcome}
+                      >
+                        Record outcome
+                      </button>
                     </div>
-                  ) : (
-                    <p className="detail-value">
-                      {candidate.assignedInterviewerName || "Nobody yet"}
-                    </p>
-                  )}
-                </div>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -800,15 +736,18 @@ export default function CandidateDetail() {
                       </div>
                       {iv.notes && <div className="cell-sub">{iv.notes}</div>}
                     </div>
-                    {p["interview:schedule"] && (
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => cancelInterview(iv.id)}
-                        disabled={busy}
-                      >
-                        Cancel
-                      </button>
-                    )}
+                    <div className="btn-row">
+                      <JoinButton location={iv.location} mine={iv.interviewerId === user?.id} />
+                      {p["interview:schedule"] && (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => cancelInterview(iv.id)}
+                          disabled={busy}
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>

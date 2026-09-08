@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
-import { Alert, Empty, Loading, formatDateTime } from "../components/ui.jsx";
+import { Alert, Empty, JoinButton, Loading, formatDateTime } from "../components/ui.jsx";
 
 /**
  * Interviews, plus the in-app notifications that tell an interviewer
@@ -220,6 +220,10 @@ export default function Interviews() {
                   </td>
                   <td className="cell-right">
                     <div className="btn-row" style={{ justifyContent: "flex-end" }}>
+                      <JoinButton
+                        location={interview.location}
+                        mine={interview.interviewerId === user?.id}
+                      />
                       <Link
                         className="btn btn-secondary btn-sm"
                         to={"/candidates/" + interview.candidateId}

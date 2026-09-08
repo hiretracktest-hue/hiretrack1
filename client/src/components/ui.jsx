@@ -247,6 +247,47 @@ export function formatBytes(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
+/**
+ * A "Join" button when the interview's location is a meeting link.
+ *
+ * HR types wherever the interview happens into one box, and half the
+ * time that is a URL - a Meet room, a Teams link. Printed as text it
+ * has to be copied out by hand at the moment somebody is already late.
+ *
+ * Only the interviewer booked for it gets the button. HR does not need
+ * to join, and giving everyone a Join makes the one person who does
+ * need it hunt for theirs.
+ */
+export function JoinButton({ location, mine, size = "btn-sm" }) {
+  if (!mine) return null;
+
+  const raw = String(location || "").trim();
+  if (!raw) return null;
+
+  // Accept "meet.google.com/abc" as readily as the full URL - that is
+  // how people paste them.
+  const url = /^https?:\/\//i.test(raw) ? raw : "https://" + raw;
+  try {
+    // Anything that is not a real address is a room number or a floor,
+    // and there is nothing to join.
+    const parsed = new URL(url);
+    if (!parsed.hostname.includes(".")) return null;
+  } catch {
+    return null;
+  }
+
+  return (
+    <a
+      className={"btn btn-primary " + size}
+      href={url}
+      target="_blank"
+      rel="noreferrer noopener"
+    >
+      Join
+    </a>
+  );
+}
+
 /** What a CV has to be. Mirrors config.upload on the server - one rule,
  *  written twice, so the person is told before the upload as well as
  *  after it. The server is still the one that decides. */
