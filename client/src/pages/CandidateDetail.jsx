@@ -13,7 +13,6 @@ import {
   BandBadge,
   Field,
   Loading,
-  OUTCOME_LABEL,
   OutcomeBadge,
   RecommendationBadge,
   Stars,
@@ -22,7 +21,6 @@ import {
   formatDateTime,
 } from "../components/ui.jsx";
 
-const OUTCOMES = ["ACTIVE", "ON_HOLD", "HIRED", "REJECTED"];
 const RECOMMENDATIONS = ["ADVANCE", "HOLD", "REJECT"];
 
 /** One candidate: their CV, where they are in the process, the feedback
@@ -57,7 +55,6 @@ export default function CandidateDetail() {
 
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
-  const [outcome, setOutcome] = useState("ACTIVE");
   const [cvFile, setCvFile] = useState(null);
   const [cvError, setCvError] = useState("");
 
@@ -116,7 +113,6 @@ export default function CandidateDetail() {
       setCandidate(result.candidate);
       setInterviews(result.interviews);
       setFeedback(result.feedback || []);
-      setOutcome(result.candidate.outcome);
       setEditForm({
         fullName: result.candidate.fullName,
         email: result.candidate.email,
@@ -183,14 +179,6 @@ export default function CandidateDetail() {
     event.preventDefault();
     const result = await run(() => api.updateCandidate(id, editForm), "Details saved.");
     if (result) setEditing(false);
-  }
-
-  async function saveOutcome() {
-    const result = await run(
-      () => api.updateCandidate(id, { outcome }),
-      "Outcome recorded as " + OUTCOME_LABEL[outcome] + "."
-    );
-    if (result) await load();
   }
 
   async function setBand(band) {
@@ -503,38 +491,6 @@ export default function CandidateDetail() {
                     {candidate.notes || "—"}
                   </p>
                 </div>
-
-                {/* The outcome lives here now, with the rest of the
-                    facts about this person. It used to be a strip
-                    across the top of the page, which gave the one
-                    decision more room than everything it depends on. */}
-                {p["candidate:outcome"] && (
-                  <div className="mt-3">
-                    <div className="detail-label">Outcome</div>
-                    <div className="btn-row mt-1">
-                      <select
-                        className="select"
-                        style={{ width: "auto" }}
-                        value={outcome}
-                        onChange={(event) => setOutcome(event.target.value)}
-                        aria-label="Outcome"
-                      >
-                        {OUTCOMES.map((value) => (
-                          <option key={value} value={value}>
-                            {OUTCOME_LABEL[value]}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={saveOutcome}
-                        disabled={busy || outcome === candidate.outcome}
-                      >
-                        Record outcome
-                      </button>
-                    </div>
-                  </div>
-                )}
               </>
             )}
           </div>
