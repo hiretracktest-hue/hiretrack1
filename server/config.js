@@ -173,7 +173,11 @@ export const PERMISSIONS = {
   // Interviews and feedback
   "interview:schedule": [ROLE_HR, ROLE_HIRING_MANAGER],
   "interview:view": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER, ROLE_MANAGEMENT],
-  "feedback:write": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER],
+  // HR reads feedback, it does not write it. HR arranges the process;
+  // the verdict belongs to whoever actually sat in the room. Letting
+  // the person who books the interviews also score them is how a
+  // side-by-side comparison stops meaning anything.
+  "feedback:write": [ROLE_HIRING_MANAGER, ROLE_INTERVIEWER],
   "feedback:view": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER, ROLE_MANAGEMENT],
 
   // Notifications outbox (what would be emailed to a candidate)

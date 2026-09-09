@@ -635,6 +635,7 @@ describe("fair side-by-side comparison", () => {
   let jobId;
 
   test("a rating outside 1-5 is refused", async () => {
+    await signIn("interviewer@example.com");
     mayaId = Number((await one("SELECT id FROM candidates WHERE email = $1", ["maya@example.com"])).id);
     jobId = Number((await one("SELECT job_id FROM candidates WHERE id = $1", [mayaId])).job_id);
 
@@ -656,6 +657,25 @@ describe("fair side-by-side comparison", () => {
     const { data } = await call("GET", "/api/feedback?candidate=" + mayaId + "&mine=1");
     assert.equal(data.feedback.length, 1);
     assert.equal(data.feedback[0].rating, 2);
+  });
+
+  test("HR reads feedback but cannot write it", async () => {
+    // HR arranges the process; the verdict belongs to whoever sat in
+    // the room. If the person booking the interviews can also score
+    // them, the side-by-side comparison stops meaning anything.
+    await signIn("hr@example.com");
+
+    const reading = await call("GET", "/api/feedback?candidate=" + mayaId);
+    assert.equal(reading.status, 200, "HR can still read it");
+    assert.ok(reading.data.feedback.length > 0);
+
+    const writing = await call("POST", "/api/feedback", {
+      candidateId: mayaId,
+      stage: "Interview",
+      rating: 5,
+      recommendation: "ADVANCE",
+    });
+    assert.equal(writing.status, 403, "and cannot add any of their own");
   });
 
   test("the comparison table ranks candidates by average score", async () => {
