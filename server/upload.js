@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import multer from "multer";
@@ -8,10 +9,30 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // UPLOAD_DIR can be overridden so the automated tests write into a
 // temporary folder instead of the real uploads directory.
+//
+// On a serverless host the project folder is READ ONLY and only /tmp
+// can be written to, so the default moves there. That storage is wiped
+// between requests, which is exactly why SUPABASE_URL has to be set in
+// production - see the deploy section of the README. This only keeps
+// the module from throwing as it loads; it is not somewhere to keep a
+// CV.
+const onServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+
 export const UPLOAD_DIR = process.env.UPLOAD_DIR
   ? path.resolve(process.env.UPLOAD_DIR)
-  : path.join(__dirname, "uploads");
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  : onServerless
+    ? path.join(os.tmpdir(), "altrium-uploads")
+    : path.join(__dirname, "uploads");
+
+// A read-only filesystem must not stop the API from starting. Uploads
+// go to the bucket there anyway; if they somehow do not, the upload
+// itself fails with a real message instead of the whole app refusing
+// to boot.
+try {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+} catch (err) {
+  console.warn("[upload] cannot create " + UPLOAD_DIR + ": " + err.message);
+}
 
 // The file is held in memory, not written straight to disk, because
 // storage.js decides afterwards whether it belongs in a Supabase bucket

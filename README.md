@@ -551,7 +551,67 @@ which is not the application.
 The whole thing runs as one service: `npm start` boots Express, which serves
 the built React app as well. The database stays on Supabase.
 
-A host has not been chosen yet. Whichever one is used, it needs to:
+### Deploying to Vercel (free)
+
+The repository already carries what Vercel needs:
+
+| File | What it does |
+|------|--------------|
+| `vercel.json` | builds the React app, serves `client/dist`, sends everything else to `index.html` so React Router works on a refresh |
+| `api/[...path].js` | hands the Express app to Vercel as one function. The catch-all name is deliberate: every `/api/...` request arrives with its original URL, which is what the routes expect |
+| `vercel-build` in `package.json` | installs the client's dev dependencies before building, because Vercel does not install them for a sub-folder on its own |
+
+Nothing about local development changes. `npm run dev` still runs
+`server/index.js`; that file is not used on Vercel.
+
+**Steps.** Only the first one needs a decision:
+
+1. Push to GitHub, then on [vercel.com](https://vercel.com) sign in with GitHub,
+   **Add New → Project**, and import the repository. Leave the framework preset
+   as **Other** - `vercel.json` already says what to do.
+2. Before the first deploy, open **Environment Variables** and paste in the
+   values from your `.env`:
+
+   | Variable | Notes |
+   |----------|-------|
+   | `DATABASE_URL` | **Use the transaction pooler, port 6543.** See the warning below |
+   | `JWT_SECRET` | A long random string. If it changes, everyone is signed out |
+   | `CLIENT_URL` | `https://<your-project>.vercel.app` - fill in after the first deploy and redeploy |
+   | `SUPABASE_URL` | Required. See "CVs" below |
+   | `SUPABASE_SERVICE_ROLE_KEY` | Required |
+   | `SUPABASE_CV_BUCKET` | `candidate-cvs` |
+   | `RESEND_API_KEY` | Optional. Without it, mail waits in the Outbox |
+   | `RESEND_FROM_EMAIL` | Optional, goes with the key |
+   | `COMPANY_NAME` | Optional, appears in emails |
+
+   `NODE_ENV` is set to `production` by Vercel - do not add it yourself.
+3. Deploy. Then set `CLIENT_URL` to the address Vercel gives you and redeploy,
+   or the accept and decline links in interview emails will point at localhost.
+4. Check `https://<your-project>.vercel.app/api/health`. It should answer
+   `{"ok":true,...}` with the PostgreSQL version. If it does not, the message
+   says what is wrong.
+
+**Connection pooling matters here.** A normal server is one process with one
+pool. Vercel runs a separate copy per warm instance, each with its own pool, so
+a handful of instances asking for ten connections each will use up what Supabase
+allows and requests start failing. `database/index.js` drops the pool to two
+connections when it sees `VERCEL` in the environment - but the connection string
+still has to be the **transaction pooler on port 6543**, not the session pooler
+on 5432. (The automated tests are the opposite: they need 5432, because
+transaction mode leaks the `search_path` they rely on. `npm test` swaps the port
+itself.)
+
+**CVs must go to the Supabase bucket.** Vercel's filesystem is read only apart
+from `/tmp`, and `/tmp` is wiped between requests. Without `SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY` the API still starts and still accepts an upload,
+and the file is gone by the time anybody clicks Download. Set them.
+
+**What Vercel's free tier will not do:** keep a process running between
+requests. Nothing here needs that today - there is no background job or
+scheduler - but a cold start pays for one database connection, so the first
+request after an idle spell is noticeably slower than the rest.
+
+### Any other host
 
 - run `npm install && npm run build` to build the React app, then `npm start`
 - be given the same environment variables that are in `.env` - never commit them

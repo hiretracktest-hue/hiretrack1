@@ -32,6 +32,10 @@ if (!config.databaseUrl) {
   process.exit(1);
 }
 
+// Vercel and Lambda both set one of these. Nothing else in the project
+// needs to know where it is running - only the pool does.
+const onServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+
 export const pool = new Pool({
   connectionString: config.databaseUrl,
   // The automated tests point this at their own throw-away schema, so a
@@ -45,8 +49,13 @@ export const pool = new Pool({
   // Node does not ship with, so we accept it explicitly rather than
   // turning encryption off.
   ssl: config.databaseSsl ? { rejectUnauthorized: false } : false,
-  max: 10,
-  idleTimeoutMillis: 30_000,
+  // One pool per running copy of the app. On a normal server that is
+  // one copy, so ten connections is fine. On a serverless host every
+  // warm instance holds its own pool, and a few instances at ten each
+  // will exhaust what Supabase allows - so ask for far fewer, and let
+  // them go sooner.
+  max: onServerless ? 2 : 10,
+  idleTimeoutMillis: onServerless ? 10_000 : 30_000,
   connectionTimeoutMillis: 15_000,
 });
 
