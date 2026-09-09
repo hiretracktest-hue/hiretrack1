@@ -6,10 +6,15 @@
  * request, so there is nobody to call app.listen(). Express apps are
  * already (req, res) handlers, so the app itself is the function.
  *
- * The filename is a catch-all on purpose: `[...path].js` inside api/
- * means every /api/... request lands here with its original URL
- * intact, which is what the routes in server/app.js expect. A plain
- * api/index.js would only answer /api and nothing underneath it.
+ * Every /api/... request is sent here by the "routes" entry in
+ * vercel.json, which keeps the original URL on the request - that is
+ * the whole reason it uses `routes` and not `rewrites`. Express then
+ * matches /api/auth/signin and the rest exactly as it does locally.
+ *
+ * The first attempt at this named the file api/[...path].js, on the
+ * assumption that Vercel treats it as a catch-all. It does not - that
+ * is Next.js syntax. Vercel read it as ONE dynamic segment, so
+ * /api/health worked and /api/auth/signin returned a Vercel 404.
  *
  * The checks server/index.js makes at start-up - reaching the database,
  * creating the CV bucket - are deliberately not repeated here. They
