@@ -1715,6 +1715,173 @@ describe("adding a candidate is one step", () => {
 // the order they appear on it. Named so a marker can put the slide and
 // the run side by side: TC-12, TC-14, TC-15, TC-16.
 // =====================================================================
+describe("CAN-05 - the same person applying for a second position", () => {
+  let firstId;
+  let jobA;
+  let jobB;
+
+  test("their details and CV are carried across, so nothing is retyped", async () => {
+    await signIn("hr@example.com");
+    const jobs = (await call("GET", "/api/jobs")).data.jobs;
+    jobA = jobs[0].id;
+    jobB = jobs.find((j) => j.id !== jobA).id;
+
+    const first = await call("POST", "/api/candidates", {
+      jobId: jobA,
+      fullName: "Sunil Rathnayake",
+      email: "sunil@example.com",
+      phone: "+94 77 555 1234",
+      notes: "Strong React portfolio.",
+      notify: false,
+    });
+    assert.equal(first.status, 201);
+    firstId = first.data.candidate.id;
+
+    const form = new FormData();
+    form.append("cv", new Blob(["%PDF-1.4 sunil"], { type: "application/pdf" }), "sunil.pdf");
+    assert.equal((await call("POST", "/api/candidates/" + firstId + "/cv", form, true)).status, 200);
+
+    // Now the same person, giving nothing but a name and an email.
+    const second = await call("POST", "/api/candidates", {
+      jobId: jobB,
+      fullName: "Sunil Rathnayake",
+      email: "sunil@example.com",
+      notify: false,
+    });
+    assert.equal(second.status, 201);
+
+    const c = second.data.candidate;
+    assert.equal(c.phone, "+94 77 555 1234", "their phone is carried over");
+    assert.match(c.notes, /React portfolio/, "their notes are carried over");
+    assert.ok(c.cv, "their CV is attached without being uploaded again");
+    assert.equal(c.cv.filename, "sunil.pdf");
+    assert.deepEqual(second.data.linkedFrom, { candidateId: firstId, cvReused: true });
+  });
+
+  test("the screening band is NOT carried across", async () => {
+    // A CV that is High for a QA role may be Low for a developer role.
+    // The band is a judgement about a person against ONE position, not
+    // a property of the person.
+    await signIn("hr@example.com");
+    const list = (await call("GET", "/api/candidates?q=sunil@example.com")).data.candidates;
+    const second = list.find((c) => c.id !== firstId);
+    assert.equal(second.cvBand, "UNRATED");
+  });
+
+  test("the shared CV downloads from both records", async () => {
+    const list = (await call("GET", "/api/candidates?q=sunil@example.com")).data.candidates;
+    assert.equal(list.length, 2);
+    for (const c of list) {
+      const response = await fetch(baseUrl + "/api/candidates/" + c.id + "/cv", {
+        headers: { Cookie: cookie },
+      });
+      assert.equal(response.status, 200, "candidate " + c.id + " can reach the CV");
+    }
+  });
+
+  test("they still cannot be added to the SAME position twice", async () => {
+    const { status } = await call("POST", "/api/candidates", {
+      jobId: jobA,
+      fullName: "Sunil Rathnayake",
+      email: "sunil@example.com",
+      notify: false,
+    });
+    assert.equal(status, 409);
+  });
+});
+
+describe("AUD-01 - the audit log", () => {
+  test("a failed sign-in is recorded, naming the address that was tried", async () => {
+    cookie = "";
+    await call("POST", "/api/auth/signin", {
+      email: "hr@example.com",
+      password: "definitely-not-the-password",
+    });
+
+    await signIn("hr@example.com");
+    const { data } = await call("GET", "/api/team/audit");
+    const failed = data.entries.find((e) => e.action === "user.sign_in_failed");
+    assert.ok(failed, "the attempt is in the log");
+    // There is no account behind a failed sign-in, so the attempted
+    // address is the only identity there is.
+    assert.equal(failed.actorName, "hr@example.com");
+    assert.match(failed.detail, /wrong password/);
+  });
+
+  test("a successful sign-in is recorded against the person", async () => {
+    await signIn("hr@example.com");
+    const { data } = await call("GET", "/api/team/audit");
+    const ok = data.entries.find((e) => e.action === "user.signed_in");
+    assert.ok(ok);
+    assert.equal(ok.actorName, "Test HR");
+  });
+
+  test("creating an account and changing a role are both traceable", async () => {
+    await signIn("hr@example.com");
+    const created = await call("POST", "/api/team/members", {
+      name: "Kumara Bandara",
+      email: "kumara@example.com",
+      role: "interviewer",
+      jobTitle: "Senior Engineer",
+      password: "Kumara12345",
+    });
+    assert.equal(created.status, 201);
+    const id = created.data.member.id;
+
+    assert.equal(
+      (await call("PATCH", "/api/team/members/" + id, { role: "hiring_manager" })).status,
+      200
+    );
+
+    const { data } = await call("GET", "/api/team/audit");
+    const made = data.entries.find((e) => e.action === "user.created" && e.subjectId === id);
+    const moved = data.entries.find(
+      (e) => e.action === "user.role_changed" && e.subjectId === id
+    );
+
+    assert.ok(made, "the account creation is logged");
+    assert.match(made.detail, /kumara@example.com/);
+    assert.equal(made.actorName, "Test HR", "traced back to who did it");
+
+    assert.ok(moved, "the role change is logged");
+    // Recorded before the write, so it can still name what it changed FROM.
+    assert.match(moved.detail, /interviewer -> hiring_manager/);
+  });
+
+  test("deleting a candidate leaves a record of it", async () => {
+    await signIn("hr@example.com");
+    const jobId = (await call("GET", "/api/jobs")).data.jobs[0].id;
+    const added = await call("POST", "/api/candidates", {
+      jobId,
+      fullName: "Temporary Person",
+      email: "temporary@example.com",
+      notify: false,
+    });
+    const id = added.data.candidate.id;
+    assert.equal((await call("DELETE", "/api/candidates/" + id)).status, 200);
+
+    const { data } = await call("GET", "/api/team/audit");
+    const gone = data.entries.find(
+      (e) => e.action === "candidate.deleted" && e.subjectId === id
+    );
+    assert.ok(gone, "the deletion is logged");
+    assert.match(gone.detail, /temporary@example.com/);
+  });
+
+  test("only HR can read the log", async () => {
+    // It names who did what, which is staff information.
+    for (const [who, password] of [
+      ["manager@example.com", "Password123"],
+      ["interviewer@example.com", "Password123"],
+      ["management@example.com", "Password456"],
+    ]) {
+      await signIn(who, password);
+      assert.equal((await call("GET", "/api/team/audit")).status, 403, who + " must be refused");
+    }
+    await signIn("hr@example.com");
+  });
+});
+
 describe("Sprint 1 test cases - schedule interview", () => {
   let candidateId;
   let sanduniId;

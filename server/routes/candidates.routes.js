@@ -3,6 +3,7 @@ import { one, many, run } from "../../database/index.js";
 import { config, can } from "../config.js";
 import { asyncHandler, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
+import * as audit from "../audit.js";
 import { stagesFor } from "./jobs.routes.js";
 import { uploadCv, safeFilename, assertRealCv } from "../upload.js";
 import { putCv, getCv, removeCv } from "../storage.js";
@@ -275,21 +276,73 @@ router.post(
       throw httpError(409, "This person has already been added to this position.");
     }
 
+    // CAN-05 - the same person applying for a second position.
+    //
+    // Good people apply for more than one role, and making HR retype
+    // their details and re-upload the same CV is how two records of one
+    // person end up disagreeing with each other. So the most recent
+    // record for this email is carried across: their phone, their notes
+    // and their CV.
+    //
+    // The CV is shared by pointing the new row at the same stored file
+    // rather than copying the bytes. One upload, one file, and replacing
+    // it on one position does not silently change the other - the new
+    // upload gets a new key and only that row is repointed.
+    //
+    // The screening BAND is deliberately not carried across. A CV that
+    // is High for a QA role may be Low for a developer role; the band is
+    // a judgement about a person against one position, not a property of
+    // the person.
+    const previous = await one(
+      "SELECT * FROM candidates WHERE email = $1 ORDER BY created_at DESC LIMIT 1",
+      [emailValue]
+    );
+
+    const linked = previous
+      ? {
+          phone: phone || previous.phone,
+          notes: notes || previous.notes,
+          cvFilename: previous.cv_filename,
+          cvStoredName: previous.cv_stored_name,
+          cvMime: previous.cv_mime,
+          cvSize: previous.cv_size,
+          cvStorage: previous.cv_storage,
+          cvUploadedAt: previous.cv_uploaded_at,
+        }
+      : {
+          phone,
+          notes,
+          cvFilename: null,
+          cvStoredName: null,
+          cvMime: null,
+          cvSize: null,
+          cvStorage: null,
+          cvUploadedAt: null,
+        };
+
     const created = await one(
       "INSERT INTO candidates (job_id, full_name, email, phone, source, notes, current_stage, " +
-        "invite_link, invite_at, added_by) " +
-        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
+        "invite_link, invite_at, added_by, cv_filename, cv_stored_name, cv_mime, cv_size, " +
+        "cv_storage, cv_uploaded_at) " +
+        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) " +
+        "RETURNING id",
       [
         jobId,
         fullName,
         emailValue,
-        phone,
+        linked.phone,
         source,
-        notes,
+        linked.notes,
         stages[0],
         inviteLink,
         inviteAt,
         req.user.id,
+        linked.cvFilename,
+        linked.cvStoredName,
+        linked.cvMime,
+        linked.cvSize,
+        linked.cvStorage,
+        linked.cvUploadedAt,
       ]
     );
 
@@ -318,7 +371,16 @@ router.post(
     }
 
     // The front end says what actually happened, not what was asked for.
-    res.status(201).json({ candidate: toJson(candidate), email });
+    res.status(201).json({
+      candidate: toJson(candidate),
+      email,
+      // CAN-05: whether this person was already known, so the page can
+      // say their CV was carried over rather than leaving HR wondering
+      // why one is already attached.
+      linkedFrom: previous
+        ? { candidateId: Number(previous.id), cvReused: Boolean(previous.cv_stored_name) }
+        : null,
+    });
   })
 );
 
@@ -667,6 +729,13 @@ router.delete(
 
     await run("DELETE FROM candidates WHERE id = $1", [id]);
     await removeCv(row.cv_stored_name, row.cv_storage);
+    await audit.record(audit.ACTIONS.CANDIDATE_DELETED, {
+      actor: req.user,
+      subjectType: "candidate",
+      subjectId: id,
+      detail: row.full_name + " (" + row.email + ")",
+      req,
+    });
     res.json({ ok: true });
   })
 );

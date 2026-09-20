@@ -21,42 +21,52 @@ const RESET = process.argv.includes("--reset");
 // short passwords below are accepted. Accounts created through the Team
 // page still go through the proper rule (8+ characters, a letter and a
 // number) - see server/validate.js.
+// The four personas from the project plan, so the document and the
+// running system describe the same people.
+//
+// Their addresses are ordinary personal Gmail addresses rather than
+// role mailboxes like hr@company.test. A recruitment system holds real
+// people, and an account that reads "hr@" belongs to a job rather than
+// to anyone - which is exactly the kind of shared login that makes an
+// audit log useless.
 const TEAM = [
   {
-    name: "Nimali Wijesinghe",
-    email: "hr@hiretrack.test",
-    password: "hr12345",
+    name: "Kevin Fernando",
+    email: "kevin2847@gmail.com",
+    password: "kevin12345",
     role: "hr",
     jobTitle: "HR Manager",
   },
   {
-    name: "Chathura Rajapaksha",
-    email: "hiringmanager@hiretrack.test",
-    password: "hm12345",
+    name: "Thusitha Samarasinghe",
+    email: "thusitha4715@gmail.com",
+    password: "thusitha12345",
     role: "hiring_manager",
-    jobTitle: "Engineering / Hiring Manager",
+    jobTitle: "Hiring Manager",
   },
   {
-    name: "Sanduni Ekanayake",
-    email: "int@hiretrack.test",
-    password: "int12345",
+    name: "Sara Salgadu",
+    email: "sara3162@gmail.com",
+    password: "sara12345",
     role: "interviewer",
     jobTitle: "Senior Software Engineer",
   },
   {
-    name: "Mahesh Gunawardena",
-    email: "manag@hiretrack.test",
-    password: "manag12345",
+    name: "Arosh Perera",
+    email: "arosh2903@gmail.com",
+    password: "arosh12345",
     role: "management",
     jobTitle: "Operations Manager",
   },
 ];
 
-// The addresses the rest of this script refers to, in one place, so a
-// change up there does not have to be chased through the file.
-const HR = "hr@hiretrack.test";
-const HIRING_MANAGER = "hiringmanager@hiretrack.test";
-const INTERVIEWER = "int@hiretrack.test";
+// The addresses the rest of this script refers to, taken from TEAM
+// above rather than repeated, so changing somebody's email in one place
+// cannot leave the rest of the file pointing at an account that no
+// longer exists.
+const HR = TEAM[0].email;
+const HIRING_MANAGER = TEAM[1].email;
+const INTERVIEWER = TEAM[2].email;
 
 const JOBS = [
   {

@@ -3,6 +3,7 @@ import { one, many, run } from "../../database/index.js";
 import { config, ROLES, ROLE_LABELS, ROLE_DESCRIPTIONS, PERMISSIONS } from "../config.js";
 import { asyncHandler, requireAuth, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
+import * as audit from "../audit.js";
 import { publicUser, hashPassword } from "../auth.js";
 
 /**
@@ -123,6 +124,14 @@ router.post(
       [name, emailValue, await hashPassword(pw), role, jobTitle]
     );
 
+    await audit.record(audit.ACTIONS.USER_CREATED, {
+      actor: req.user,
+      subjectType: "user",
+      subjectId: Number(created.id),
+      detail: name + " (" + emailValue + ") as " + role,
+      req,
+    });
+
     const row = await one(LIST_SQL + "WHERE u.id = $1", [created.id]);
     res.status(201).json({ member: memberRow(row) });
   })
@@ -159,6 +168,17 @@ router.patch(
         throw httpError(400, "There has to be at least one active HR account.");
       }
       push("role", role);
+      // Recorded before the write rather than after, so the message can
+      // still name what the role was changing FROM.
+      if (role !== target.role) {
+        await audit.record(audit.ACTIONS.USER_ROLE_CHANGED, {
+          actor: req.user,
+          subjectType: "user",
+          subjectId: id,
+          detail: target.name + ": " + target.role + " -> " + role,
+          req,
+        });
+      }
     }
 
     if (req.body.isActive !== undefined) {
@@ -170,6 +190,18 @@ router.patch(
         throw httpError(400, "There has to be at least one active HR account.");
       }
       push("is_active", active);
+      if (active !== target.is_active) {
+        await audit.record(
+          active ? audit.ACTIONS.USER_REACTIVATED : audit.ACTIONS.USER_DEACTIVATED,
+          {
+            actor: req.user,
+            subjectType: "user",
+            subjectId: id,
+            detail: target.name + " (" + target.email + ")",
+            req,
+          }
+        );
+      }
     }
 
     if (!sets.length) throw httpError(400, "Nothing to update.");
@@ -233,6 +265,24 @@ router.get(
       googleEnabled: config.google.enabled,
       mailEnabled: config.smtp.enabled,
     });
+  })
+);
+
+// --- AUD-01: read the audit trail --------------------------------------
+//
+// Behind team:manage rather than a permission of its own: the log names
+// who did what, which is staff information, and HR is who administers
+// accounts. Management sees the numbers through Reports instead.
+router.get(
+  "/audit",
+  requirePermission("team:manage"),
+  asyncHandler(async (req, res) => {
+    const entries = await audit.list({
+      limit: req.query.limit,
+      action: req.query.action ? String(req.query.action) : "",
+      actorId: req.query.actor ? v.id(req.query.actor, { field: "actor id" }) : null,
+    });
+    res.json({ entries, summary: await audit.counts() });
   })
 );
 

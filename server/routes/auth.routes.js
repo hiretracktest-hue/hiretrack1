@@ -4,6 +4,7 @@ import { one, run } from "../../database/index.js";
 import { config, ROLES, ROLE_LABELS } from "../config.js";
 import { asyncHandler, requireAuth, httpError } from "../middleware.js";
 import * as v from "../validate.js";
+import * as audit from "../audit.js";
 import {
   hashPassword,
   checkPassword,
@@ -49,9 +50,17 @@ router.post(
       if (user && user.is_active && !user.password_hash) {
         throw httpError(401, "This account uses Google sign-in. Use the Google button instead.");
       }
+      // A failed attempt is worth recording too - a run of them
+      // against one address is what an attack looks like.
+      await audit.record(audit.ACTIONS.SIGN_IN_FAILED, {
+        actorEmail: emailValue,
+        detail: user ? "wrong password" : "no such account",
+        req,
+      });
       throw httpError(401, "Invalid email or password.");
     }
 
+    await audit.record(audit.ACTIONS.SIGN_IN, { actor: user, req });
     setAuthCookie(res, signToken(user));
     res.json({ user: publicUser(user) });
   })

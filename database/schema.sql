@@ -19,6 +19,7 @@
 CREATE EXTENSION IF NOT EXISTS citext;
 
 -- Drop in reverse dependency order so re-running is clean.
+DROP TABLE IF EXISTS audit_log CASCADE;
 DROP TABLE IF EXISTS notifications CASCADE;
 DROP TABLE IF EXISTS feedback CASCADE;
 DROP TABLE IF EXISTS interviews CASCADE;
@@ -224,6 +225,38 @@ CREATE INDEX idx_feedback_candidate ON feedback (candidate_id);
 --   EMAIL  - for a candidate, who does not. The message is written to
 --            an outbox that HR sends and marks off. There is no mail
 --            server in this project, so nothing is sent automatically.
+-- -------------------------------------------------------------------
+-- audit_log - AUD-01. Who did what, and when.
+--
+-- Only security-sensitive actions are recorded: signing in, creating
+-- or changing an account, changing somebody's role, and deleting a
+-- candidate or a position. Recording every read as well would bury
+-- those entries in noise and make the log useless for the one job it
+-- has.
+--
+-- actor_id is ON DELETE SET NULL rather than CASCADE. Deleting a user
+-- must not erase the record of what they did - that would let somebody
+-- cover their tracks by removing the account afterwards. actor_email
+-- and actor_name keep a readable copy for exactly that case.
+-- -------------------------------------------------------------------
+CREATE TABLE audit_log (
+  id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  action       TEXT        NOT NULL,
+  actor_id     BIGINT      REFERENCES users (id) ON DELETE SET NULL,
+  actor_email  TEXT        NOT NULL DEFAULT '',
+  actor_name   TEXT        NOT NULL DEFAULT '',
+  -- What was acted on: 'candidate', 'job', 'user'. Free text with the
+  -- id beside it, so a new kind of record does not need a migration.
+  subject_type TEXT        NOT NULL DEFAULT '',
+  subject_id   BIGINT,
+  detail       TEXT        NOT NULL DEFAULT '',
+  ip           TEXT        NOT NULL DEFAULT '',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX audit_log_created_idx ON audit_log (created_at DESC);
+CREATE INDEX audit_log_actor_idx   ON audit_log (actor_id);
+
 -- -------------------------------------------------------------------
 CREATE TABLE notifications (
   id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

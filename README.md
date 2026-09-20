@@ -56,14 +56,20 @@ each row has a **Use** button that fills the form for you.
 
 | Email | Password | Role | What they can do |
 | --- | --- | --- | --- |
-| `hr@hiretrack.test` | `hr12345` | HR Recruiter | Everything: open positions, add candidates, screen CVs, run the process |
-| `hiringmanager@hiretrack.test` | `hm12345` | Hiring Manager | Candidates, comparison, the hire decision. **Cannot** open or close a position |
-| `int@hiretrack.test` | `int12345` | Interviewer | Sees candidates, leaves feedback at their stage. **Cannot** move anyone forward |
-| `manag@hiretrack.test` | `manag12345` | Management | Oversight: sees everything, changes nothing, exports reports |
+| `kevin2847@gmail.com` | `kevin12345` | HR Recruiter | Everything: open positions, add candidates, screen CVs, run the process |
+| `thusitha4715@gmail.com` | `thusitha12345` | Hiring Manager | Candidates, comparison, the hire decision. **Cannot** open or close a position |
+| `sara3162@gmail.com` | `sara12345` | Interviewer | Sees candidates, leaves feedback at their stage. **Cannot** move anyone forward |
+| `arosh2903@gmail.com` | `arosh12345` | Management | Oversight: sees everything, changes nothing, exports reports |
 
-The names behind them are the four personas from the project plan — Nimali
-Wijesinghe (HR), Chathura Rajapaksha (Hiring Manager), Sanduni Ekanayake
-(Interviewer) and Mahesh Gunawardena (Management).
+These are the four personas from the project plan — Kevin Fernando (HR),
+Thusitha Samarasinghe (Hiring Manager), Sara Salgadu (Interviewer) and Arosh
+Perera (Management) — so the document and the running system describe the same
+people.
+
+Their addresses are ordinary personal Gmail addresses rather than role
+mailboxes like `hr@company.test`. A recruitment system holds real people, and
+an account that reads `hr@` belongs to a job rather than to anyone — which is
+exactly the kind of shared login that makes an audit trail meaningless.
 
 > These are demo passwords, short on purpose so they are quick to type in the
 > sprint review. They are written straight into the database by `seed.js`.
@@ -621,13 +627,13 @@ request after an idle spell is noticeably slower than the rest.
 
 ### Before making it public
 
-The seeded accounts are `hr@hiretrack.test` / `hr12345` and three like it. On
+The seeded accounts are `kevin2847@gmail.com` / `kevin12345` and three like it. On
 `localhost` that is convenient. On a public URL it is a real database of CVs and
 candidate email addresses behind a password that has been shared over chat.
 
 Either change the demo passwords in `database/seed.js` before deploying, or
 point the deployed copy at a second, throw-away Supabase project and keep the
-real one local. Do not put real candidate data behind `hr12345`.
+real one local. Do not put real candidate data behind `kevin12345`.
 
 ## 10. Publishing to GitHub
 
