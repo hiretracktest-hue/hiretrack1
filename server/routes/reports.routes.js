@@ -1,6 +1,7 @@
 import express from "express";
 import { one, many } from "../../database/index.js";
 import { asyncHandler, requirePermission } from "../middleware.js";
+import { streamReportPdf } from "../report-pdf.js";
 
 /**
  * "What reports would management want to export?"
@@ -117,7 +118,10 @@ async function buildReport() {
       outstanding: Math.max(0, row.interviews - row.feedback),
     }));
 
-  return { summary, positions, byStage, byBand, interviewerActivity };
+  // Named `vacancies` to match the rest of the app. This key said
+  // `positions` while every screen and route said vacancies, so the
+  // Reports page read undefined and crashed before it drew anything.
+  return { summary, vacancies: positions, byStage, byBand, interviewerActivity };
 }
 
 router.get(
@@ -143,7 +147,9 @@ router.get(
   "/export.csv",
   requirePermission("report:export"),
   asyncHandler(async (req, res) => {
-    const which = String(req.query.report || "positions");
+    // "vacancies" is what the front end sends; "positions" is kept so an
+    // older bookmark or a saved link does not break.
+    const which = String(req.query.report || "vacancies");
     const report = await buildReport();
     let filename = "hiretrack-positions.csv";
     let csv = "";
@@ -181,7 +187,7 @@ router.get(
     } else {
       csv = toCsv(
         ["Position", "Department", "Status", "Opened on", "Candidates", "Active", "On hold", "Hired", "Rejected", "High band", "Average score"],
-        report.positions.map((r) => [
+        report.vacancies.map((r) => [
           r.title, r.department, r.status, r.openedOn, r.candidates,
           r.active, r.onHold, r.hired, r.rejected, r.highBand, r.averageRating ?? "",
         ])
@@ -192,6 +198,41 @@ router.get(
     res.setHeader("Content-Disposition", 'attachment; filename="' + filename + '"');
     // A BOM so Excel opens UTF-8 correctly.
     res.send("﻿" + csv);
+  })
+);
+
+// The rows behind the candidate export. Shared by the CSV and the PDF so
+// the two can never disagree about what the figures are.
+async function candidateRows() {
+  return many(`
+    SELECT c.full_name, c.email, c.phone, j.title AS job_title, j.department,
+           c.current_stage, c.outcome, c.cv_band, c.source, c.created_at,
+           (SELECT ROUND(AVG(f.rating), 1) FROM feedback f WHERE f.candidate_id = c.id) AS average_rating
+    FROM candidates c JOIN jobs j ON j.id = c.job_id
+    ORDER BY j.title, c.full_name
+  `);
+}
+
+// --- RPT-02: the same reports as PDF -----------------------------------
+//
+// CSV is for somebody who will carry on working with the numbers; PDF is
+// for somebody who will read them - a leadership meeting, an email
+// attachment - where a spreadsheet that opens differently on every
+// machine is worse than a page that looks the same everywhere.
+router.get(
+  "/export.pdf",
+  requirePermission("report:export"),
+  asyncHandler(async (req, res) => {
+    const which = String(req.query.report || "vacancies");
+    const report = await buildReport();
+    const rows = which === "candidates" ? await candidateRows() : [];
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="hiretrack-' + which.replace(/[^a-z]/gi, "") + '.pdf"'
+    );
+    streamReportPdf(res, which, report, rows);
   })
 );
 

@@ -1170,7 +1170,10 @@ describe("reports management can export", () => {
     assert.equal(data.summary.totalCandidates, count);
 
     const jobId = Number((await one("SELECT id FROM jobs WHERE title = $1", ["Junior Developer"])).id);
-    const position = data.positions.find((row) => row.id === jobId);
+    // The payload calls these vacancies, matching every screen and route
+    // in the app. It used to say `positions`, which is why the Reports
+    // page read undefined and crashed before drawing anything.
+    const position = data.vacancies.find((row) => row.id === jobId);
     const actual = await one("SELECT COUNT(*)::int AS count FROM candidates WHERE job_id = $1", [jobId]);
     assert.equal(position.candidates, actual.count, "feedback rows must not inflate the count");
   });
@@ -1879,6 +1882,75 @@ describe("AUD-01 - the audit log", () => {
       assert.equal((await call("GET", "/api/team/audit")).status, 403, who + " must be refused");
     }
     await signIn("hr@example.com");
+  });
+});
+
+describe("RPT-01 and RPT-02 - the dashboard data and the PDF export", () => {
+  test("the report payload uses the same word as the rest of the app", async () => {
+    // It said `positions` while every screen, route and label said
+    // vacancies, so the page read undefined and crashed on .length -
+    // the whole Reports screen rendered nothing for every role.
+    await signIn("management@example.com", "Password456");
+    const { data } = await call("GET", "/api/reports");
+    assert.ok(Array.isArray(data.vacancies), "vacancies is the key the front end reads");
+    assert.equal(data.positions, undefined, "the old name is gone, not merely aliased");
+  });
+
+  test("the chart data is present and shaped for drawing", async () => {
+    await signIn("management@example.com", "Password456");
+    const { data } = await call("GET", "/api/reports");
+
+    // RPT-01 draws three charts from these three arrays.
+    for (const key of ["byStage", "byBand", "interviewerActivity"]) {
+      assert.ok(Array.isArray(data[key]), key + " is an array");
+    }
+    for (const row of data.byStage) {
+      assert.equal(typeof row.stage, "string");
+      assert.equal(typeof row.total, "number", "a bar length has to be a number");
+    }
+    for (const row of data.byBand) {
+      assert.match(row.band, /^(HIGH|MEDIUM|LOW|UNRATED)$/);
+    }
+  });
+
+  test("every report downloads as a PDF", async () => {
+    await signIn("management@example.com", "Password456");
+
+    for (const which of ["vacancies", "candidates", "stages", "interviewers"]) {
+      const response = await fetch(baseUrl + "/api/reports/export.pdf?report=" + which, {
+        headers: { Cookie: cookie },
+      });
+      assert.equal(response.status, 200, which + " exports");
+      assert.match(response.headers.get("content-type") || "", /application\/pdf/);
+      assert.match(
+        response.headers.get("content-disposition") || "",
+        /^attachment/,
+        "a report is downloaded, not rendered in the page"
+      );
+
+      const bytes = Buffer.from(await response.arrayBuffer());
+      // A PDF always starts %PDF- and ends with an EOF marker. Checking
+      // the bytes catches a truncated stream, which a 200 will not.
+      assert.equal(bytes.subarray(0, 5).toString(), "%PDF-", which + " is really a PDF");
+      assert.match(bytes.subarray(-1024).toString("latin1"), /%%EOF/, which + " is complete");
+    }
+  });
+
+  test("a role without export rights cannot reach the PDF either", async () => {
+    // The CSV route was already guarded; the PDF must not be a way round it.
+    await signIn("interviewer@example.com");
+    assert.equal((await call("GET", "/api/reports/export.pdf?report=vacancies")).status, 403);
+    await signIn("manager@example.com");
+    assert.equal((await call("GET", "/api/reports/export.pdf?report=vacancies")).status, 403);
+  });
+
+  test("an unknown report name falls back instead of failing", async () => {
+    await signIn("management@example.com", "Password456");
+    const response = await fetch(baseUrl + "/api/reports/export.pdf?report=nonsense", {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(Buffer.from(await response.arrayBuffer()).subarray(0, 5).toString(), "%PDF-");
   });
 });
 

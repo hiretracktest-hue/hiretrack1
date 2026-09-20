@@ -1522,3 +1522,139 @@ textarea:focus-visible,
   background: var(--red-bg);
   color: var(--red-fg);
 }
+
+/* --- charts (RPT-01) -------------------------------------------------
+   Thin marks, recessive grid, every bar directly labelled. The fills are
+   set from JS because they carry meaning; everything structural is here. */
+.chart {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  box-shadow: var(--shadow-sm);
+}
+.chart + .chart {
+  margin-top: 14px;
+}
+.chart-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.chart-head h3 {
+  font-size: 0.98rem;
+}
+.chart-note {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  max-width: 62ch;
+}
+.chart-group + .chart-group {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.chart-group-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-bottom: 7px;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.chart-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chart-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  flex: none;
+}
+
+.bars {
+  display: grid;
+  gap: 6px;
+}
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(64px, 132px) 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+.bar-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bar-track {
+  /* The track is the recessive part - it shows the scale without
+     competing with the data. */
+  background: var(--canvas);
+  border-radius: 5px;
+  height: 16px;
+  display: block;
+  overflow: hidden;
+}
+.bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  /* Bars grow from nothing on first paint, so the eye follows the
+     length rather than being handed a finished picture. */
+  transform-origin: left center;
+  animation: grow 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.bar-value {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  min-width: 2ch;
+  text-align: right;
+}
+
+.chart-table {
+  margin-top: 4px;
+}
+
+@media (max-width: 560px) {
+  .bar-row {
+    grid-template-columns: minmax(56px, 92px) 1fr auto;
+    gap: 7px;
+  }
+  .chart {
+    padding: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar-fill {
+    animation: none;
+  }
+}

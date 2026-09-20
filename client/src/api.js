@@ -109,6 +109,9 @@ export const api = {
   // reports for management
   reports: () => request("/reports"),
   reportCsvUrl: (report) => "/api/reports/export.csv?report=" + encodeURIComponent(report),
+  // RPT-02. CSV is for working with the numbers; PDF is for sending them
+  // to somebody who will only read them.
+  reportPdfUrl: (report) => "/api/reports/export.pdf?report=" + encodeURIComponent(report),
 
   // people
   team: () => request("/team"),
