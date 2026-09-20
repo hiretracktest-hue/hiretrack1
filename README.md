@@ -13,9 +13,9 @@ Built for our second year, second semester group project.
 | Front end | React 18 (JSX), React Router, plain CSS, built with Vite |
 | Visual design | Our client's own palette and typeface, taken from [altrium.io](https://www.altrium.io/) |
 | Back end | Node.js + Express (REST API) |
-| Database | **PostgreSQL on Supabase**, accessed with `pg` (node-postgres) — 8 tables |
+| Database | **PostgreSQL on Supabase**, accessed with `pg` (node-postgres) — 9 tables |
 | Auth | Email + password (bcrypt), JWT in an httpOnly cookie, optional Google sign-in |
-| Tests | Node's built-in test runner — 77 API tests |
+| Tests | Node's built-in test runner — 135 API tests |
 
 > **This is an internal system.** The people who log in are HR, hiring managers,
 > interviewers and management. **Job candidates do not have accounts** — HR adds
@@ -56,20 +56,20 @@ each row has a **Use** button that fills the form for you.
 
 | Email | Password | Role | What they can do |
 | --- | --- | --- | --- |
-| `kevin2847@gmail.com` | `kevin12345` | HR Recruiter | Everything: open positions, add candidates, screen CVs, run the process |
-| `thusitha4715@gmail.com` | `thusitha12345` | Hiring Manager | Candidates, comparison, the hire decision. **Cannot** open or close a position |
-| `sara3162@gmail.com` | `sara12345` | Interviewer | Sees candidates, leaves feedback at their stage. **Cannot** move anyone forward |
-| `arosh2903@gmail.com` | `arosh12345` | Management | Oversight: sees everything, changes nothing, exports reports |
+| `kevin@hiretrack.lk` | `kevin12345` | HR Recruiter | Everything: open positions, add candidates, screen CVs, run the process |
+| `thusitha@hiretrack.lk` | `thusitha12345` | Hiring Manager | Candidates, comparison, the hire decision. **Cannot** open or close a position |
+| `sara@hiretrack.lk` | `sara12345` | Interviewer | Sees candidates, leaves feedback at their stage. **Cannot** move anyone forward |
+| `arosh@hiretrack.lk` | `arosh12345` | Management | Oversight: sees everything, changes nothing, exports reports |
 
 These are the four personas from the project plan — Kevin Fernando (HR),
 Thusitha Samarasinghe (Hiring Manager), Sara Salgadu (Interviewer) and Arosh
 Perera (Management) — so the document and the running system describe the same
 people.
 
-Their addresses are ordinary personal Gmail addresses rather than role
-mailboxes like `hr@company.test`. A recruitment system holds real people, and
-an account that reads `hr@` belongs to a job rather than to anyone — which is
-exactly the kind of shared login that makes an audit trail meaningless.
+They sign in with work addresses on the company domain, named after the person
+rather than the job. An account that reads `hr@` belongs to a post rather than
+to anybody, and a login several people share is exactly what makes an audit
+trail worthless — you can see what was done but never who did it.
 
 > These are demo passwords, short on purpose so they are quick to type in the
 > sprint review. They are written straight into the database by `seed.js`.
@@ -88,7 +88,7 @@ exactly the kind of shared login that makes an audit trail meaningless.
 | `npm run dev` | Run the API and the React dev server together |
 | `npm run build` | Build the React app into `client/dist` |
 | `npm start` | Run the API, serving the built React app too |
-| `npm test` | Run the 77 automated API tests |
+| `npm test` | Run the 135 automated API tests |
 | `npm run seed` | Add any missing demo data (safe to re-run) |
 | `npm run seed:reset` | Empty every table, then seed from scratch |
 
@@ -413,7 +413,7 @@ our web/
 │   │   ├── notifications.routes.js in-app notifications + candidate outbox
 │   │   ├── reports.routes.js       management reports + CSV export
 │   │   └── team.routes.js          who logs in, roles, dashboard counts
-│   └── tests/api.test.js   77 automated tests
+│   └── tests/api.test.js   135 automated tests
 │
 └── client/                 React front end
     ├── index.html
@@ -627,7 +627,7 @@ request after an idle spell is noticeably slower than the rest.
 
 ### Before making it public
 
-The seeded accounts are `kevin2847@gmail.com` / `kevin12345` and three like it. On
+The seeded accounts are `kevin@hiretrack.lk` / `kevin12345` and three like it. On
 `localhost` that is convenient. On a public URL it is a real database of CVs and
 candidate email addresses behind a password that has been shared over chat.
 

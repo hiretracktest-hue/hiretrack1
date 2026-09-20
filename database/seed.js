@@ -24,36 +24,36 @@ const RESET = process.argv.includes("--reset");
 // The four personas from the project plan, so the document and the
 // running system describe the same people.
 //
-// Their addresses are ordinary personal Gmail addresses rather than
-// role mailboxes like hr@company.test. A recruitment system holds real
-// people, and an account that reads "hr@" belongs to a job rather than
-// to anyone - which is exactly the kind of shared login that makes an
-// audit log useless.
+// Work addresses on the company domain, named after the person rather
+// than the job. An account that reads "hr@" belongs to a post rather
+// than to anybody, and a login several people share is exactly what
+// makes an audit trail worthless - you can see what was done but never
+// who did it.
 const TEAM = [
   {
     name: "Kevin Fernando",
-    email: "kevin2847@gmail.com",
+    email: "kevin@hiretrack.lk",
     password: "kevin12345",
     role: "hr",
     jobTitle: "HR Manager",
   },
   {
     name: "Thusitha Samarasinghe",
-    email: "thusitha4715@gmail.com",
+    email: "thusitha@hiretrack.lk",
     password: "thusitha12345",
     role: "hiring_manager",
     jobTitle: "Hiring Manager",
   },
   {
     name: "Sara Salgadu",
-    email: "sara3162@gmail.com",
+    email: "sara@hiretrack.lk",
     password: "sara12345",
     role: "interviewer",
     jobTitle: "Senior Software Engineer",
   },
   {
     name: "Arosh Perera",
-    email: "arosh2903@gmail.com",
+    email: "arosh@hiretrack.lk",
     password: "arosh12345",
     role: "management",
     jobTitle: "Operations Manager",
