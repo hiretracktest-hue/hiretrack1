@@ -4,11 +4,10 @@ import { useAuth } from "../AuthContext.jsx";
 import { Alert, Field, Loading, PasswordInput, formatDate, initials } from "../components/ui.jsx";
 
 /**
- * "Who logs in, and what can each role see and do?"
+ * "Who logs in, and what is each of them here to do?"
  *
- * This page answers it in the system itself: the people, their roles,
- * and the permission matrix that the API actually enforces. Only HR can
- * create an account or change a role.
+ * The people and their roles. Only HR can create an account or change
+ * somebody's role; everyone else reads the list.
  */
 export default function Team() {
   const { user } = useAuth();
@@ -16,7 +15,6 @@ export default function Team() {
 
   const [members, setMembers] = useState([]);
   const [roles, setRoles] = useState([]);
-  const [matrix, setMatrix] = useState({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -37,7 +35,6 @@ export default function Team() {
       const result = await api.team();
       setMembers(result.members);
       setRoles(result.roles);
-      setMatrix(result.permissionMatrix || {});
     } catch (err) {
       setError(err.message);
     } finally {
@@ -101,9 +98,6 @@ export default function Team() {
     setForm((current) => ({ ...current, [key]: event.target.value }));
 
   if (loading) return <Loading what="the team" />;
-
-  // A readable summary of what each role may do, straight from the API.
-  const matrixRows = Object.entries(matrix);
 
   return (
     <div className="page">
@@ -274,43 +268,6 @@ export default function Team() {
         ))}
       </div>
 
-      {/* The permission matrix, straight out of the API. */}
-      <div className="card mt-3">
-        <h2>What each role can do</h2>
-        <p className="field-hint">
-          This table is generated from the rules the API enforces, so it cannot drift out of date.
-          Hiding a button is convenience — the server checks the same rule on every request.
-        </p>
-
-        <div className="table-wrap mt-2" style={{ border: "none", boxShadow: "none" }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Action</th>
-                {roles.map((role) => (
-                  <th key={role.value}>{role.label}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {matrixRows.map(([action, allowed]) => (
-                <tr key={action}>
-                  <td className="cell-title">{action}</td>
-                  {roles.map((role) => (
-                    <td key={role.value}>
-                      {allowed.includes(role.value) ? (
-                        <span className="badge badge-green">Yes</span>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 }

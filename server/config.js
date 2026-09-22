@@ -109,9 +109,11 @@ export const config = {
 // Who logs in, and what can each role see and do?
 //
 //   hr             - HR / recruiter. Opens positions, adds candidates,
-//                    runs the whole process.
-//   hiring_manager - Compares candidates and makes the hire decision.
-//                    Does not open or close positions.
+//                    screens CVs and books the interviews. Does not
+//                    move candidates on or decide.
+//   hiring_manager - Compares candidates, moves them through the stages
+//                    and makes the hire decision. Does not open or
+//                    close positions.
 //   interviewer    - Leaves feedback at their stage. Sees candidates,
 //                    changes nothing about their progress.
 //   management     - Oversight. Sees everything, changes nothing,
@@ -134,9 +136,9 @@ export const ROLE_LABELS = {
 };
 
 export const ROLE_DESCRIPTIONS = {
-  hr: "Opens positions, adds candidates, screens CVs, schedules interviews and runs the whole process.",
+  hr: "Opens positions, adds candidates, screens CVs and books interviews. Does not move candidates between stages.",
   hiring_manager:
-    "Reviews candidates, compares them side by side, records the hire / reject / on-hold decision. Cannot open or close a position.",
+    "Reviews candidates, compares them side by side, moves them through the stages and records the hire / reject / on-hold decision. Cannot open or close a position.",
   interviewer:
     "Sees the candidates they are interviewing and leaves structured feedback at their stage. Cannot move anyone forward.",
   management:
