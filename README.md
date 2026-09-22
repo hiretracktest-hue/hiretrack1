@@ -15,7 +15,7 @@ Built for our second year, second semester group project.
 | Back end | Node.js + Express (REST API) |
 | Database | **PostgreSQL on Supabase**, accessed with `pg` (node-postgres) — 9 tables |
 | Auth | Email + password (bcrypt), JWT in an httpOnly cookie, optional Google sign-in |
-| Tests | Node's built-in test runner — 135 API tests |
+| Tests | Node's built-in test runner — 165 API tests |
 
 > **This is an internal system.** The people who log in are HR, hiring managers,
 > interviewers and management. **Job candidates do not have accounts** — HR adds
@@ -88,7 +88,7 @@ trail worthless — you can see what was done but never who did it.
 | `npm run dev` | Run the API and the React dev server together |
 | `npm run build` | Build the React app into `client/dist` |
 | `npm start` | Run the API, serving the built React app too |
-| `npm test` | Run the 135 automated API tests |
+| `npm test` | Run the 165 automated API tests |
 | `npm run seed` | Add any missing demo data (safe to re-run) |
 | `npm run seed:reset` | Empty every table, then seed from scratch |
 
@@ -164,8 +164,8 @@ Two providers, either optional:
 
 | | |
 | --- | --- |
-| **Resend** | `RESEND_API_KEY` + `RESEND_FROM_EMAIL`. An HTTP API, so it works on networks that block outbound SMTP ports. Preferred when both are set. |
-| **SMTP** | `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`. Any mailbox, including Gmail with an App Password. |
+| **Resend** | `RESEND_API_KEY` + `RESEND_FROM_EMAIL`. An HTTP API, so it works on networks that block outbound SMTP ports. Tried first when both are set. |
+| **SMTP** | `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`. Any mailbox, including Gmail with an App Password. **Carries whatever Resend refuses** when both are set. |
 | **Neither** | Messages wait in the Outbox for HR to send by hand, as before. |
 
 **A Resend account with no verified domain will only deliver to the address
@@ -341,19 +341,37 @@ Four roles with genuinely different permissions, all defined in one place
 
 | Action | HR | Hiring Manager | Interviewer | Management |
 | --- | :-: | :-: | :-: | :-: |
-| Open / edit / close / delete a position | ✅ | — | — | — |
+| Open / edit / close / delete a vacancy | ✅ | — | — | — |
 | See every candidate | ✅ | ✅ | ✅ | ✅ |
 | Add a candidate, upload their CV | ✅ | — | — | — |
 | Band a CV High / Medium / Low | ✅ | ✅ | — | — |
 | Move a candidate to the next stage | ✅ | ✅ | — | — |
 | Record hired / rejected / on hold | ✅ | ✅ | — | — |
-| Leave interview feedback | ✅ | ✅ | ✅ | — |
+| Leave interview feedback | — | ✅ ¹ | ✅ ¹ | — |
 | Compare candidates side by side | ✅ | ✅ | — | ✅ |
 | Schedule an interview | ✅ | ✅ | — | — |
 | Candidate email outbox | ✅ | ✅ | — | — |
 | View reports | ✅ | ✅ | — | ✅ |
-| Export CSV | ✅ | — | — | ✅ |
+| Export reports as CSV or PDF | ✅ | ✅ | — | ✅ |
+| Read and download the audit log | — | — | — | ✅ |
 | Create accounts, set roles | ✅ | — | — | — |
+
+¹ **Only for an interview they were booked for.** Once an interview is booked
+for a stage, its feedback belongs to whoever was booked: a hiring manager cannot
+score somebody else's interview, and that score would otherwise have counted
+towards letting the candidate advance. A declined booking does not count.
+
+**HR does not write feedback.** HR runs the process and reads the verdicts; the
+people who sat in the interview give them.
+
+**The hiring manager can export.** Backlog story `RPT-02` is written for them —
+*"As a Hiring Manager, I want pipeline reports exportable in CSV and PDF"* — and
+they were the one role left out of it.
+
+**Only management reads the audit log, deliberately not HR.** Most of what it
+records is HR's own work — accounts created, roles changed, candidates deleted —
+so HR reviewing it would be HR marking its own homework. That is separation of
+duties, not a lack of trust in any one person.
 
 The **Team** page renders this table live from the API, so the documentation
 cannot drift away from the rules.
@@ -413,7 +431,7 @@ our web/
 │   │   ├── notifications.routes.js in-app notifications + candidate outbox
 │   │   ├── reports.routes.js       management reports + CSV export
 │   │   └── team.routes.js          who logs in, roles, dashboard counts
-│   └── tests/api.test.js   135 automated tests
+│   └── tests/api.test.js   165 automated tests
 │
 └── client/                 React front end
     ├── index.html
@@ -493,6 +511,29 @@ is turned away, because HR controls who gets in.
 
 ---
 
+## Backlog traceability
+
+Every test suite is named after the backlog story it is evidence for, using the
+IDs exactly as the project plan writes them — so `npm test` output reads as a
+checklist against the plan, and a failing test names the story it breaks.
+
+| Sprint 1 | Tests | Sprint 2 | Tests |
+| --- | --: | --- | --: |
+| `AUTH-01` Log in securely | 20 | `JOB-03` Close a job opening | 5 |
+| `JOB-01` Create a job position | 4 | `CAN-05` Reuse a profile and CV on a second position | 4 |
+| `JOB-02` Edit or close a job position | 5 | `WF-02` Blocked until the stage's feedback is in | 12 |
+| `CAN-01` Add candidate information | 21 | `FB-02` Interviewer sees Hired / Rejected / On hold | 4 |
+| `CAN-02` Upload a candidate's CV | 21 | `FB-03` All feedback, compared side by side | 9 |
+| `CAN-03` Search and filter candidates | 12 | `COM-01` Hire-confirmation email | 8 |
+| `WF-01` Configure interview stages | 4 | `COM-02` Interviewer notified when assigned | 25 |
+| `INT-01` Schedule interviews | 38 | `RPT-01` Dashboard with KPIs | 12 |
+| `CAN-04` Move on or reject | 6 | `RPT-02` Export as CSV and PDF | 10 |
+| `FB-01` Structured feedback, score per stage | 15 | `AUD-01` Audit log | 7 |
+
+**20 of 20 stories have automated evidence.** A test can count towards more than
+one story when it proves both — the audit test that deletes a candidate is
+evidence for `AUD-01`, not a second test of deleting. 165 tests in total.
+
 ## 8. Testing
 
 ```bash
@@ -541,9 +582,10 @@ test.
 - **No public sign-up and no self-promotion**: HR creates accounts and sets
   roles, and the last HR account cannot demote or deactivate itself.
 
-Before this handled real candidate data you would also want: a real
-`JWT_SECRET` in `.env`, rate limiting on the auth routes, HTTPS, virus scanning
-of uploads, and an audit log.
+Before this handled real candidate data you would also want: rate limiting on
+the auth routes and virus scanning of uploads. (A real `JWT_SECRET` is already
+enforced — the server refuses to start in production without one — and the audit
+log now exists, see `AUD-01`.)
 
 ---
 

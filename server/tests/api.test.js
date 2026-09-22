@@ -178,7 +178,7 @@ after(async () => {
   fs.promises.rm(TEST_UPLOADS, { recursive: true, force: true }).catch(() => {});
 });
 
-describe("health and sign-in", () => {
+describe("AUTH-01 - signing in securely", () => {
   test("the API is up and talking to PostgreSQL", async () => {
     const { status, data } = await call("GET", "/api/health");
     assert.equal(status, 200);
@@ -243,7 +243,7 @@ describe("health and sign-in", () => {
   });
 });
 
-describe("positions and per-position interview stages", () => {
+describe("JOB-01 and WF-01 - creating a vacancy with its own interview stages", () => {
   test("HR opens a position with its own stages", async () => {
     await signIn("hr@example.com");
     const { status, data } = await call("POST", "/api/jobs", {
@@ -276,7 +276,7 @@ describe("positions and per-position interview stages", () => {
   });
 });
 
-describe("HR adds candidates", () => {
+describe("CAN-01 and CAN-02 - adding a candidate and uploading their CV", () => {
   let jobId;
 
   test("HR adds a candidate, who starts at the first stage", async () => {
@@ -514,7 +514,7 @@ describe("HR adds candidates", () => {
   });
 });
 
-describe("CV screening bands", () => {
+describe("CAN-03 - screening CVs into bands", () => {
   let mayaId;
 
   test("HR bands a CV", async () => {
@@ -563,7 +563,7 @@ describe("CV screening bands", () => {
   });
 });
 
-describe("no advancing without feedback", () => {
+describe("CAN-04 and WF-02 - moving a candidate on, only once feedback is in", () => {
   let mayaId;
 
   test("the first stage is exempt - nobody has interviewed them yet", async () => {
@@ -630,7 +630,7 @@ describe("no advancing without feedback", () => {
   });
 });
 
-describe("fair side-by-side comparison", () => {
+describe("FB-01 and FB-03 - structured feedback and fair comparison", () => {
   let mayaId;
   let jobId;
 
@@ -694,7 +694,7 @@ describe("fair side-by-side comparison", () => {
   });
 });
 
-describe("telling candidates and interviewers about an interview", () => {
+describe("INT-01 and COM-02 - scheduling, and telling the interviewer", () => {
   let interviewId;
   let mayaId;
 
@@ -770,7 +770,7 @@ describe("telling candidates and interviewers about an interview", () => {
   });
 });
 
-describe("the interviewer answers the booking", () => {
+describe("INT-01 and COM-02 - the interviewer accepts or declines", () => {
   let interviewId;
   let nimashaId;
   let jobId;
@@ -920,7 +920,7 @@ describe("the interviewer answers the booking", () => {
   });
 });
 
-describe("answering the invitation from the email link", () => {
+describe("INT-01 - answering the invitation from the email link", () => {
   let interviewId;
   let token;
   let candidateId;
@@ -1044,7 +1044,7 @@ describe("answering the invitation from the email link", () => {
   });
 });
 
-describe("who logs in, and what each role can do", () => {
+describe("AUTH-01 and COM-01 - who logs in, what each role can do", () => {
   let jobId;
   let mayaId;
 
@@ -1161,7 +1161,7 @@ describe("who logs in, and what each role can do", () => {
   });
 });
 
-describe("reports management can export", () => {
+describe("RPT-01 and RPT-02 - reports add up and export", () => {
   test("the report adds up and does not double-count", async () => {
     await signIn("management@example.com", "Password456");
     const { data } = await call("GET", "/api/reports");
@@ -1201,7 +1201,7 @@ describe("reports management can export", () => {
   });
 });
 
-describe("the database enforces its own rules", () => {
+describe("FB-01 and AUTH-01 - the database enforces its own rules", () => {
   test("a rating outside 1-5 is refused by the CHECK constraint", async () => {
     await assert.rejects(
       () =>
@@ -1256,7 +1256,7 @@ describe("the database enforces its own rules", () => {
 // The fixes asked for after the Sprint 2 walkthrough.
 // =====================================================================
 
-describe("booking an interview refuses bad input", () => {
+describe("INT-01 - booking an interview refuses bad input", () => {
   let candidateId;
   let interviewerId;
   // One fixed slot shared by the last two tests. It has to be the SAME
@@ -1383,7 +1383,7 @@ describe("booking an interview refuses bad input", () => {
   });
 });
 
-describe("assigning an interviewer to a candidate", () => {
+describe("COM-02 - assigning an interviewer to a candidate", () => {
   let candidateId;
   let interviewerId;
 
@@ -1501,7 +1501,7 @@ describe("assigning an interviewer to a candidate", () => {
   });
 });
 
-describe("email addresses are answered specifically", () => {
+describe("AUTH-01 - email addresses are answered specifically", () => {
   let jobId;
 
   before(async () => {
@@ -1543,7 +1543,7 @@ describe("email addresses are answered specifically", () => {
   });
 });
 
-describe("an invitation time in the past is refused", () => {
+describe("INT-01 - an invitation time in the past is refused", () => {
   let jobId;
 
   before(async () => {
@@ -1580,7 +1580,7 @@ describe("an invitation time in the past is refused", () => {
 // all happen from a single form. These pin the parts of that the front
 // end depends on.
 // ---------------------------------------------------------------------
-describe("adding a candidate is one step", () => {
+describe("CAN-01 and CAN-02 - adding a candidate is one step", () => {
   let jobId;
 
   before(async () => {
@@ -2282,7 +2282,7 @@ describe("FB-02 and FB-03 - outcomes reach the interviewer, comparison shows the
   });
 });
 
-describe("the vacancies KPI and the dashboard figures", () => {
+describe("RPT-01 - the vacancies KPI and the dashboard figures", () => {
   test("the stats payload uses the word the dashboard reads", async () => {
     // Review item 1. It sent openPositions while the dashboard read
     // openVacancies, so the Vacancies tile always showed 0.
@@ -2301,7 +2301,161 @@ describe("the vacancies KPI and the dashboard figures", () => {
   });
 });
 
-describe("Sprint 1 test cases - schedule interview", () => {
+describe("JOB-02 and JOB-03 - editing and closing a vacancy", () => {
+  let jobId;
+
+  test("HR edits a vacancy and the change sticks", async () => {
+    // JOB-02: "edit or close a job position, so that I can keep the
+    // listings accurate when hiring requirements change."
+    await signIn("hr@example.com");
+    const created = await call("POST", "/api/jobs", {
+      title: "Site Reliability Engineer",
+      department: "Infrastructure",
+      stages: ["Applied", "Screening", "Interview"],
+    });
+    assert.equal(created.status, 201);
+    jobId = created.data.job.id;
+
+    const edited = await call("PATCH", "/api/jobs/" + jobId, {
+      title: "Senior Site Reliability Engineer",
+      location: "Colombo",
+    });
+    assert.equal(edited.status, 200);
+    assert.equal(edited.data.job.title, "Senior Site Reliability Engineer");
+    assert.equal(edited.data.job.location, "Colombo");
+  });
+
+  test("closing a vacancy takes it off the active list", async () => {
+    // JOB-03: "close a job opening, so that filled or cancelled roles
+    // stop appearing as active on the dashboard."
+    const before = (await call("GET", "/api/team/stats")).data.openVacancies;
+
+    const closed = await call("PATCH", "/api/jobs/" + jobId, { status: "CLOSED" });
+    assert.equal(closed.status, 200);
+    assert.equal(closed.data.job.status, "CLOSED");
+
+    const active = (await call("GET", "/api/jobs?status=ACTIVE")).data.jobs;
+    assert.ok(!active.some((j) => j.id === jobId), "no longer listed as active");
+
+    const after = (await call("GET", "/api/team/stats")).data.openVacancies;
+    assert.equal(after, before - 1, "and the dashboard's Vacancies figure drops by one");
+  });
+
+  test("nobody can be added to a closed vacancy", async () => {
+    const { status, data } = await call("POST", "/api/candidates", {
+      jobId,
+      fullName: "Too Late",
+      email: "too.late@example.com",
+      notify: false,
+    });
+    assert.equal(status, 400);
+    assert.match(data.error, /closed/i);
+  });
+
+  test("a closed vacancy can be reopened", async () => {
+    const reopened = await call("PATCH", "/api/jobs/" + jobId, { status: "ACTIVE" });
+    assert.equal(reopened.status, 200);
+    assert.equal(reopened.data.job.status, "ACTIVE");
+  });
+
+  test("only HR can edit or close a vacancy", async () => {
+    for (const [who, password] of [
+      ["manager@example.com", "Password123"],
+      ["interviewer@example.com", "Password123"],
+      ["management@example.com", "Password456"],
+    ]) {
+      await signIn(who, password);
+      assert.equal(
+        (await call("PATCH", "/api/jobs/" + jobId, { status: "CLOSED" })).status,
+        403,
+        who + " must not close a vacancy"
+      );
+    }
+  });
+});
+
+describe("CAN-03 - searching and filtering candidates", () => {
+  let jobA;
+  let jobB;
+
+  test("setup", async () => {
+    await signIn("hr@example.com");
+    const a = await call("POST", "/api/jobs", { title: "Search Job A", stages: ["Applied", "Interview"] });
+    const b = await call("POST", "/api/jobs", { title: "Search Job B", stages: ["Applied", "Interview"] });
+    jobA = a.data.job.id;
+    jobB = b.data.job.id;
+
+    for (const [jobId, fullName, email] of [
+      [jobA, "Nadeesha Wickramasinghe", "nadeesha@example.com"],
+      [jobA, "Pradeep Kumara", "pradeep.k@example.com"],
+      [jobB, "Nadeesha Fonseka", "n.fonseka@example.com"],
+    ]) {
+      assert.equal(
+        (await call("POST", "/api/candidates", { jobId, fullName, email, notify: false })).status,
+        201
+      );
+    }
+  });
+
+  test("search finds people by part of their name", async () => {
+    // CAN-03: "search and filter candidates, so that I can quickly find
+    // suitable profiles, especially when there are many applicants."
+    const { data } = await call("GET", "/api/candidates?q=nadeesha");
+    const names = data.candidates.map((c) => c.fullName);
+    assert.ok(names.includes("Nadeesha Wickramasinghe"));
+    assert.ok(names.includes("Nadeesha Fonseka"));
+    assert.ok(!names.includes("Pradeep Kumara"));
+  });
+
+  test("search is case-insensitive and matches the email too", async () => {
+    const byCase = await call("GET", "/api/candidates?q=NADEESHA");
+    assert.ok(byCase.data.candidates.length >= 2, "capitals make no difference");
+
+    const byEmail = await call("GET", "/api/candidates?q=pradeep.k@");
+    assert.deepEqual(
+      byEmail.data.candidates.map((c) => c.fullName),
+      ["Pradeep Kumara"]
+    );
+  });
+
+  test("filtering by vacancy narrows to that vacancy only", async () => {
+    const { data } = await call("GET", "/api/candidates?job=" + jobB);
+    assert.ok(data.candidates.length >= 1);
+    assert.ok(data.candidates.every((c) => c.jobId === jobB));
+  });
+
+  test("search and filter combine", async () => {
+    const { data } = await call("GET", "/api/candidates?q=nadeesha&job=" + jobA);
+    assert.deepEqual(
+      data.candidates.map((c) => c.fullName),
+      ["Nadeesha Wickramasinghe"],
+      "the name that matches, in the vacancy asked for"
+    );
+  });
+
+  test("filtering by outcome works", async () => {
+    const { data } = await call("GET", "/api/candidates?outcome=ACTIVE&job=" + jobA);
+    assert.ok(data.candidates.every((c) => c.outcome === "ACTIVE"));
+  });
+
+  test("a search that matches nobody returns an empty list, not an error", async () => {
+    const { status, data } = await call("GET", "/api/candidates?q=zzzz-nobody-zzzz");
+    assert.equal(status, 200);
+    assert.equal(data.candidates.length, 0);
+  });
+
+  test("a search cannot be used to inject SQL", async () => {
+    // The term is passed as a parameter, never spliced into the query.
+    const { status, data } = await call(
+      "GET",
+      "/api/candidates?q=" + encodeURIComponent("' OR '1'='1")
+    );
+    assert.equal(status, 200);
+    assert.equal(data.candidates.length, 0, "matched literally, so it finds nobody");
+  });
+});
+
+describe("INT-01 - Sprint 1 manual test cases, automated", () => {
   let candidateId;
   let sanduniId;
 
