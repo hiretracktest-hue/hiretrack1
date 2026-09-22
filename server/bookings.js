@@ -27,6 +27,64 @@ export async function bookedInterviewers(candidateId, stage) {
   return rows.map((r) => ({ id: Number(r.id), name: r.name || "the booked interviewer" }));
 }
 
+/**
+ * Who may give feedback on this candidate at this stage.
+ *
+ * Review item 4: "hiring manager can give feedback for another one's
+ * assigned interviews - make it cannot." Guarding only the booked stage
+ * was not enough: the feedback form has a stage dropdown, so a hiring
+ * manager could simply pick a stage nobody was booked for and score a
+ * candidate assigned to somebody else. The owner is decided in order:
+ *
+ *   1. somebody is BOOKED to interview them at this stage
+ *      -> only the booked interviewer(s)
+ *   2. nobody is booked, but the candidate is ASSIGNED to somebody
+ *      -> only that assigned interviewer
+ *   3. neither -> anyone whose role may write feedback
+ *
+ * It is about whose interview it is, not about the role: a hiring
+ * manager booked for a stage, or assigned the candidate, can score it.
+ *
+ * Returns { allowed, owners, reason } for `userId`.
+ */
+export async function feedbackOwnership(candidate, stage, userId) {
+  const booked = await bookedInterviewers(Number(candidate.id), stage);
+  if (booked.length) {
+    const allowed = booked.some((b) => b.id === Number(userId));
+    return {
+      allowed,
+      owners: booked.map((b) => b.name),
+      reason: allowed
+        ? null
+        : 'The "' + stage + '" interview is booked with ' +
+          booked.map((b) => b.name).join(" and ") +
+          ", so only they can give its feedback.",
+    };
+  }
+
+  const assignedId = candidate.assigned_interviewer_id ?? candidate.assignedInterviewerId;
+  if (assignedId) {
+    const allowed = Number(assignedId) === Number(userId);
+    // Name the person. "Only their interviewer can" tells nobody who to
+    // ask; "only Sara Salgadu can" does.
+    let name = candidate.assigned_interviewer_name ?? candidate.assignedInterviewerName;
+    if (!name) {
+      const person = await many("SELECT name FROM users WHERE id = $1", [assignedId]);
+      name = person[0]?.name || "their assigned interviewer";
+    }
+    return {
+      allowed,
+      owners: [name],
+      reason: allowed
+        ? null
+        : candidate.full_name + " is assigned to " + name + ", so only " + name +
+          " can give their feedback.",
+    };
+  }
+
+  return { allowed: true, owners: [], reason: null };
+}
+
 /** Of those booked, who has not yet given this stage's feedback. */
 export async function awaitingFeedback(candidateId, stage) {
   const booked = await bookedInterviewers(candidateId, stage);

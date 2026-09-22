@@ -2111,7 +2111,9 @@ describe("WF-02 and FB-01 - a booked interview belongs to the person booked", ()
       recommendation: "ADVANCE",
     });
     assert.equal(refused.status, 403);
-    assert.match(refused.data.error, /assigned to Test Interviewer/);
+    // A booked stage names the booking; "assigned to" is kept for the
+    // assignment rule, so the message says which rule applied.
+    assert.match(refused.data.error, /booked with Test Interviewer/);
 
     // And it still does not count: the candidate stays blocked.
     await signIn("hr@example.com");
@@ -2452,6 +2454,160 @@ describe("CAN-03 - searching and filtering candidates", () => {
     );
     assert.equal(status, 200);
     assert.equal(data.candidates.length, 0, "matched literally, so it finds nobody");
+  });
+});
+
+// The three suites below share one vacancy. Each is named for the one
+// story its tests are evidence for, so the backlog table credits a test
+// only where it belongs.
+const pageRules = { jobId: null, stages: ["Applied", "Screening", "Interview"] };
+
+async function pageCandidate(name) {
+  await signIn("hr@example.com");
+  if (!pageRules.jobId) {
+    const job = await call("POST", "/api/jobs", {
+      title: "Page Rules Vacancy",
+      stages: pageRules.stages,
+    });
+    pageRules.jobId = job.data.job.id;
+  }
+  const added = await call("POST", "/api/candidates", {
+    jobId: pageRules.jobId,
+    fullName: name,
+    email: name.toLowerCase().replace(/\s+/g, ".") + "@example.com",
+    notify: false,
+  });
+  assert.equal(added.status, 201);
+  return added.data.candidate;
+}
+
+describe("CAN-04 and WF-02 - the Move button knows the rule before it is pressed", () => {
+  test("the page is told whether Move is allowed, before anyone presses it", async () => {
+    // The Move button used to be offered and then refused. The page now
+    // gets the same answer the action would give.
+    const c = await pageCandidate("Page Move One");
+    const { data } = await call("GET", "/api/candidates/" + c.id);
+    assert.equal(data.candidate.advance.allowed, true, "nothing booked, first stage");
+    assert.equal(data.candidate.advance.nextStage, "Screening");
+
+    await call("POST", "/api/interviews", {
+      candidateId: c.id,
+      stage: "Applied",
+      scheduledAt: "2027-10-01T10:00",
+      interviewerId: await userId("interviewer@example.com"),
+    });
+    const after = await call("GET", "/api/candidates/" + c.id);
+    assert.equal(after.data.candidate.advance.allowed, false, "a booking locks it");
+    assert.match(after.data.candidate.advance.reason, /Waiting on feedback/);
+    assert.deepEqual(after.data.candidate.advance.waitingOn, ["Test Interviewer"]);
+  });
+
+  test("with nobody booked, the wait names the ASSIGNED interviewer", async () => {
+    // The reviewer's wording: blocked "until the interviewer sends the
+    // current stage feedback". Name who that is.
+    const c = await pageCandidate("Page Move Two");
+    await call("POST", "/api/candidates/" + c.id + "/assign", {
+      interviewerId: await userId("interviewer@example.com"),
+    });
+    // Past stage one, where the rule applies, with nobody booked.
+    await run("UPDATE candidates SET current_stage = 'Screening' WHERE id = $1", [c.id]);
+
+    const { data } = await call("GET", "/api/candidates/" + c.id);
+    assert.equal(data.candidate.advance.allowed, false);
+    assert.match(data.candidate.advance.reason, /from Test Interviewer/);
+  });
+
+  test("a decided candidate no longer moves between stages", async () => {
+    const c = await pageCandidate("Page Decided");
+    await signIn("manager@example.com");
+    await call("PATCH", "/api/candidates/" + c.id, { outcome: "HIRED" });
+
+    const { data } = await call("GET", "/api/candidates/" + c.id);
+    assert.equal(data.candidate.advance.allowed, false);
+    assert.match(data.candidate.advance.reason, /decision has been recorded/);
+    assert.equal((await call("POST", "/api/candidates/" + c.id + "/advance")).status, 400);
+  });
+
+});
+
+describe("FB-01 - only the interviewer who owns the stage gives its feedback", () => {
+  test("the stage dropdown is no way round the feedback rule", async () => {
+    // Review item 4, the exact route the tester took. The booked stage
+    // was guarded, but the form lets you pick another stage - and a
+    // hiring manager could score a candidate assigned to somebody else
+    // by choosing a stage nobody was booked for.
+    const c = await pageCandidate("Dropdown Loophole");
+    await signIn("hr@example.com");
+    await call("POST", "/api/interviews", {
+      candidateId: c.id,
+      stage: "Applied",
+      scheduledAt: "2027-10-02T10:00",
+      interviewerId: await userId("interviewer@example.com"),
+    });
+
+    await signIn("manager@example.com");
+    for (const stage of pageRules.stages) {
+      const { status, data } = await call("POST", "/api/feedback", {
+        candidateId: c.id,
+        stage,
+        rating: 5,
+        recommendation: "ADVANCE",
+      });
+      assert.equal(status, 403, "refused at " + stage);
+      assert.match(data.error, /Test Interviewer/, "and names who may");
+    }
+  });
+
+  test("the page is told, per stage, whether this person may give feedback", async () => {
+    const c = await pageCandidate("Rights Per Stage");
+    await signIn("hr@example.com");
+    await call("POST", "/api/candidates/" + c.id + "/assign", {
+      interviewerId: await userId("interviewer@example.com"),
+    });
+
+    await signIn("manager@example.com");
+    const asManager = (await call("GET", "/api/candidates/" + c.id)).data.candidate.feedbackRights;
+    for (const stage of pageRules.stages) assert.equal(asManager[stage].allowed, false, "manager: " + stage);
+
+    await signIn("interviewer@example.com");
+    const asInterviewer = (await call("GET", "/api/candidates/" + c.id)).data.candidate.feedbackRights;
+    for (const stage of pageRules.stages) assert.equal(asInterviewer[stage].allowed, true, "interviewer: " + stage);
+  });
+
+  test("an unassigned, unbooked candidate is open to any feedback writer", async () => {
+    // Rule 3: nobody owns them yet, so the usual roles may score them.
+    const c = await pageCandidate("Nobody Owns Me");
+    await signIn("manager@example.com");
+    const { status } = await call("POST", "/api/feedback", {
+      candidateId: c.id,
+      stage: "Applied",
+      rating: 4,
+      recommendation: "ADVANCE",
+    });
+    assert.equal(status, 201);
+  });
+
+});
+
+describe("COM-01 - the hire decision reports whether the letter was sent", () => {
+  test("recording an outcome says whether the candidate's letter went", async () => {
+    // Review item 6: "need to check hire confirmation mails sent or not".
+    // The reply now says, rather than leaving it to a trip to the Outbox.
+    const c = await pageCandidate("Letter Check");
+    await signIn("manager@example.com");
+    const { status, data } = await call("PATCH", "/api/candidates/" + c.id, { outcome: "HIRED" });
+    assert.equal(status, 200);
+    assert.equal(data.email.attempted, true);
+    assert.equal(data.email.to, "letter.check@example.com");
+    assert.equal(data.email.sent, false, "no mail provider in tests");
+    assert.match(data.email.reason, /no mail provider/);
+  });
+
+  test("putting someone on hold writes no letter", async () => {
+    const c = await pageCandidate("Hold No Letter");
+    await signIn("manager@example.com");
+    const { data } = await call("PATCH", "/api/candidates/" + c.id, { outcome: "ON_HOLD" });
+    assert.equal(data.email.attempted, false);
   });
 });
 

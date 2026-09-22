@@ -15,7 +15,7 @@ Built for our second year, second semester group project.
 | Back end | Node.js + Express (REST API) |
 | Database | **PostgreSQL on Supabase**, accessed with `pg` (node-postgres) — 9 tables |
 | Auth | Email + password (bcrypt), JWT in an httpOnly cookie, optional Google sign-in |
-| Tests | Node's built-in test runner — 165 API tests |
+| Tests | Node's built-in test runner — 173 API tests |
 
 > **This is an internal system.** The people who log in are HR, hiring managers,
 > interviewers and management. **Job candidates do not have accounts** — HR adds
@@ -88,7 +88,7 @@ trail worthless — you can see what was done but never who did it.
 | `npm run dev` | Run the API and the React dev server together |
 | `npm run build` | Build the React app into `client/dist` |
 | `npm start` | Run the API, serving the built React app too |
-| `npm test` | Run the 165 automated API tests |
+| `npm test` | Run the 173 automated API tests |
 | `npm run seed` | Add any missing demo data (safe to re-run) |
 | `npm run seed:reset` | Empty every table, then seed from scratch |
 
@@ -181,6 +181,11 @@ HR in full, because a refused email that merely looks unsent is
 indistinguishable from one nobody tried to send. HR can then fix the cause and
 press **Send now**, or send it by hand and mark it sent.
 
+**Recording a decision says at once whether the letter went.** Pressing **Hire**
+or **Reject** on the candidate page answers *"The offer letter was emailed to …"*,
+or *"The email to … was NOT sent"* with the provider's reason, and points at the
+Outbox where it is waiting.
+
 The automated tests run with **no** mail provider and **no** Storage bucket,
 whatever is in `.env`. Otherwise `npm test` would fire real messages at real
 addresses and write throw-away CVs into the production bucket.
@@ -234,10 +239,18 @@ A stage cannot be deleted while candidates are still standing on it.
 
 ### "Should a candidate be blocked from advancing until the current stage's feedback is in?"
 
-**Yes.** `POST /api/candidates/:id/advance` refuses with a message naming the
-stage. The first stage is exempt — nobody has interviewed a candidate who has
-only just been added. Set `REQUIRE_FEEDBACK_TO_ADVANCE=false` in `.env` to lift
-the rule.
+**Yes.** Once HR books an interview for a stage, the candidate cannot move on
+until **every interviewer booked for that stage** has given their feedback — at
+any stage, the first included. The candidate page shows the **Move to …**
+button greyed out, with the reason beside it naming who it is waiting on, and
+`POST /api/candidates/:id/advance` refuses with the same message. The page and
+the action ask the same server check, so the button can never offer a move the
+server would refuse.
+
+With nobody booked, the stages after the first still need some feedback before a
+move; a candidate who has only just been added can move out of the first stage.
+Once somebody is **Hired** or **Rejected** they no longer move between stages at
+all. Set `REQUIRE_FEEDBACK_TO_ADVANCE=false` in `.env` to lift the feedback rule.
 
 ### "How do interviewers give feedback so candidates can be compared fairly?"
 
@@ -246,8 +259,13 @@ recommendation, plus strengths, concerns and a comment. A `UNIQUE` constraint
 means one person leaves **one** score per stage, so nobody can weight the result
 by writing twice.
 
-**Compare candidates** then ranks everyone for a position by average score, with
-a column per stage and the recommendation split.
+**Compare candidates** opens with the two highest scorers **side by side** — a
+column each, the score at every stage, the recommendation split, the CV band,
+and what every interviewer actually wrote, stage by stage. Tick up to four in
+the ranking underneath to change who is compared. You can also start from the
+**Candidates** page: filter to a vacancy, tick two to four people, and press
+**Compare side by side**. Comparison stays within one vacancy, because two roles
+do not share a yardstick.
 
 ### "How are candidates and interviewers told about a scheduled interview?"
 
@@ -356,10 +374,14 @@ Four roles with genuinely different permissions, all defined in one place
 | Read and download the audit log | — | — | — | ✅ |
 | Create accounts, set roles | ✅ | — | — | — |
 
-¹ **Only for an interview they were booked for.** Once an interview is booked
-for a stage, its feedback belongs to whoever was booked: a hiring manager cannot
-score somebody else's interview, and that score would otherwise have counted
-towards letting the candidate advance. A declined booking does not count.
+¹ **Only for a candidate who is theirs to score.** Once an interview is booked
+for a stage, its feedback belongs to whoever was booked. Before anything is
+booked, a candidate who has been **assigned** to an interviewer belongs to that
+interviewer, at every stage — so a hiring manager cannot get round the rule by
+picking a different stage in the feedback form. A declined booking does not
+count. Only a candidate nobody has been assigned or booked for is open to any
+hiring manager or interviewer. The page hides **Leave feedback** from anyone it
+would refuse, and says who the feedback belongs to.
 
 **HR does not write feedback.** HR runs the process and reads the verdicts; the
 people who sat in the interview give them.
@@ -431,7 +453,7 @@ our web/
 │   │   ├── notifications.routes.js in-app notifications + candidate outbox
 │   │   ├── reports.routes.js       management reports + CSV export
 │   │   └── team.routes.js          who logs in, roles, dashboard counts
-│   └── tests/api.test.js   165 automated tests
+│   └── tests/api.test.js   173 automated tests
 │
 └── client/                 React front end
     ├── index.html
@@ -521,18 +543,18 @@ checklist against the plan, and a failing test names the story it breaks.
 | --- | --: | --- | --: |
 | `AUTH-01` Log in securely | 20 | `JOB-03` Close a job opening | 5 |
 | `JOB-01` Create a job position | 4 | `CAN-05` Reuse a profile and CV on a second position | 4 |
-| `JOB-02` Edit or close a job position | 5 | `WF-02` Blocked until the stage's feedback is in | 12 |
+| `JOB-02` Edit or close a job position | 5 | `WF-02` Blocked until the stage's feedback is in | 15 |
 | `CAN-01` Add candidate information | 21 | `FB-02` Interviewer sees Hired / Rejected / On hold | 4 |
 | `CAN-02` Upload a candidate's CV | 21 | `FB-03` All feedback, compared side by side | 9 |
-| `CAN-03` Search and filter candidates | 12 | `COM-01` Hire-confirmation email | 8 |
+| `CAN-03` Search and filter candidates | 12 | `COM-01` Hire-confirmation email | 10 |
 | `WF-01` Configure interview stages | 4 | `COM-02` Interviewer notified when assigned | 25 |
 | `INT-01` Schedule interviews | 38 | `RPT-01` Dashboard with KPIs | 12 |
-| `CAN-04` Move on or reject | 6 | `RPT-02` Export as CSV and PDF | 10 |
-| `FB-01` Structured feedback, score per stage | 15 | `AUD-01` Audit log | 7 |
+| `CAN-04` Move on or reject | 9 | `RPT-02` Export as CSV and PDF | 10 |
+| `FB-01` Structured feedback, score per stage | 18 | `AUD-01` Audit log | 7 |
 
 **20 of 20 stories have automated evidence.** A test can count towards more than
 one story when it proves both — the audit test that deletes a candidate is
-evidence for `AUD-01`, not a second test of deleting. 165 tests in total.
+evidence for `AUD-01`, not a second test of deleting. 173 tests in total.
 
 ## 8. Testing
 

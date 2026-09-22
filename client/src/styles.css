@@ -1706,6 +1706,14 @@ tr.is-selected td {
 .vote-hold { color: var(--amber-fg); }
 .vote-reject { color: var(--red-fg); }
 
+.compare-hint {
+  margin: 0 0 10px;
+  padding-left: 12px;
+  border-left: 3px solid var(--brand-500);
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
 .compare {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1815,4 +1823,141 @@ tr.is-selected td {
 .compare-comment {
   color: var(--muted);
   font-style: italic;
+}
+
+/* --- CAN-04 progress and decision ------------------------------------- */
+.progress-card {
+  margin-top: 16px;
+}
+
+/* The stages as a track: done, current, still to come. Numbered so the
+   state is never carried by colour alone. */
+.stage-track {
+  list-style: none;
+  margin: 4px 0 16px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 0;
+}
+.stage-dot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 118px;
+  position: relative;
+  padding-right: 10px;
+}
+/* The line joining one stage to the next. */
+.stage-dot:not(:last-child)::after {
+  content: "";
+  flex: 1;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--line);
+  min-width: 14px;
+}
+.stage-dot.is-done:not(:last-child)::after {
+  background: var(--brand-500);
+}
+.stage-marker {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border: 2px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.stage-name {
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.stage-dot.is-done .stage-marker {
+  background: var(--brand-500);
+  border-color: var(--brand-500);
+  color: var(--on-brand);
+}
+.stage-dot.is-current .stage-marker {
+  border-color: var(--brand-500);
+  color: var(--brand-700);
+  box-shadow: 0 0 0 4px var(--brand-100);
+}
+.stage-dot.is-current .stage-name {
+  color: var(--ink);
+  font-weight: 700;
+}
+.stage-dot.is-skipped {
+  opacity: 0.45;
+}
+
+.progress-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+/* Why the button is off. Amber, because it is a wait, not an error. */
+.progress-blocked {
+  margin: 0;
+  flex: 1 1 260px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--amber-bg);
+  color: var(--amber-fg);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+.progress-decided {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.decision {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.decision-label {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+/* Hire and reject are the two actions that email a real person, so they
+   are unmistakable - but in the app's own green and red, with the word
+   on the button, never colour alone. */
+.btn-hire {
+  background: var(--green-fg);
+  color: #ffffff;
+}
+.btn-hire:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.btn-reject {
+  background: var(--surface);
+  border-color: var(--red-fg);
+  color: var(--red-fg);
+}
+.btn-reject:hover:not(:disabled) {
+  background: var(--red-bg);
+}
+
+@media (max-width: 560px) {
+  .stage-dot {
+    min-width: 100%;
+  }
+  .stage-dot:not(:last-child)::after {
+    display: none;
+  }
 }

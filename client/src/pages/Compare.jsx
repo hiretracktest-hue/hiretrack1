@@ -61,6 +61,25 @@ export default function Compare() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  // Open ON a comparison, not on a ranking. The side-by-side view used to
+  // appear only after two candidates had been ticked, so the page opened
+  // on the ranking table - and the sprint review reasonably concluded
+  // that "only overall feedback comparison is displayed". With nobody
+  // chosen yet, start with the two highest scorers side by side; the
+  // ticks below change who is compared.
+  // The ranking arrives best-first, so the first two are the top scorers.
+  // Only on arrival: once someone clears the selection, it stays cleared.
+  const [autoIds, setAutoIds] = useState(null);
+  useEffect(() => {
+    if (!data || selected.length > 0 || autoIds !== null) return;
+    const rated = data.candidates.filter((c) => c.feedbackCount > 0);
+    const pool = rated.length >= 2 ? rated : data.candidates;
+    if (pool.length < 2) return;
+    const ids = pool.slice(0, 2).map((c) => c.id).join(",");
+    setAutoIds(ids);
+    setSearchParams({ ids }, { replace: true });
+  }, [data, selected.length, autoIds, setSearchParams]);
+
   function select(ids) {
     setError("");
     setSearchParams(ids.length ? { ids: ids.join(",") } : {}, { replace: true });
@@ -108,8 +127,8 @@ export default function Compare() {
           </Link>
           <h1 className="mt-1">Compare candidates</h1>
           <p className="subtitle">
-            {candidates.length} candidate{candidates.length === 1 ? "" : "s"} for {job.title}. Tick
-            two to four to put them side by side.
+            {candidates.length} candidate{candidates.length === 1 ? "" : "s"} for {job.title}.
+            {chosen.length < 2 && " Tick two to four to put them side by side."}
           </p>
         </div>
         {chosen.length > 0 && (
@@ -133,6 +152,13 @@ export default function Compare() {
         </div>
       ) : (
         <>
+          {chosen.length >= 2 && autoIds === selected.join(",") && (
+            <p className="compare-hint">
+              Showing the two highest-scoring candidates side by side. Tick others in the ranking
+              below to change who is compared — up to {MAX_COMPARE} at once.
+            </p>
+          )}
+
           {chosen.length >= 2 && (
             <SideBySide candidates={chosen} stages={stages} onRemove={toggle} />
           )}

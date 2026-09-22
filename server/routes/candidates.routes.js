@@ -7,7 +7,7 @@ import * as audit from "../audit.js";
 import { stagesFor } from "./jobs.routes.js";
 import { uploadCv, safeFilename, assertRealCv } from "../upload.js";
 import { putCv, getCv, removeCv } from "../storage.js";
-import { awaitingFeedback } from "../bookings.js";
+import { awaitingFeedback, feedbackOwnership } from "../bookings.js";
 import { notifyCandidateAdded } from "../notify.js";
 import { notifyOutcome } from "../notify.js";
 
@@ -87,6 +87,86 @@ async function loadOr404(id) {
   const row = await one(SELECT_COLUMNS + "WHERE c.id = $1", [id]);
   if (!row) throw httpError(404, "That candidate does not exist.");
   return row;
+}
+
+/**
+ * CAN-04 and WF-02 - can this candidate move to the next stage yet?
+ *
+ * One function, used twice: by POST /advance, which acts on it, and by
+ * GET /:id, which hands it to the page so the Move button can say what
+ * it is waiting for BEFORE anybody presses it. Two copies of this rule -
+ * one in the page and one here - is how the screen ends up offering a
+ * button the server then refuses.
+ *
+ *   - When somebody is BOOKED to interview them at this stage, wait for
+ *     every booked interviewer's own feedback, not just anybody's. This
+ *     holds at every stage, the first included: once HR has booked an
+ *     interview there, somebody is interviewing them, so moving them on
+ *     would skip an interview that has not happened yet.
+ *   - With nobody booked, the original rule: any stage after the first
+ *     needs its feedback. The first stage is free, because nobody has
+ *     interviewed somebody who was only just added.
+ *
+ * Returns { allowed, reason, nextStage, waitingOn }. `waitingOn` names
+ * the people, so the page can show who to chase.
+ */
+async function advanceCheck(row, stages) {
+  const index = stages.indexOf(row.current_stage);
+  const nextStage = index >= 0 && index < stages.length - 1 ? stages[index + 1] : null;
+  const refuse = (reason, waitingOn = []) => ({ allowed: false, reason, nextStage, waitingOn });
+
+  if (index === -1) return refuse("This candidate's stage is no longer in the vacancy's pipeline.");
+  if (!nextStage) return refuse("This candidate is already at the final stage.");
+  if (row.outcome === "HIRED" || row.outcome === "REJECTED") {
+    return refuse("A decision has been recorded, so the candidate no longer moves between stages.");
+  }
+  if (!config.requireFeedbackToAdvance) return { allowed: true, reason: null, nextStage, waitingOn: [] };
+
+  const { booked, missing } = await awaitingFeedback(Number(row.id), row.current_stage);
+
+  if (booked.length && missing.length) {
+    return refuse(
+      'Waiting on feedback for "' +
+        row.current_stage +
+        '" from ' +
+        missing.map((m) => m.name).join(" and ") +
+        '. They can move to "' +
+        nextStage +
+        '" once it is in.',
+      missing.map((m) => m.name)
+    );
+  }
+
+  if (!booked.length && index > 0) {
+    const { count } = await one(
+      "SELECT COUNT(*)::int AS count FROM feedback WHERE candidate_id = $1 AND stage = $2",
+      [row.id, row.current_stage]
+    );
+    if (count === 0) {
+      // Name who it is waiting on when we know - the candidate's assigned
+      // interviewer is the only one who can give it (bookings.js), so
+      // "feedback has to be submitted" would leave HR guessing who to ask.
+      const who = row.assigned_interviewer_name;
+      return refuse(
+        who
+          ? 'Waiting on feedback for "' +
+              row.current_stage +
+              '" from ' +
+              who +
+              '. They can move to "' +
+              nextStage +
+              '" once it is in.'
+          : 'Feedback for "' +
+              row.current_stage +
+              '" has to be submitted before they can move to "' +
+              nextStage +
+              '".',
+        who ? [who] : []
+      );
+    }
+  }
+
+  return { allowed: true, reason: null, nextStage, waitingOn: [] };
 }
 
 // --- List candidates ---------------------------------------------------
@@ -190,6 +270,19 @@ router.get(
     const index = stages.indexOf(candidate.currentStage);
     candidate.stages = stages;
     candidate.nextStage = index >= 0 && index < stages.length - 1 ? stages[index + 1] : null;
+    // The same answer POST /advance would give, so the Move button can
+    // say what it is waiting for instead of being pressed and refused.
+    candidate.advance = await advanceCheck(row, stages);
+
+    // Whether THIS user may give feedback at each stage, from the same
+    // rule the feedback route enforces. The page used to work this out
+    // for itself and could disagree - offering a form the server would
+    // then refuse on Save.
+    candidate.feedbackRights = {};
+    for (const stage of stages) {
+      const own = await feedbackOwnership(row, stage, req.user.id);
+      candidate.feedbackRights[stage] = { allowed: own.allowed, reason: own.reason };
+    }
 
     const interviews = (
       await many(
@@ -478,17 +571,30 @@ router.patch(
     // A final decision is news the candidate has to be given. They have
     // no account here, so the letter goes into the outbox for HR to send
     // - the same route the interview invitation takes.
+    // What happened to the candidate's email - so the page can say "the
+    // offer went to X" or "it did not go, and here is why", instead of
+    // leaving HR to go and look in the Outbox. Review item 6 was exactly
+    // this: there was no way to check whether the hire email was sent.
+    let email = { attempted: false, sent: false, reason: null, to: null };
     if (newOutcome && newOutcome !== existing.outcome) {
       const job = await one("SELECT * FROM jobs WHERE id = $1", [existing.job_id]);
-      await notifyOutcome({
+      const outcome = await notifyOutcome({
         candidate: existing,
         job,
         outcome: newOutcome,
         decidedBy: req.user,
       });
+      if (outcome) {
+        email = {
+          attempted: true,
+          sent: Boolean(outcome.sent),
+          reason: outcome.reason || null,
+          to: existing.email,
+        };
+      }
     }
 
-    res.json({ candidate: toJson(await loadOr404(id)) });
+    res.json({ candidate: toJson(await loadOr404(id)), email });
   })
 );
 
@@ -599,61 +705,10 @@ router.post(
     const existing = await loadOr404(id);
 
     const stages = await stagesFor(existing.job_id);
-    const index = stages.indexOf(existing.current_stage);
-    if (index === -1) throw httpError(400, "This candidate's stage is no longer in the pipeline.");
-    if (index >= stages.length - 1) {
-      throw httpError(400, "This candidate is already at the final stage.");
-    }
+    const check = await advanceCheck(existing, stages);
+    if (!check.allowed) throw httpError(400, check.reason);
 
-    // WF-02 - "a candidate blocked from advancing to the next stage until
-    // feedback for the current stage is submitted".
-    //
-    // When somebody is BOOKED to interview them at this stage, wait for
-    // every booked interviewer's own feedback - not anybody's. This
-    // applies at every stage including the first. The first stage used
-    // to be exempt outright, on the reasoning that nobody has interviewed
-    // somebody who was only just added; but once HR books an interview
-    // there, somebody is interviewing them, and the exemption let a
-    // candidate be moved straight past an interview that had not
-    // happened yet.
-    const { booked, missing } = config.requireFeedbackToAdvance
-      ? await awaitingFeedback(id, existing.current_stage)
-      : { booked: [], missing: [] };
-
-    if (booked.length && missing.length) {
-      throw httpError(
-        400,
-        'Waiting on feedback for "' +
-          existing.current_stage +
-          '" from ' +
-          missing.map((m) => m.name).join(" and ") +
-          '. The candidate can move to "' +
-          stages[index + 1] +
-          '" once it is in.'
-      );
-    }
-
-    // With nobody booked, the original rule: any stage after the first
-    // needs its feedback before the candidate moves on.
-    if (config.requireFeedbackToAdvance && index > 0 && !booked.length) {
-      const { count } = await one(
-        "SELECT COUNT(*)::int AS count FROM feedback WHERE candidate_id = $1 AND stage = $2",
-        [id, existing.current_stage]
-      );
-
-      if (count === 0) {
-        throw httpError(
-          400,
-          'Feedback for "' +
-            existing.current_stage +
-            '" has to be submitted before this candidate can move to "' +
-            stages[index + 1] +
-            '".'
-        );
-      }
-    }
-
-    await run("UPDATE candidates SET current_stage = $1 WHERE id = $2", [stages[index + 1], id]);
+    await run("UPDATE candidates SET current_stage = $1 WHERE id = $2", [check.nextStage, id]);
     res.json({ candidate: toJson(await loadOr404(id)), stages });
   })
 );

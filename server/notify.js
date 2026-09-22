@@ -513,7 +513,9 @@ export async function notifyOutcome({ candidate, job, outcome, decidedBy }) {
     );
   }
 
-  await toOutbox(
+  // Returned, so whoever recorded the decision can be told whether the
+  // candidate's letter actually went (review item 6).
+  return toOutbox(
     hired ? "candidate.hired" : "candidate.rejected",
     { email: candidate.email, name: candidate.full_name },
     (hired ? "Offer - " : "Your application - ") + job.title,

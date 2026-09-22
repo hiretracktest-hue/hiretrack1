@@ -4,7 +4,7 @@ import { asyncHandler, requirePermission, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 import { stagesFor } from "./jobs.routes.js";
 import { notifyFeedbackSubmitted } from "../notify.js";
-import { bookedInterviewers } from "../bookings.js";
+import { feedbackOwnership } from "../bookings.js";
 
 /**
  * "How do interviewers give feedback so candidates can be compared
@@ -100,27 +100,15 @@ router.post(
     const concerns = v.str(req.body.concerns, { field: "Concerns", max: 1000 });
     const comment = v.str(req.body.comment, { field: "Comment", max: 2000 });
 
-    // Feedback on a booked interview belongs to whoever was booked for it.
-    //
-    // Before this, anybody with feedback:write could score any candidate
-    // at any stage - so a hiring manager could fill in the verdict on an
-    // interview assigned to somebody else, and that verdict then counted
-    // towards letting the candidate advance. The person who actually sat
-    // in the room is the only one who can say how it went.
-    //
-    // A declined booking does not count: that interviewer said they were
-    // not doing it, so it is not theirs to score.
-    const booked = await bookedInterviewers(candidateId, stage);
-    if (booked.length && !booked.some((b) => b.id === req.user.id)) {
-      throw httpError(
-        403,
-        'The "' +
-          stage +
-          '" interview is assigned to ' +
-          booked.map((b) => b.name).join(" and ") +
-          ", so only they can give its feedback."
-      );
-    }
+    // Feedback belongs to whoever interviews the candidate: the person
+    // booked for that stage, or failing that the person the candidate is
+    // assigned to (bookings.js). Before this, anybody with feedback:write
+    // could score anybody - so a hiring manager could fill in the verdict
+    // on somebody else's candidate, and it then counted towards letting
+    // them advance. Guarding only the booked stage was not enough either:
+    // the form's stage dropdown let you pick a stage nobody was booked for.
+    const ownership = await feedbackOwnership(candidate, stage, req.user.id);
+    if (!ownership.allowed) throw httpError(403, ownership.reason);
 
     // One interviewer, one verdict per stage: writing again replaces it.
     await run(

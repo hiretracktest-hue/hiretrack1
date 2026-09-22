@@ -48,6 +48,11 @@ export default function Candidates() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const canBand = Boolean(user?.permissions?.["candidate:band"]);
+  // FB-03. Ticking candidates also feeds the side-by-side comparison, so
+  // anyone who may compare gets the tick boxes - management included,
+  // who can compare but cannot band a CV and so never saw them.
+  const canCompare = Boolean(user?.permissions?.["candidate:compare"]);
+  const canSelect = canBand || canCompare;
   // The role itself, not a guess from a missing permission - management
   // cannot band a CV either, and was being told "you have nobody to
   // interview" as if it were an interviewer.
@@ -480,23 +485,26 @@ export default function Candidates() {
         </div>
       )}
 
-      {canBand && selected.length > 0 && (
-        <div className="alert alert-info">
+      {canSelect && selected.length > 0 && (
+        <div className="alert alert-info selection-bar">
           <div className="row-between">
             <span>
-              {selected.length} selected. Screen {selected.length === 1 ? "it" : "them all"} as:
+              <strong>{selected.length} selected.</strong>
+              {canBand && <> Screen {selected.length === 1 ? "it" : "them all"} as:</>}
             </span>
             <div className="btn-row">
-              {BANDS.map((value) => (
-                <button
-                  key={value}
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => bandSelected(value)}
-                  disabled={busy}
-                >
-                  {BAND_LABEL[value]}
-                </button>
-              ))}
+              {canBand &&
+                BANDS.map((value) => (
+                  <button
+                    key={value}
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => bandSelected(value)}
+                    disabled={busy}
+                  >
+                    {BAND_LABEL[value]}
+                  </button>
+                ))}
+              {canCompare && <CompareButton selected={selected} candidates={candidates} />}
               <button className="btn btn-ghost btn-sm" onClick={() => setSelected([])}>
                 Clear
               </button>
@@ -571,7 +579,7 @@ export default function Candidates() {
           <table>
             <thead>
               <tr>
-                {canBand && (
+                {canSelect && (
                   <th style={{ width: 36 }}>
                     <input
                       type="checkbox"
@@ -597,7 +605,7 @@ export default function Candidates() {
             <tbody>
               {candidates.map((candidate) => (
                 <tr key={candidate.id}>
-                  {canBand && (
+                  {canSelect && (
                     <td>
                       <input
                         type="checkbox"
@@ -643,5 +651,44 @@ export default function Candidates() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * FB-03 from the Candidates page, which is where you actually find "two
+ * DevOps candidates" - by filtering to the vacancy and ticking them.
+ *
+ * A comparison only means something within one vacancy: the stages and
+ * the questions are the vacancy's own, so a DevOps technical round and a
+ * QA test task are not the same yardstick. Ticking across vacancies says
+ * so rather than producing a meaningless table.
+ */
+function CompareButton({ selected, candidates }) {
+  const navigate = useNavigate();
+  const picked = candidates.filter((c) => selected.includes(c.id));
+  const vacancies = [...new Set(picked.map((c) => c.jobId))];
+
+  if (picked.length < 2) {
+    return <span className="small muted">Tick one more to compare</span>;
+  }
+  if (vacancies.length > 1) {
+    return (
+      <span className="small muted">
+        Compare works within one vacancy — tick candidates for the same role
+      </span>
+    );
+  }
+  if (picked.length > 4) {
+    return <span className="small muted">Compare up to four at a time</span>;
+  }
+  return (
+    <button
+      className="btn btn-primary btn-sm"
+      onClick={() =>
+        navigate("/vacancies/" + vacancies[0] + "/compare?ids=" + picked.map((c) => c.id).join(","))
+      }
+    >
+      Compare side by side →
+    </button>
   );
 }

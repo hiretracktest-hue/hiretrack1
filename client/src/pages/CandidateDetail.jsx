@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
+import Progress from "../components/Progress.jsx";
 import {
   Alert,
   JoinButton,
@@ -106,8 +107,11 @@ export default function CandidateDetail() {
     window.history.replaceState({}, "");
   }, [location.state]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // `quiet` refreshes the data in place. A full reload swaps the whole
+  // page for a spinner, which would unmount the Progress card and throw
+  // away its "the offer letter was sent" message the moment it appeared.
+  const load = useCallback(async (quiet = false) => {
+    if (quiet !== true) setLoading(true);
     try {
       const result = await api.getCandidate(id);
       setCandidate(result.candidate);
@@ -353,6 +357,13 @@ export default function CandidateDetail() {
   // Still needed: the feedback form asks which stage the review is for.
   const stages = candidate.stages || [];
 
+  // Review item 4. Allowed only where the server says so - booked for the
+  // stage, or the one the candidate is assigned to.
+  const rights = candidate.feedbackRights || {};
+  const canGiveFeedback =
+    Boolean(p["feedback:write"]) && stages.some((stage) => rights[stage]?.allowed);
+  const feedbackOwner = Object.values(rights).find((r) => r && !r.allowed)?.reason || "";
+
   return (
     <div className="page">
       <div className="page-head">
@@ -384,6 +395,10 @@ export default function CandidateDetail() {
       <Alert kind="success" onDismiss={() => setMessage("")}>
         {message}
       </Alert>
+
+      {/* CAN-04: move on, or decide. Everybody sees where the candidate
+          is; only HR and the hiring manager get the buttons. */}
+      <Progress candidate={candidate} permissions={p} onChanged={() => load(true)} />
 
       <div className="grid grid-sidebar mt-2">
         <div>
@@ -503,7 +518,7 @@ export default function CandidateDetail() {
                 <span className="muted small">
                   {feedback.length} review{feedback.length === 1 ? "" : "s"}
                 </span>
-                {p["feedback:write"] && (
+                {canGiveFeedback && (
                   <button
                     className="btn btn-secondary btn-sm"
                     onClick={() => setShowFeedbackForm((c) => !c)}
@@ -513,6 +528,13 @@ export default function CandidateDetail() {
                 )}
               </div>
             </div>
+
+            {/* A hiring manager looking at somebody else's candidate: no
+                button, and a plain statement of who gives the feedback,
+                rather than a form that refuses on Save. */}
+            {p["feedback:write"] && !canGiveFeedback && feedbackOwner && (
+              <p className="muted small">{feedbackOwner}</p>
+            )}
 
             {feedback.length > 0 && (
               <div className="mb-2">
@@ -562,7 +584,7 @@ export default function CandidateDetail() {
               <p className="muted small">Your role can read feedback but not write it.</p>
             )}
 
-            {p["feedback:write"] && showFeedbackForm && (
+            {canGiveFeedback && showFeedbackForm && (
               <form onSubmit={submitFeedback}>
                 <div className="grid grid-3">
                   <Field label="Stage" htmlFor="feedbackStage">
@@ -642,29 +664,17 @@ export default function CandidateDetail() {
                   />
                 </Field>
 
-                {/* A booked interview belongs to whoever was booked for
-                    it. Say so here rather than let the form look usable
-                    and then refuse on Save. Mirrors the rule the server
-                    enforces in feedback.routes.js. */}
+                {/* Whether this person may score this stage comes from
+                    the server (candidate.feedbackRights), the same rule
+                    the feedback route enforces - so the form never looks
+                    usable and then refuses on Save. */}
                 {(() => {
-                  const booked = interviews.filter(
-                    (i) =>
-                      i.stage === feedbackForm.stage &&
-                      i.interviewerId &&
-                      i.response !== "DECLINED"
-                  );
-                  const notMine =
-                    booked.length > 0 && !booked.some((i) => i.interviewerId === user?.id);
+                  const right = candidate.feedbackRights?.[feedbackForm.stage];
+                  const refused = right && !right.allowed;
                   return (
                     <>
-                      {notMine && (
-                        <Alert kind="info">
-                          The “{feedbackForm.stage}” interview is assigned to{" "}
-                          {[...new Set(booked.map((i) => i.interviewerName))].join(" and ")}, so
-                          only they can give its feedback.
-                        </Alert>
-                      )}
-                      <button className="btn btn-primary" disabled={busy || notMine}>
+                      {refused && <Alert kind="info">{right.reason}</Alert>}
+                      <button className="btn btn-primary" disabled={busy || refused}>
                         Save my feedback
                       </button>
                     </>

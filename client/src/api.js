@@ -56,6 +56,13 @@ export const api = {
   getCandidate: (id) => request("/candidates/" + id),
   addCandidate: (body) => request("/candidates", { method: "POST", body }),
   updateCandidate: (id, body) => request("/candidates/" + id, { method: "PATCH", body }),
+  // CAN-04 / WF-02. Forward only goes through here, where the feedback
+  // rule is checked - the edit route refuses to move a stage forward.
+  advanceCandidate: (id) => request("/candidates/" + id + "/advance", { method: "POST" }),
+  // CAN-04. Hired / Rejected / On hold / back to Active. The reply says
+  // whether the candidate's letter actually went.
+  recordOutcome: (id, outcome) =>
+    request("/candidates/" + id, { method: "PATCH", body: { outcome } }),
   // Pass null to hand the candidate back to the unassigned pool.
   assignInterviewer: (id, interviewerId) =>
     request("/candidates/" + id + "/assign", {

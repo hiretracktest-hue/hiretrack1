@@ -292,6 +292,15 @@ function ResponseCell({ interview, isMine, busy, onRespond }) {
     );
   }
 
+  // The candidate has already been hired or rejected. An unanswered
+  // booking for them is moot: asking an interviewer to accept an
+  // interview for somebody the decision has already been made on is
+  // noise, and "Awaiting reply" would suggest there is still something to
+  // wait for.
+  if (interview.candidateOutcome === "HIRED" || interview.candidateOutcome === "REJECTED") {
+    return <span className="cell-sub">No reply needed — decided</span>;
+  }
+
   if (!isMine) return <span className="badge badge-amber">Awaiting reply</span>;
 
   return (
