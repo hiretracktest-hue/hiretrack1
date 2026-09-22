@@ -42,13 +42,19 @@ app.listen(config.port, () => {
   console.log("  Database       ->  Supabase PostgreSQL");
   console.log("  CV storage     ->  " + cvStorageLine);
   const provider = mailProvider();
+  // Both can be on at once: Resend is tried first and SMTP carries
+  // whatever Resend refuses. Say so, or somebody reading "Resend" here
+  // would assume a refused address was simply undeliverable.
+  const both = config.resend.enabled && config.smtp.enabled;
   console.log(
     "  Email          ->  " +
-      (provider === "resend"
-        ? "Resend, from " + config.resend.from
-        : provider === "smtp"
-          ? "SMTP via " + config.smtp.host
-          : "not configured (messages wait in the Outbox)")
+      (both
+        ? "Resend, falling back to SMTP via " + config.smtp.host
+        : provider === "resend"
+          ? "Resend, from " + config.resend.from
+          : provider === "smtp"
+            ? "SMTP via " + config.smtp.host
+            : "not configured (messages wait in the Outbox)")
   );
   console.log(
     "  Google sign-in ->  " +

@@ -477,6 +477,42 @@ export async function notifyOutcome({ candidate, job, outcome, decidedBy }) {
     except: decidedBy?.id,
   });
 
+  // FB-02 - "As an Interviewer, I want to see each candidate's status
+  // (Hired, Rejected, or On Hold)". The people who actually interviewed
+  // this candidate were never told how it ended: only HR and management
+  // were. Anyone booked to interview them, or who left feedback on them,
+  // now hears the outcome directly.
+  const interviewers = await many(
+    "SELECT DISTINCT u.id, u.name, u.email, u.role FROM users u WHERE u.is_active AND u.id IN (" +
+      "  SELECT interviewer_id FROM interviews WHERE candidate_id = $1 AND interviewer_id IS NOT NULL" +
+      "  UNION SELECT author_id FROM feedback WHERE candidate_id = $1" +
+      ")",
+    [candidate.id]
+  );
+  for (const person of interviewers) {
+    // HR and management were already told above, so skip them rather
+    // than tell anyone twice - and never tell the person who made the
+    // decision what they decided.
+    if (person.role === "hr" || person.role === "management") continue;
+    if (Number(person.id) === Number(decidedBy?.id)) continue;
+    await toUser(
+      hired ? "candidate.hired" : "candidate.rejected",
+      person,
+      "Outcome: " + candidate.full_name + " was " + (hired ? "hired" : "not taken forward"),
+      "You interviewed " +
+        candidate.full_name +
+        " for " +
+        job.title +
+        ". " +
+        (decidedBy?.name || "The hiring manager") +
+        " has recorded them as " +
+        (hired ? "hired" : "rejected") +
+        ". Thank you for your part in the decision.",
+      candidate.id,
+      null
+    );
+  }
+
   await toOutbox(
     hired ? "candidate.hired" : "candidate.rejected",
     { email: candidate.email, name: candidate.full_name },

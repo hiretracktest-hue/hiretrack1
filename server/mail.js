@@ -100,20 +100,37 @@ export async function sendMail({ to, name, subject, text, html }) {
     return { sent: false, reason: "no mail provider is configured" };
   }
 
-  // Resend first when both are set - it is an HTTP call, so it works
-  // from networks that block outbound SMTP ports.
-  const send = config.resend.enabled ? sendViaResend : sendViaSmtp;
+  // Every configured provider, in order: Resend first because it is an
+  // HTTP call and works from networks that block outbound SMTP ports,
+  // then SMTP.
+  //
+  // If the first one refuses, the next one is tried. This used to pick
+  // one provider and stop, which set a trap: a Resend account with no
+  // verified domain delivers only to its owner's address, so adding a
+  // Gmail App Password to reach everybody else did nothing - Resend was
+  // still chosen first, and still refused. Now Resend delivers what it
+  // can and SMTP carries the rest.
+  const providers = [
+    config.resend.enabled && { name: "Resend", send: sendViaResend },
+    config.smtp.enabled && { name: "SMTP", send: sendViaSmtp },
+  ].filter(Boolean);
 
-  try {
-    const result = await send({ to, name, subject, text, html });
-    if (!result.sent) {
-      console.warn("[mail] refused for " + to + ": " + result.reason);
+  const reasons = [];
+  for (const provider of providers) {
+    try {
+      const result = await provider.send({ to, name, subject, text, html });
+      if (result.sent) return { ...result, provider: provider.name };
+      reasons.push(provider.name + ": " + result.reason);
+    } catch (err) {
+      reasons.push(provider.name + ": " + err.message);
     }
-    return result;
-  } catch (err) {
-    console.error("[mail] could not send to " + to + ": " + err.message);
-    return { sent: false, reason: err.message };
   }
+
+  // Every provider refused. Report all of them - "Resend refused" alone
+  // hides that SMTP was tried too, and which one to fix.
+  const reason = reasons.join(" | ");
+  console.warn("[mail] could not send to " + to + " - " + reason);
+  return { sent: false, reason };
 }
 
 /** Checked once at startup so a broken password is obvious immediately. */

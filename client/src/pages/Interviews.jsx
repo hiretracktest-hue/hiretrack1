@@ -2,7 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
-import { Alert, Empty, JoinButton, Loading, formatDateTime } from "../components/ui.jsx";
+import {
+  Alert,
+  Empty,
+  JoinButton,
+  Loading,
+  OutcomeBadge,
+  formatDateTime,
+} from "../components/ui.jsx";
 
 /**
  * Interviews, plus the in-app notifications that tell an interviewer
@@ -193,6 +200,14 @@ export default function Interviews() {
                     <Link to={"/candidates/" + interview.candidateId}>
                       {interview.candidateName}
                     </Link>
+                    {/* FB-02: where they ended up, at a glance. An
+                        interviewer should not have to open every
+                        candidate to learn whether they were hired. */}
+                    {interview.candidateOutcome && (
+                      <div className="mt-1">
+                        <OutcomeBadge outcome={interview.candidateOutcome} />
+                      </div>
+                    )}
                   </td>
                   <td>{interview.jobTitle}</td>
                   <td>{interview.stage}</td>

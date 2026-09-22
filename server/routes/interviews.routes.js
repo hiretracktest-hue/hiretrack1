@@ -21,6 +21,8 @@ function toJson(row) {
     id: Number(row.id),
     candidateId: Number(row.candidate_id),
     candidateName: row.candidate_name ?? null,
+    candidateOutcome: row.candidate_outcome ?? null,
+    candidateStage: row.candidate_stage ?? null,
     candidateEmail: row.candidate_email ?? null,
     jobTitle: row.job_title ?? null,
     stage: row.stage,
@@ -44,6 +46,9 @@ function toJson(row) {
 
 const BASE_SELECT =
   "SELECT i.*, c.full_name AS candidate_name, c.email AS candidate_email, j.title AS job_title, " +
+  // FB-02: where the candidate ended up, so an interviewer can see the
+  // outcome of the people they assessed without opening each one.
+  "c.outcome AS candidate_outcome, c.current_stage AS candidate_stage, " +
   "u.name AS created_by_name, " +
   "(SELECT COUNT(*) FROM feedback f WHERE f.candidate_id = i.candidate_id " +
   "  AND f.stage = i.stage AND f.author_id = i.interviewer_id) AS feedback_given " +

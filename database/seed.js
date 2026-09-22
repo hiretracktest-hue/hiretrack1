@@ -98,6 +98,19 @@ const JOBS = [
     description: "Six month internship supporting requirements gathering and user story writing.",
     stages: ["Applied", "Screening", "Interview", "Offer"],
   },
+  // Two strong candidates for one role, so the side-by-side comparison
+  // (FB-03) has something real to show - the sprint review asked for
+  // exactly this: "two DevOps candidates compared".
+  {
+    title: "DevOps Engineer",
+    department: "Infrastructure",
+    location: "Colombo, Sri Lanka",
+    employmentType: "Full-time",
+    salaryRange: "LKR 250,000 - 320,000",
+    description:
+      "Own our deployment pipeline and production infrastructure on AWS and Kubernetes.",
+    stages: ["Applied", "Screening", "Technical Interview", "Final Interview", "Offer"],
+  },
 ];
 
 const CANDIDATES = [
@@ -167,13 +180,38 @@ const CANDIDATES = [
     cvBand: "UNRATED",
     notes: "Second year business information systems student.",
   },
+  // The DevOps pair for the side-by-side comparison. Deliberately close:
+  // both screened High, both recommended to advance - what separates
+  // them is in the written feedback, not the averages.
+  {
+    job: "DevOps Engineer",
+    fullName: "Ravindu Jayasinghe",
+    email: "ravindu.jayasinghe@gmail.com",
+    phone: "+94 77 410 2266",
+    source: "LinkedIn",
+    stage: "Final Interview",
+    outcome: "ACTIVE",
+    cvBand: "HIGH",
+    notes: "Five years on production Kubernetes at a payments company.",
+  },
+  {
+    job: "DevOps Engineer",
+    fullName: "Hansika Perera",
+    email: "hansika.perera@gmail.com",
+    phone: "+94 71 588 9043",
+    source: "Referral",
+    stage: "Final Interview",
+    outcome: "ACTIVE",
+    cvBand: "HIGH",
+    notes: "AWS certified; led a Terraform migration at her current employer.",
+  },
 ];
 
 async function reset() {
   // TRUNCATE ... RESTART IDENTITY empties the tables and resets the id
   // counters; CASCADE follows the foreign keys for us.
   await run(
-    "TRUNCATE notifications, feedback, interviews, candidates, job_stages, jobs, " +
+    "TRUNCATE audit_log, notifications, feedback, interviews, candidates, job_stages, jobs, " +
       "password_resets, users RESTART IDENTITY CASCADE"
   );
   console.log("  emptied every table");
@@ -344,6 +382,73 @@ async function seedInterviewAndFeedback(userIds) {
   console.log("  feedback  2 entries for Dilshan Herath");
 }
 
+/**
+ * Two DevOps candidates who have been through Screening and a Technical
+ * Interview, so the side-by-side comparison has real evidence to line up.
+ *
+ * The data follows the system's own rules rather than side-stepping
+ * them because this is seed code:
+ *
+ *   - Screening had nobody booked, so the hiring manager scored it.
+ *   - The Technical Interview WAS booked, with Sara - so Sara, and only
+ *     Sara, wrote its feedback.
+ *
+ * The scores are close on purpose. Both tie at Screening, which shows
+ * that a tie is not highlighted as a lead; they differ at Technical, and
+ * what really separates them is written under "concerns".
+ */
+async function seedComparison(userIds) {
+  const pair = [
+    {
+      email: "ravindu.jayasinghe@gmail.com",
+      screening: [4, "ADVANCE", "Five years running Kubernetes in production.",
+        "Little hands-on Terraform.", "Confident, clear answers."],
+      technical: [4, "ADVANCE",
+        "Designed a zero-downtime deploy on the whiteboard without prompting.",
+        "Over-provisioned every example - did not think about cost.", ""],
+    },
+    {
+      email: "hansika.perera@gmail.com",
+      screening: [4, "ADVANCE", "Strong Terraform and AWS, and certified.",
+        "Has not run Kubernetes beyond a lab.", "Very structured."],
+      technical: [5, "ADVANCE",
+        "Found the misconfigured health check in the incident exercise within minutes.",
+        "Quieter in the pairing section; needed drawing out.", ""],
+    },
+  ];
+
+  const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+
+  for (const [n, person] of pair.entries()) {
+    const candidate = await one("SELECT * FROM candidates WHERE email = $1", [person.email]);
+    if (!candidate) continue;
+    if (await one("SELECT id FROM feedback WHERE candidate_id = $1", [candidate.id])) continue;
+
+    // Booked, accepted, and already held - so its feedback is due and in.
+    const when = new Date(fiveDaysAgo.getTime() + n * 2 * 60 * 60 * 1000).toISOString();
+    await run(
+      "INSERT INTO interviews (candidate_id, stage, scheduled_at, interviewer_id, interviewer_name, " +
+        "interviewer_email, location, notes, response, responded_at, created_by) " +
+        "VALUES ($1, 'Technical Interview', $2, $3, $4, $5, 'Meeting room 1', " +
+        "'Incident exercise, then pairing.', 'ACCEPTED', $2, $6)",
+      [candidate.id, when, userIds[INTERVIEWER], "Sara Salgadu", INTERVIEWER, userIds[HR]]
+    );
+
+    for (const [stage, authorId, entry] of [
+      ["Screening", userIds[HIRING_MANAGER], person.screening],
+      ["Technical Interview", userIds[INTERVIEWER], person.technical],
+    ]) {
+      const [rating, recommendation, strengths, concerns, comment] = entry;
+      await run(
+        "INSERT INTO feedback (candidate_id, author_id, stage, rating, recommendation, " +
+          "strengths, concerns, comment) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        [candidate.id, authorId, stage, rating, recommendation, strengths, concerns, comment]
+      );
+    }
+    console.log("  compare   " + candidate.full_name.padEnd(22) + "2 feedback entries");
+  }
+}
+
 async function main() {
   const info = await one("SELECT current_database() AS db");
   console.log("\nSeeding " + info.db + "\n");
@@ -358,6 +463,7 @@ async function main() {
     const jobIds = await seedJobs(userIds[HR], userIds[HIRING_MANAGER]);
     await seedCandidates(jobIds, userIds[HR]);
     await seedInterviewAndFeedback(userIds);
+    await seedComparison(userIds);
   });
 
   const WHAT = {

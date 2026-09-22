@@ -642,9 +642,34 @@ export default function CandidateDetail() {
                   />
                 </Field>
 
-                <button className="btn btn-primary" disabled={busy}>
-                  Save my feedback
-                </button>
+                {/* A booked interview belongs to whoever was booked for
+                    it. Say so here rather than let the form look usable
+                    and then refuse on Save. Mirrors the rule the server
+                    enforces in feedback.routes.js. */}
+                {(() => {
+                  const booked = interviews.filter(
+                    (i) =>
+                      i.stage === feedbackForm.stage &&
+                      i.interviewerId &&
+                      i.response !== "DECLINED"
+                  );
+                  const notMine =
+                    booked.length > 0 && !booked.some((i) => i.interviewerId === user?.id);
+                  return (
+                    <>
+                      {notMine && (
+                        <Alert kind="info">
+                          The “{feedbackForm.stage}” interview is assigned to{" "}
+                          {[...new Set(booked.map((i) => i.interviewerName))].join(" and ")}, so
+                          only they can give its feedback.
+                        </Alert>
+                      )}
+                      <button className="btn btn-primary" disabled={busy || notMine}>
+                        Save my feedback
+                      </button>
+                    </>
+                  );
+                })()}
                 <p className="field-hint">
                   Everyone scores out of 5 with the same options, which is what makes the
                   side-by-side comparison fair. Saving again updates the score you already left.

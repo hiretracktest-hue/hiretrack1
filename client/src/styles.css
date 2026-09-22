@@ -1664,3 +1664,155 @@ textarea:focus-visible,
 tr.audit-watch td:first-child {
   box-shadow: inset 3px 0 0 var(--brand-500);
 }
+
+/* --- FB-03 side-by-side comparison ----------------------------------- */
+.section-title {
+  font-size: 1rem;
+  margin: 26px 0 10px;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.col-check {
+  width: 38px;
+  text-align: center;
+}
+.col-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand-500);
+  cursor: pointer;
+}
+tr.is-selected td {
+  background: var(--brand-50);
+}
+
+.votes {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.vote {
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.vote-advance { color: var(--green-fg); }
+.vote-hold { color: var(--amber-fg); }
+.vote-reject { color: var(--red-fg); }
+
+.compare {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: 4px 4px 12px;
+  margin-bottom: 8px;
+  animation: rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.compare-scroll {
+  overflow-x: auto;
+}
+.compare-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 560px;
+}
+.compare-table th,
+.compare-table td {
+  padding: 11px 14px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+.compare-table thead th {
+  background: var(--canvas);
+  position: sticky;
+  top: 0;
+  /* These headers are people, not column labels. The table-wide rule
+     uppercases every th, which turned an email address into
+     RAVINDU.JAYASINGHE@GMAIL.COM - an address is case-sensitive to the
+     eye even where it is not to the mail server, and a name in capitals
+     reads as shouting. */
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: normal;
+  color: var(--ink);
+  font-size: inherit;
+}
+.compare-rowhead {
+  width: 150px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface);
+  /* The row labels stay put while the columns scroll on a phone. */
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+.compare-col {
+  min-width: 190px;
+}
+.compare-name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.compare-remove {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.compare-remove:hover {
+  background: var(--red-bg);
+  color: var(--red-fg);
+}
+/* The single strongest figure in a row. A tint, not a colour change on
+   the number itself, so the value stays in normal ink and readable. */
+.compare-best {
+  background: var(--green-bg);
+  box-shadow: inset 3px 0 0 var(--green-fg);
+}
+.compare-words td {
+  background: var(--canvas);
+}
+.compare-note + .compare-note {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+.compare-note-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 0.84rem;
+}
+.compare-plus,
+.compare-minus,
+.compare-comment {
+  margin: 5px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+.compare-plus span { color: var(--green-fg); font-weight: 700; }
+.compare-minus span { color: var(--red-fg); font-weight: 700; }
+.compare-comment {
+  color: var(--muted);
+  font-style: italic;
+}

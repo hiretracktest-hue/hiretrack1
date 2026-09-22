@@ -208,6 +208,10 @@ router.get(
       location: iv.location,
       notes: iv.notes,
       createdByName: iv.created_by_name,
+      // The page decides whether to offer the feedback form from this.
+      // Without it every booking looked live, and a DECLINED one would
+      // have blocked feedback the server itself allows.
+      response: iv.response,
     }));
 
     const feedback = (

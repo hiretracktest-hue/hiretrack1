@@ -2176,6 +2176,131 @@ describe("WF-02 and FB-01 - a booked interview belongs to the person booked", ()
   });
 });
 
+describe("FB-02 and FB-03 - outcomes reach the interviewer, comparison shows the words", () => {
+  let jobId;
+  let firstStage;
+
+  async function addAndInterview(name) {
+    await signIn("hr@example.com");
+    const added = await call("POST", "/api/candidates", {
+      jobId,
+      fullName: name,
+      email: name.toLowerCase().replace(/\s+/g, ".") + "@example.com",
+      notify: false,
+    });
+    const c = added.data.candidate;
+    const booked = await call("POST", "/api/interviews", {
+      candidateId: c.id,
+      stage: firstStage,
+      scheduledAt: "2027-09-0" + (1 + (c.id % 8)) + "T10:00",
+      interviewerId: await userId("interviewer@example.com"),
+    });
+    assert.equal(booked.status, 201);
+
+    await signIn("interviewer@example.com");
+    assert.equal(
+      (await call("POST", "/api/feedback", {
+        candidateId: c.id,
+        stage: firstStage,
+        rating: 4,
+        recommendation: "ADVANCE",
+        strengths: "Clear on the fundamentals.",
+        concerns: "Little production experience.",
+      })).status,
+      201
+    );
+    return c;
+  }
+
+  test("setup", async () => {
+    await signIn("hr@example.com");
+    const job = (await call("GET", "/api/jobs")).data.jobs[0];
+    jobId = job.id;
+    const detail = (await call("GET", "/api/jobs/" + jobId)).data.job;
+    firstStage = detail.stages.map((st) => (typeof st === "string" ? st : st.name))[0];
+  });
+
+  test("the interviewer is told when a candidate they assessed is hired", async () => {
+    // Review item 3. Only HR and management used to hear the outcome;
+    // the person who actually interviewed them never found out.
+    const c = await addAndInterview("Outcome Watcher");
+
+    await signIn("manager@example.com");
+    assert.equal(
+      (await call("PATCH", "/api/candidates/" + c.id, { outcome: "HIRED" })).status,
+      200
+    );
+
+    await signIn("interviewer@example.com");
+    const { data } = await call("GET", "/api/notifications");
+    const told = data.notifications.find(
+      (n) => n.kind === "candidate.hired" && n.candidateId === c.id
+    );
+    assert.ok(told, "the interviewer hears the outcome");
+    assert.match(told.subject, /Outcome Watcher was hired/);
+  });
+
+  test("the interviewer's interview list shows where each candidate ended up", async () => {
+    await signIn("interviewer@example.com");
+    const { data } = await call("GET", "/api/interviews?mine=1");
+    const row = data.interviews.find((i) => i.candidateName === "Outcome Watcher");
+    assert.ok(row);
+    assert.equal(row.candidateOutcome, "HIRED", "visible at a glance, not only on the candidate");
+  });
+
+  test("the person who made the decision is not told what they decided", async () => {
+    const c = await addAndInterview("Self Decider");
+    await signIn("manager@example.com");
+    await call("PATCH", "/api/candidates/" + c.id, { outcome: "REJECTED" });
+
+    const { data } = await call("GET", "/api/notifications");
+    assert.ok(
+      !data.notifications.some((n) => n.kind === "candidate.rejected" && n.candidateId === c.id),
+      "being told what you just did yourself is noise"
+    );
+  });
+
+  test("the comparison carries what interviewers actually wrote", async () => {
+    // Review item 5. The page showed averages only - two candidates on
+    // 4.0 and 4.1 are not separated by the decimal but by the concerns.
+    const a = await addAndInterview("Compare Alpha");
+    const b = await addAndInterview("Compare Beta");
+
+    await signIn("manager@example.com");
+    const { status, data } = await call("GET", "/api/feedback/compare/" + jobId);
+    assert.equal(status, 200);
+
+    for (const id of [a.id, b.id]) {
+      const c = data.candidates.find((x) => x.id === id);
+      assert.ok(Array.isArray(c.feedback), "each candidate carries their feedback");
+      const note = c.feedback[0];
+      assert.equal(note.authorName, "Test Interviewer");
+      assert.equal(note.strengths, "Clear on the fundamentals.");
+      assert.equal(note.concerns, "Little production experience.");
+      assert.equal(note.rating, 4);
+    }
+  });
+});
+
+describe("the vacancies KPI and the dashboard figures", () => {
+  test("the stats payload uses the word the dashboard reads", async () => {
+    // Review item 1. It sent openPositions while the dashboard read
+    // openVacancies, so the Vacancies tile always showed 0.
+    await signIn("hr@example.com");
+    const { data } = await call("GET", "/api/team/stats");
+    assert.equal(typeof data.openVacancies, "number");
+    assert.ok(data.openVacancies > 0, "there are open vacancies, so it must not read 0");
+    assert.equal(data.openPositions, undefined, "the old name is gone");
+  });
+
+  test("the report summary matches it", async () => {
+    await signIn("management@example.com", "Password456");
+    const { data } = await call("GET", "/api/reports");
+    assert.equal(typeof data.summary.openVacancies, "number");
+    assert.equal(data.summary.openPositions, undefined);
+  });
+});
+
 describe("Sprint 1 test cases - schedule interview", () => {
   let candidateId;
   let sanduniId;

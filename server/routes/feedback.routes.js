@@ -210,6 +210,19 @@ router.get(
       [jobId]
     );
 
+    // FB-03 - "view all interviewer feedback for a candidate and compare
+    // candidates side-by-side". The averages alone reduce two people to a
+    // number each; the words are what a hiring decision is actually made
+    // on. One query for the whole vacancy rather than one per candidate.
+    const written = await many(
+      "SELECT f.candidate_id, f.stage, f.rating, f.recommendation, f.strengths, f.concerns, " +
+        "f.comment, f.created_at, u.name AS author_name, u.role AS author_role " +
+        "FROM feedback f LEFT JOIN users u ON u.id = f.author_id " +
+        "WHERE f.candidate_id IN (SELECT id FROM candidates WHERE job_id = $1) " +
+        "ORDER BY f.created_at ASC",
+      [jobId]
+    );
+
     const candidates = rows.map((row) => ({
       id: Number(row.id),
       fullName: row.full_name,
@@ -230,6 +243,19 @@ router.get(
           .filter((entry) => Number(entry.candidate_id) === Number(row.id))
           .map((entry) => [entry.stage, { average: num(entry.average_rating), count: entry.count }])
       ),
+      feedback: written
+        .filter((f) => Number(f.candidate_id) === Number(row.id))
+        .map((f) => ({
+          stage: f.stage,
+          rating: Number(f.rating),
+          recommendation: f.recommendation,
+          strengths: f.strengths,
+          concerns: f.concerns,
+          comment: f.comment,
+          authorName: f.author_name || "Unknown",
+          authorRole: f.author_role,
+          createdAt: f.created_at,
+        })),
     }));
 
     res.json({
