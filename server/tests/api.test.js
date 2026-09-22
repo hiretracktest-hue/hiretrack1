@@ -566,9 +566,26 @@ describe("CAN-03 - screening CVs into bands", () => {
 describe("CAN-04 and WF-02 - moving a candidate on, only once feedback is in", () => {
   let mayaId;
 
-  test("the first stage is exempt - nobody has interviewed them yet", async () => {
+  test("HR cannot move a candidate on - that is the hiring manager's", async () => {
+    // The progress card, and the stage moves behind it, belong to the
+    // hiring manager. HR opens the position, adds the candidate and
+    // books the interviews; it does not decide who goes further.
     mayaId = Number((await one("SELECT id FROM candidates WHERE email = $1", ["maya@example.com"])).id);
     await signIn("hr@example.com");
+    const refused = await call("POST", "/api/candidates/" + mayaId + "/advance");
+    assert.equal(refused.status, 403);
+
+    const byPatch = await call("PATCH", "/api/candidates/" + mayaId, { currentStage: "Offer" });
+    assert.equal(byPatch.status, 403, "and not by patching the stage either");
+    assert.match(byPatch.data.error, /hiring manager/);
+
+    const outcome = await call("PATCH", "/api/candidates/" + mayaId, { outcome: "HIRED" });
+    assert.equal(outcome.status, 403, "nor the hire decision");
+    assert.match(outcome.data.error, /hiring manager/);
+  });
+
+  test("the first stage is exempt - nobody has interviewed them yet", async () => {
+    await signIn("manager@example.com");
     const { status, data } = await call("POST", "/api/candidates/" + mayaId + "/advance");
     assert.equal(status, 200);
     assert.equal(data.candidate.currentStage, "Interview");
@@ -619,7 +636,7 @@ describe("CAN-04 and WF-02 - moving a candidate on, only once feedback is in", (
     });
     assert.equal(feedback.status, 201);
 
-    await signIn("hr@example.com");
+    await signIn("manager@example.com");
     const { status, data } = await call("POST", "/api/candidates/" + mayaId + "/advance");
     assert.equal(status, 200);
     assert.equal(data.candidate.currentStage, "Offer");
@@ -2068,7 +2085,7 @@ describe("WF-02 and FB-01 - a booked interview belongs to the person booked", ()
     assert.equal(c.currentStage, stages[0]);
     await book(c.id, stages[0], "interviewer@example.com", "2027-08-01T10:00");
 
-    await signIn("hr@example.com");
+    await signIn("manager@example.com");
     const blocked = await call("POST", "/api/candidates/" + c.id + "/advance");
     assert.equal(blocked.status, 400, "blocked while the interviewer has not reported");
     assert.match(blocked.data.error, /Waiting on feedback/);
@@ -2090,7 +2107,7 @@ describe("WF-02 and FB-01 - a booked interview belongs to the person booked", ()
       201
     );
 
-    await signIn("hr@example.com");
+    await signIn("manager@example.com");
     const moved = await call("POST", "/api/candidates/" + c.id + "/advance");
     assert.equal(moved.status, 200);
     assert.equal(moved.data.candidate.currentStage, stages[1]);
@@ -2116,7 +2133,7 @@ describe("WF-02 and FB-01 - a booked interview belongs to the person booked", ()
     assert.match(refused.data.error, /booked with Test Interviewer/);
 
     // And it still does not count: the candidate stays blocked.
-    await signIn("hr@example.com");
+    await signIn("manager@example.com");
     assert.equal((await call("POST", "/api/candidates/" + c.id + "/advance")).status, 400);
   });
 
@@ -2152,7 +2169,7 @@ describe("WF-02 and FB-01 - a booked interview belongs to the person booked", ()
       200
     );
 
-    await signIn("hr@example.com");
+    await signIn("manager@example.com");
     const moved = await call("POST", "/api/candidates/" + c.id + "/advance");
     assert.equal(moved.status, 200, "nobody live is booked, so stage one moves as before");
   });
@@ -2170,7 +2187,7 @@ describe("WF-02 and FB-01 - a booked interview belongs to the person booked", ()
       recommendation: "ADVANCE",
     });
 
-    await signIn("hr@example.com");
+    await signIn("manager@example.com");
     const still = await call("POST", "/api/candidates/" + c.id + "/advance");
     assert.equal(still.status, 400, "one of two is not enough");
     assert.match(still.data.error, /Test Manager/, "names the one still missing");

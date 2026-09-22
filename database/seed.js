@@ -467,8 +467,8 @@ async function main() {
   });
 
   const WHAT = {
-    hr: "Everything: open positions, add candidates, screen CVs, run the process",
-    hiring_manager: "Candidates, comparison and the hire decision. No position control",
+    hr: "Opens positions, adds candidates, screens CVs, books interviews",
+    hiring_manager: "Moves candidates through the stages and makes the hire decision",
     interviewer: "Sees their candidates, leaves feedback at their stage",
     management: "Oversight: sees everything, changes nothing, exports reports",
   };

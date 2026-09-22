@@ -163,8 +163,15 @@ export const PERMISSIONS = {
   "candidate:delete": [ROLE_HR],
   "candidate:uploadCv": [ROLE_HR],
   "candidate:band": [ROLE_HR, ROLE_HIRING_MANAGER],
-  "candidate:advance": [ROLE_HR, ROLE_HIRING_MANAGER],
-  "candidate:outcome": [ROLE_HR, ROLE_HIRING_MANAGER],
+  // Moving somebody through the stages, and the hire / reject decision,
+  // belong to the hiring manager alone. HR runs the process - it opens
+  // the position, adds the candidate, books the interviews - but the
+  // judgement about whether a candidate goes further is the manager's,
+  // and splitting it between two roles is how a candidate gets moved on
+  // by somebody who was never in the room. Note this is stricter than
+  // the plan's CAN-04, which names the HR Recruiter.
+  "candidate:advance": [ROLE_HIRING_MANAGER],
+  "candidate:outcome": [ROLE_HIRING_MANAGER],
   "candidate:compare": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_MANAGEMENT],
   // Handing a candidate to an interviewer. HR runs the process, and the
   // hiring manager owns the shortlist, so both may assign.

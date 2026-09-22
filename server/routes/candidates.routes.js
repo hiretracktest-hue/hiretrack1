@@ -526,7 +526,7 @@ router.patch(
     let newOutcome = null;
     if (req.body.outcome !== undefined) {
       if (!can(req.user, "candidate:outcome")) {
-        throw httpError(403, "Your role cannot record an outcome.");
+        throw httpError(403, "Only the hiring manager records a hire or a rejection.");
       }
       newOutcome = v.oneOf(req.body.outcome, OUTCOMES, { field: "Outcome" });
       push("outcome", newOutcome);
@@ -534,7 +534,7 @@ router.patch(
 
     if (req.body.currentStage !== undefined) {
       if (!can(req.user, "candidate:advance")) {
-        throw httpError(403, "Your role cannot change a candidate's stage.");
+        throw httpError(403, "Only the hiring manager moves a candidate between stages.");
       }
       const stages = await stagesFor(existing.job_id);
       const wanted = v.oneOf(req.body.currentStage, stages, { field: "Stage" });

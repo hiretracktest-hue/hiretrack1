@@ -364,6 +364,11 @@ export default function CandidateDetail() {
     Boolean(p["feedback:write"]) && stages.some((stage) => rights[stage]?.allowed);
   const feedbackOwner = Object.values(rights).find((r) => r && !r.allowed)?.reason || "";
 
+  // The progress card is the hiring manager's. The permissions decide it,
+  // not the role name, so the map in server/config.js stays the one place
+  // the rule is written.
+  const showProgress = Boolean(p["candidate:advance"] || p["candidate:outcome"]);
+
   return (
     <div className="page">
       <div className="page-head">
@@ -379,6 +384,12 @@ export default function CandidateDetail() {
           </p>
         </div>
         <div className="btn-row">
+          {/* Where they stand, for the roles that do not get the
+              Progress card - HR still books interviews stage by stage,
+              so the stage name has to be legible to them somewhere. */}
+          {!showProgress && candidate.currentStage && (
+            <span className="badge badge-grey">{candidate.currentStage}</span>
+          )}
           <BandBadge band={candidate.cvBand} />
           <OutcomeBadge outcome={candidate.outcome} />
           {p["candidate:edit"] && (
@@ -396,9 +407,13 @@ export default function CandidateDetail() {
         {message}
       </Alert>
 
-      {/* CAN-04: move on, or decide. Everybody sees where the candidate
-          is; only HR and the hiring manager get the buttons. */}
-      <Progress candidate={candidate} permissions={p} onChanged={() => load(true)} />
+      {/* CAN-04: the stage track, the move, and the hire / reject
+          decision. The hiring manager's, and nobody else's - the card is
+          not rendered at all for the other roles rather than shown with
+          dead buttons. */}
+      {showProgress && (
+        <Progress candidate={candidate} permissions={p} onChanged={() => load(true)} />
+      )}
 
       <div className="grid grid-sidebar mt-2">
         <div>

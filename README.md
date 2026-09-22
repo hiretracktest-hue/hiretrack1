@@ -15,7 +15,7 @@ Built for our second year, second semester group project.
 | Back end | Node.js + Express (REST API) |
 | Database | **PostgreSQL on Supabase**, accessed with `pg` (node-postgres) — 9 tables |
 | Auth | Email + password (bcrypt), JWT in an httpOnly cookie, optional Google sign-in |
-| Tests | Node's built-in test runner — 173 API tests |
+| Tests | Node's built-in test runner — 174 API tests |
 
 > **This is an internal system.** The people who log in are HR, hiring managers,
 > interviewers and management. **Job candidates do not have accounts** — HR adds
@@ -56,8 +56,8 @@ each row has a **Use** button that fills the form for you.
 
 | Email | Password | Role | What they can do |
 | --- | --- | --- | --- |
-| `kevin@hiretrack.lk` | `kevin12345` | HR Recruiter | Everything: open positions, add candidates, screen CVs, run the process |
-| `thusitha@hiretrack.lk` | `thusitha12345` | Hiring Manager | Candidates, comparison, the hire decision. **Cannot** open or close a position |
+| `kevin@hiretrack.lk` | `kevin12345` | HR Recruiter | Opens positions, adds candidates, screens CVs, books interviews. **Does not** move candidates on or decide |
+| `thusitha@hiretrack.lk` | `thusitha12345` | Hiring Manager | Comparison, moving candidates through the stages, and the hire decision. **Cannot** open or close a position |
 | `sara@hiretrack.lk` | `sara12345` | Interviewer | Sees candidates, leaves feedback at their stage. **Cannot** move anyone forward |
 | `arosh@hiretrack.lk` | `arosh12345` | Management | Oversight: sees everything, changes nothing, exports reports |
 
@@ -88,7 +88,7 @@ trail worthless — you can see what was done but never who did it.
 | `npm run dev` | Run the API and the React dev server together |
 | `npm run build` | Build the React app into `client/dist` |
 | `npm start` | Run the API, serving the built React app too |
-| `npm test` | Run the 173 automated API tests |
+| `npm test` | Run the 174 automated API tests |
 | `npm run seed` | Add any missing demo data (safe to re-run) |
 | `npm run seed:reset` | Empty every table, then seed from scratch |
 
@@ -363,8 +363,8 @@ Four roles with genuinely different permissions, all defined in one place
 | See every candidate | ✅ | ✅ | ✅ | ✅ |
 | Add a candidate, upload their CV | ✅ | — | — | — |
 | Band a CV High / Medium / Low | ✅ | ✅ | — | — |
-| Move a candidate to the next stage | ✅ | ✅ | — | — |
-| Record hired / rejected / on hold | ✅ | ✅ | — | — |
+| Move a candidate to the next stage | — | ✅ ² | — | — |
+| Record hired / rejected / on hold | — | ✅ ² | — | — |
 | Leave interview feedback | — | ✅ ¹ | ✅ ¹ | — |
 | Compare candidates side by side | ✅ | ✅ | — | ✅ |
 | Schedule an interview | ✅ | ✅ | — | — |
@@ -382,6 +382,13 @@ picking a different stage in the feedback form. A declined booking does not
 count. Only a candidate nobody has been assigned or booked for is open to any
 hiring manager or interviewer. The page hides **Leave feedback** from anyone it
 would refuse, and says who the feedback belongs to.
+
+² **The progress card is the hiring manager's.** The stage track, the **Move
+to …** button and the hire / reject decision appear on the candidate page for
+the hiring manager and nobody else - the other roles are not shown a card of
+dead buttons, and the API refuses them too. HR still sees which stage a
+candidate is on, because HR books the interviews stage by stage. This is
+deliberately stricter than the plan's `CAN-04`, which names the HR Recruiter.
 
 **HR does not write feedback.** HR runs the process and reads the verdicts; the
 people who sat in the interview give them.
@@ -453,7 +460,7 @@ our web/
 │   │   ├── notifications.routes.js in-app notifications + candidate outbox
 │   │   ├── reports.routes.js       management reports + CSV export
 │   │   └── team.routes.js          who logs in, roles, dashboard counts
-│   └── tests/api.test.js   173 automated tests
+│   └── tests/api.test.js   174 automated tests
 │
 └── client/                 React front end
     ├── index.html
@@ -543,18 +550,18 @@ checklist against the plan, and a failing test names the story it breaks.
 | --- | --: | --- | --: |
 | `AUTH-01` Log in securely | 20 | `JOB-03` Close a job opening | 5 |
 | `JOB-01` Create a job position | 4 | `CAN-05` Reuse a profile and CV on a second position | 4 |
-| `JOB-02` Edit or close a job position | 5 | `WF-02` Blocked until the stage's feedback is in | 15 |
+| `JOB-02` Edit or close a job position | 5 | `WF-02` Blocked until the stage's feedback is in | 16 |
 | `CAN-01` Add candidate information | 21 | `FB-02` Interviewer sees Hired / Rejected / On hold | 4 |
 | `CAN-02` Upload a candidate's CV | 21 | `FB-03` All feedback, compared side by side | 9 |
 | `CAN-03` Search and filter candidates | 12 | `COM-01` Hire-confirmation email | 10 |
 | `WF-01` Configure interview stages | 4 | `COM-02` Interviewer notified when assigned | 25 |
 | `INT-01` Schedule interviews | 38 | `RPT-01` Dashboard with KPIs | 12 |
-| `CAN-04` Move on or reject | 9 | `RPT-02` Export as CSV and PDF | 10 |
+| `CAN-04` Move on or reject | 10 | `RPT-02` Export as CSV and PDF | 10 |
 | `FB-01` Structured feedback, score per stage | 18 | `AUD-01` Audit log | 7 |
 
 **20 of 20 stories have automated evidence.** A test can count towards more than
 one story when it proves both — the audit test that deletes a candidate is
-evidence for `AUD-01`, not a second test of deleting. 173 tests in total.
+evidence for `AUD-01`, not a second test of deleting. 174 tests in total.
 
 ## 8. Testing
 
