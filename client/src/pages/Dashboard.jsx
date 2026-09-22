@@ -37,8 +37,13 @@ export default function Dashboard() {
       api.stats(),
       p["position:view"] ? api.listJobs() : Promise.resolve(empty),
       p["candidate:view"] ? api.listCandidates({ sort: "newest" }) : Promise.resolve(empty),
+      // Only an interviewer's list is narrowed to their own bookings.
+      // This used to narrow anybody who could not SCHEDULE interviews -
+      // which included management, who then saw only the interviews
+      // they were personally conducting. That is none, so their list was
+      // always empty.
       p["interview:view"]
-        ? api.listInterviews({ upcoming: 1, ...(p["interview:schedule"] ? {} : { mine: 1 }) })
+        ? api.listInterviews({ upcoming: 1, ...(user?.role === "interviewer" ? { mine: 1 } : {}) })
         : Promise.resolve(empty),
     ])
       .then(([statsResult, jobsResult, candidateResult, interviewResult]) => {
@@ -59,7 +64,12 @@ export default function Dashboard() {
   if (loading) return <Loading what="your dashboard" />;
 
   const openJobs = jobs.filter((job) => job.status === "ACTIVE").slice(0, 5);
-  const isInterviewer = !p["candidate:advance"];
+  // Read the role, do not infer it. This was `!p["candidate:advance"]`,
+  // on the assumption that only interviewers cannot advance anyone - but
+  // management cannot either. So management was treated as an
+  // interviewer: shown "My next interviews", a "Feedback I still owe"
+  // tile, and an interview list filtered down to their own (none).
+  const isInterviewer = user?.role === "interviewer";
 
   return (
     <div className="page">
@@ -189,7 +199,7 @@ export default function Dashboard() {
           {p["interview:view"] && (
             <div className="card">
               <div className="card-title">
-                <h2>{isInterviewer ? "My next interviews" : "Next interviews"}</h2>
+                <h2>{isInterviewer ? "My next interviews" : "Interviews"}</h2>
                 <Link className="small" to="/interviews">
                   View all
                 </Link>

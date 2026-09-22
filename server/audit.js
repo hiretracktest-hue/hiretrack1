@@ -29,6 +29,9 @@ export const ACTIONS = {
   CANDIDATE_DELETED: "candidate.deleted",
   JOB_DELETED: "job.deleted",
   CV_DOWNLOADED: "candidate.cv_downloaded",
+  // Taking a copy of the log out of the system is itself worth a line
+  // in the log.
+  AUDIT_EXPORTED: "audit.exported",
 };
 
 /**

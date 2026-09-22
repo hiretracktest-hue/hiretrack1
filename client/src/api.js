@@ -113,6 +113,10 @@ export const api = {
   // to somebody who will only read them.
   reportPdfUrl: (report) => "/api/reports/export.pdf?report=" + encodeURIComponent(report),
 
+  // AUD-01 - management only.
+  auditLog: (params = {}) => request("/team/audit?" + new URLSearchParams(params).toString()),
+  auditCsvUrl: () => "/api/team/audit.csv",
+
   // people
   team: () => request("/team"),
   interviewers: () => request("/team/interviewers"),

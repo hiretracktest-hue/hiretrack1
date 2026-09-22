@@ -7,6 +7,7 @@ import * as audit from "../audit.js";
 import { stagesFor } from "./jobs.routes.js";
 import { uploadCv, safeFilename, assertRealCv } from "../upload.js";
 import { putCv, getCv, removeCv } from "../storage.js";
+import { awaitingFeedback } from "../bookings.js";
 import { notifyCandidateAdded } from "../notify.js";
 import { notifyOutcome } from "../notify.js";
 
@@ -600,10 +601,37 @@ router.post(
       throw httpError(400, "This candidate is already at the final stage.");
     }
 
-    // "Should a candidate be blocked from advancing until the current
-    // stage's feedback is in?" - yes. The first stage is exempt because
-    // nobody has interviewed them yet when they have only just been added.
-    if (config.requireFeedbackToAdvance && index > 0) {
+    // WF-02 - "a candidate blocked from advancing to the next stage until
+    // feedback for the current stage is submitted".
+    //
+    // When somebody is BOOKED to interview them at this stage, wait for
+    // every booked interviewer's own feedback - not anybody's. This
+    // applies at every stage including the first. The first stage used
+    // to be exempt outright, on the reasoning that nobody has interviewed
+    // somebody who was only just added; but once HR books an interview
+    // there, somebody is interviewing them, and the exemption let a
+    // candidate be moved straight past an interview that had not
+    // happened yet.
+    const { booked, missing } = config.requireFeedbackToAdvance
+      ? await awaitingFeedback(id, existing.current_stage)
+      : { booked: [], missing: [] };
+
+    if (booked.length && missing.length) {
+      throw httpError(
+        400,
+        'Waiting on feedback for "' +
+          existing.current_stage +
+          '" from ' +
+          missing.map((m) => m.name).join(" and ") +
+          '. The candidate can move to "' +
+          stages[index + 1] +
+          '" once it is in.'
+      );
+    }
+
+    // With nobody booked, the original rule: any stage after the first
+    // needs its feedback before the candidate moves on.
+    if (config.requireFeedbackToAdvance && index > 0 && !booked.length) {
       const { count } = await one(
         "SELECT COUNT(*)::int AS count FROM feedback WHERE candidate_id = $1 AND stage = $2",
         [id, existing.current_stage]

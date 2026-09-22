@@ -1801,7 +1801,7 @@ describe("AUD-01 - the audit log", () => {
       password: "definitely-not-the-password",
     });
 
-    await signIn("hr@example.com");
+    await signIn("management@example.com", "Password456");
     const { data } = await call("GET", "/api/team/audit");
     const failed = data.entries.find((e) => e.action === "user.sign_in_failed");
     assert.ok(failed, "the attempt is in the log");
@@ -1813,10 +1813,12 @@ describe("AUD-01 - the audit log", () => {
 
   test("a successful sign-in is recorded against the person", async () => {
     await signIn("hr@example.com");
+    await signIn("management@example.com", "Password456");
     const { data } = await call("GET", "/api/team/audit");
-    const ok = data.entries.find((e) => e.action === "user.signed_in");
-    assert.ok(ok);
-    assert.equal(ok.actorName, "Test HR");
+    const ok = data.entries.find(
+      (e) => e.action === "user.signed_in" && e.actorName === "Test HR"
+    );
+    assert.ok(ok, "HR's sign-in is traced to HR");
   });
 
   test("creating an account and changing a role are both traceable", async () => {
@@ -1836,6 +1838,7 @@ describe("AUD-01 - the audit log", () => {
       200
     );
 
+    await signIn("management@example.com", "Password456");
     const { data } = await call("GET", "/api/team/audit");
     const made = data.entries.find((e) => e.action === "user.created" && e.subjectId === id);
     const moved = data.entries.find(
@@ -1863,6 +1866,7 @@ describe("AUD-01 - the audit log", () => {
     const id = added.data.candidate.id;
     assert.equal((await call("DELETE", "/api/candidates/" + id)).status, 200);
 
+    await signIn("management@example.com", "Password456");
     const { data } = await call("GET", "/api/team/audit");
     const gone = data.entries.find(
       (e) => e.action === "candidate.deleted" && e.subjectId === id
@@ -1871,17 +1875,64 @@ describe("AUD-01 - the audit log", () => {
     assert.match(gone.detail, /temporary@example.com/);
   });
 
-  test("only HR can read the log", async () => {
-    // It names who did what, which is staff information.
+  test("only management can read or download the log", async () => {
+    // Deliberately not HR. Most of what the log records is HR's own
+    // work - accounts, roles, deletions - so HR reviewing it would be
+    // HR marking its own homework.
     for (const [who, password] of [
+      ["hr@example.com", "Password123"],
       ["manager@example.com", "Password123"],
       ["interviewer@example.com", "Password123"],
-      ["management@example.com", "Password456"],
     ]) {
       await signIn(who, password);
-      assert.equal((await call("GET", "/api/team/audit")).status, 403, who + " must be refused");
+      assert.equal((await call("GET", "/api/team/audit")).status, 403, who + " cannot read it");
+      assert.equal(
+        (await call("GET", "/api/team/audit.csv")).status,
+        403,
+        who + " cannot download it"
+      );
     }
+
+    await signIn("management@example.com", "Password456");
+    assert.equal((await call("GET", "/api/team/audit")).status, 200);
+  });
+
+  test("the download is a CSV that cannot smuggle a formula into Excel", async () => {
+    // Account names are typed by hand and written into the log's detail
+    // column. A name that is really a formula would run the moment
+    // management opened the export - unless it is neutralised.
     await signIn("hr@example.com");
+    const created = await call("POST", "/api/team/members", {
+      name: "=HYPERLINK(1)",
+      email: "formula@example.com",
+      role: "interviewer",
+      password: "Formula12345",
+    });
+    assert.equal(created.status, 201, "the name is stored as typed - it is only text here");
+
+    await signIn("management@example.com", "Password456");
+    const response = await fetch(baseUrl + "/api/team/audit.csv", { headers: { Cookie: cookie } });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") || "", /text\/csv/);
+    assert.match(response.headers.get("content-disposition") || "", /^attachment/);
+
+    const text = await response.text();
+    assert.match(text, /When,Action,Who/, "has its header row");
+    // Prove the payload actually reached the file - otherwise the check
+    // below would pass for the wrong reason.
+    assert.match(text, /'=HYPERLINK\(1\)/, "the formula is there, prefixed and inert");
+    assert.doesNotMatch(
+      text,
+      /(^|,)"?=HYPERLINK/m,
+      "no cell may START with = - that would be a live formula"
+    );
+  });
+
+  test("downloading the log is itself logged", async () => {
+    await signIn("management@example.com", "Password456");
+    await fetch(baseUrl + "/api/team/audit.csv", { headers: { Cookie: cookie } });
+    const { data } = await call("GET", "/api/team/audit");
+    assert.ok(data.entries.some((e) => e.action === "audit.exported"));
   });
 });
 
@@ -1936,12 +1987,26 @@ describe("RPT-01 and RPT-02 - the dashboard data and the PDF export", () => {
     }
   });
 
-  test("a role without export rights cannot reach the PDF either", async () => {
-    // The CSV route was already guarded; the PDF must not be a way round it.
+  test("the hiring manager can export - RPT-02 is written for them", async () => {
+    // "As a Hiring Manager, I want pipeline reports exportable in CSV and
+    // PDF". They were left out of report:export, so the one role the
+    // story names was the one that could not do it.
+    await signIn("manager@example.com");
+    for (const url of [
+      "/api/reports/export.csv?report=candidates",
+      "/api/reports/export.pdf?report=candidates",
+      "/api/reports/export.pdf?report=vacancies",
+    ]) {
+      const response = await fetch(baseUrl + url, { headers: { Cookie: cookie } });
+      assert.equal(response.status, 200, url);
+    }
+  });
+
+  test("an interviewer still cannot reach any export", async () => {
+    // The PDF route must not be a way round the rule the CSV follows.
     await signIn("interviewer@example.com");
     assert.equal((await call("GET", "/api/reports/export.pdf?report=vacancies")).status, 403);
-    await signIn("manager@example.com");
-    assert.equal((await call("GET", "/api/reports/export.pdf?report=vacancies")).status, 403);
+    assert.equal((await call("GET", "/api/reports/export.csv?report=candidates")).status, 403);
   });
 
   test("an unknown report name falls back instead of failing", async () => {
@@ -1951,6 +2016,163 @@ describe("RPT-01 and RPT-02 - the dashboard data and the PDF export", () => {
     });
     assert.equal(response.status, 200);
     assert.equal(Buffer.from(await response.arrayBuffer()).subarray(0, 5).toString(), "%PDF-");
+  });
+});
+
+describe("WF-02 and FB-01 - a booked interview belongs to the person booked", () => {
+  let jobId;
+  let stages;
+
+  // A fresh candidate each time, at the FIRST stage - where the old
+  // rule let anybody through because nothing was checked there at all.
+  async function freshCandidate(name) {
+    await signIn("hr@example.com");
+    const added = await call("POST", "/api/candidates", {
+      jobId,
+      fullName: name,
+      email: name.toLowerCase().replace(/\s+/g, ".") + "@example.com",
+      notify: false,
+    });
+    assert.equal(added.status, 201);
+    return added.data.candidate;
+  }
+
+  async function book(candidateId, stage, interviewerEmail, when) {
+    await signIn("hr@example.com");
+    const booked = await call("POST", "/api/interviews", {
+      candidateId,
+      stage,
+      scheduledAt: when,
+      interviewerId: await userId(interviewerEmail),
+      location: "Room 2",
+    });
+    assert.equal(booked.status, 201, "booked");
+    return booked.data.interview;
+  }
+
+  test("setup", async () => {
+    await signIn("hr@example.com");
+    const job = (await call("GET", "/api/jobs")).data.jobs[0];
+    jobId = job.id;
+    stages = (await call("GET", "/api/jobs/" + jobId)).data.job.stages.map((s) =>
+      typeof s === "string" ? s : s.name
+    );
+    assert.ok(stages.length >= 2);
+  });
+
+  test("once HR books an interview, the candidate cannot move past it - even at stage one", async () => {
+    // The review found exactly this: book an interview, then press
+    // "Move to next stage" and it went straight through. The first stage
+    // was exempt from the feedback rule outright.
+    const c = await freshCandidate("Gate Test One");
+    assert.equal(c.currentStage, stages[0]);
+    await book(c.id, stages[0], "interviewer@example.com", "2027-08-01T10:00");
+
+    await signIn("hr@example.com");
+    const blocked = await call("POST", "/api/candidates/" + c.id + "/advance");
+    assert.equal(blocked.status, 400, "blocked while the interviewer has not reported");
+    assert.match(blocked.data.error, /Waiting on feedback/);
+    assert.match(blocked.data.error, /Test Interviewer/, "it names who it is waiting on");
+  });
+
+  test("the booked interviewer's own feedback is what unblocks it", async () => {
+    const c = await freshCandidate("Gate Test Two");
+    await book(c.id, stages[0], "interviewer@example.com", "2027-08-02T10:00");
+
+    await signIn("interviewer@example.com");
+    assert.equal(
+      (await call("POST", "/api/feedback", {
+        candidateId: c.id,
+        stage: stages[0],
+        rating: 4,
+        recommendation: "ADVANCE",
+      })).status,
+      201
+    );
+
+    await signIn("hr@example.com");
+    const moved = await call("POST", "/api/candidates/" + c.id + "/advance");
+    assert.equal(moved.status, 200);
+    assert.equal(moved.data.candidate.currentStage, stages[1]);
+  });
+
+  test("a hiring manager cannot fill in the feedback for someone else's interview", async () => {
+    // Review item 4. Before, any feedback:write role could score any
+    // stage - and that score then counted towards letting the candidate
+    // advance, so the gate could be opened by the wrong person.
+    const c = await freshCandidate("Gate Test Three");
+    await book(c.id, stages[0], "interviewer@example.com", "2027-08-03T10:00");
+
+    await signIn("manager@example.com");
+    const refused = await call("POST", "/api/feedback", {
+      candidateId: c.id,
+      stage: stages[0],
+      rating: 5,
+      recommendation: "ADVANCE",
+    });
+    assert.equal(refused.status, 403);
+    assert.match(refused.data.error, /assigned to Test Interviewer/);
+
+    // And it still does not count: the candidate stays blocked.
+    await signIn("hr@example.com");
+    assert.equal((await call("POST", "/api/candidates/" + c.id + "/advance")).status, 400);
+  });
+
+  test("a hiring manager CAN give feedback on an interview they were booked for", async () => {
+    // The rule is about whose interview it is, not about the role.
+    const c = await freshCandidate("Gate Test Four");
+    await book(c.id, stages[0], "manager@example.com", "2027-08-04T10:00");
+
+    await signIn("manager@example.com");
+    assert.equal(
+      (await call("POST", "/api/feedback", {
+        candidateId: c.id,
+        stage: stages[0],
+        rating: 4,
+        recommendation: "ADVANCE",
+      })).status,
+      201
+    );
+  });
+
+  test("a declined booking does not block the candidate forever", async () => {
+    // The interviewer said no. Waiting on their feedback would hold the
+    // candidate for good, so a declined booking is not counted.
+    const c = await freshCandidate("Gate Test Five");
+    const interview = await book(c.id, stages[0], "interviewer@example.com", "2027-08-05T10:00");
+
+    await signIn("interviewer@example.com");
+    assert.equal(
+      (await call("POST", "/api/interviews/" + interview.id + "/respond", {
+        response: "DECLINED",
+        note: "On leave that week.",
+      })).status,
+      200
+    );
+
+    await signIn("hr@example.com");
+    const moved = await call("POST", "/api/candidates/" + c.id + "/advance");
+    assert.equal(moved.status, 200, "nobody live is booked, so stage one moves as before");
+  });
+
+  test("with two interviewers booked, both have to report", async () => {
+    const c = await freshCandidate("Gate Test Six");
+    await book(c.id, stages[0], "interviewer@example.com", "2027-08-06T10:00");
+    await book(c.id, stages[0], "manager@example.com", "2027-08-06T14:00");
+
+    await signIn("interviewer@example.com");
+    await call("POST", "/api/feedback", {
+      candidateId: c.id,
+      stage: stages[0],
+      rating: 4,
+      recommendation: "ADVANCE",
+    });
+
+    await signIn("hr@example.com");
+    const still = await call("POST", "/api/candidates/" + c.id + "/advance");
+    assert.equal(still.status, 400, "one of two is not enough");
+    assert.match(still.data.error, /Test Manager/, "names the one still missing");
+    assert.doesNotMatch(still.data.error, /Test Interviewer/, "and not the one who has reported");
   });
 });
 

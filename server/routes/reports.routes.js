@@ -36,8 +36,10 @@ async function buildReport() {
   `);
 
   const summary = {
-    openPositions: Number(summaryRow.open_positions),
-    closedPositions: Number(summaryRow.closed_positions),
+    // vacancies, to match every screen - the Reports page reads
+    // openVacancies, so openPositions left its headline figure empty.
+    openVacancies: Number(summaryRow.open_positions),
+    closedVacancies: Number(summaryRow.closed_positions),
     totalCandidates: Number(summaryRow.total_candidates),
     activeCandidates: Number(summaryRow.active_candidates),
     onHold: Number(summaryRow.on_hold),
@@ -134,9 +136,14 @@ router.get(
 
 // --- CSV export ---------------------------------------------------------
 function csvCell(value) {
-  const text = value === null || value === undefined ? "" : String(value);
+  const raw = value === null || value === undefined ? "" : String(value);
+  // A cell starting =, +, - or @ is run as a formula when the file is
+  // opened in Excel or Sheets. Candidate names and notes are typed in by
+  // hand, so a name like =HYPERLINK(...) would become live the moment a
+  // manager opened the export. A leading apostrophe makes it plain text.
+  const text = /^[=+\-@\t\r]/.test(raw) ? "'" + raw : raw;
   // Escape quotes and wrap anything containing a comma, quote or newline.
-  return /[",\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+  return /[",\n\r]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
 }
 
 function toCsv(headers, rows) {

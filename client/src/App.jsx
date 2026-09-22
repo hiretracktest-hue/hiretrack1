@@ -17,6 +17,7 @@ import CandidateDetail from "./pages/CandidateDetail.jsx";
 import Interviews from "./pages/Interviews.jsx";
 import Outbox from "./pages/Outbox.jsx";
 import Reports from "./pages/Reports.jsx";
+import AuditLog from "./pages/AuditLog.jsx";
 import Team from "./pages/Team.jsx";
 import Profile from "./pages/Profile.jsx";
 
@@ -173,6 +174,14 @@ export default function App() {
         element={
           <Protected need="team:view">
             <Team />
+          </Protected>
+        }
+      />
+      <Route
+        path="/audit"
+        element={
+          <Protected need="audit:view">
+            <AuditLog />
           </Protected>
         }
       />

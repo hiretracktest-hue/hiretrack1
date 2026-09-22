@@ -252,7 +252,7 @@ export function streamReportPdf(res, which, report, candidateRows) {
 
     const s = report.summary;
     summaryBoxes(doc, [
-      ["Open vacancies", s.openPositions],
+      ["Open vacancies", s.openVacancies],
       ["Candidates", s.totalCandidates],
       ["In progress", s.activeCandidates],
       ["Hired", s.hired],

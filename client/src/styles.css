@@ -1658,3 +1658,9 @@ textarea:focus-visible,
     animation: none;
   }
 }
+
+/* AUD-01: entries worth a second look carry a faint amber edge, so a
+   run of failed sign-ins or deletions stands out while scanning. */
+tr.audit-watch td:first-child {
+  box-shadow: inset 3px 0 0 var(--brand-500);
+}

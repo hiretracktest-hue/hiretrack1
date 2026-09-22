@@ -48,7 +48,10 @@ export default function Candidates() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const canBand = Boolean(user?.permissions?.["candidate:band"]);
-  const isInterviewer = !canBand;
+  // The role itself, not a guess from a missing permission - management
+  // cannot band a CV either, and was being told "you have nobody to
+  // interview" as if it were an interviewer.
+  const isInterviewer = user?.role === "interviewer";
 
   const canAdd = Boolean(user?.permissions?.["candidate:add"]);
   const [showAdd, setShowAdd] = useState(false);

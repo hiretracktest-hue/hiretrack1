@@ -17,6 +17,7 @@ const LINKS = [
   { to: "/outbox", label: "Outbox", need: "outbox:view" },
   { to: "/reports", label: "Reports", need: "report:view" },
   { to: "/team", label: "Team", need: "team:view" },
+  { to: "/audit", label: "Audit log", need: "audit:view" },
 ];
 
 export default function Layout({ children }) {

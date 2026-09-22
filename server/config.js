@@ -187,7 +187,18 @@ export const PERMISSIONS = {
   "team:view": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER, ROLE_MANAGEMENT],
   "team:manage": [ROLE_HR],
   "report:view": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_MANAGEMENT],
-  "report:export": [ROLE_HR, ROLE_MANAGEMENT],
+  // RPT-02 names the Hiring Manager as the person who wants exports:
+  // "As a Hiring Manager, I want pipeline reports exportable in CSV and
+  // PDF". They were left out of this list, so the one role the story is
+  // written for was the one that could not do it.
+  "report:export": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_MANAGEMENT],
+
+  // AUD-01. Management only - and deliberately not HR. The log exists
+  // largely to watch what HR does: creating accounts, changing roles,
+  // deleting candidates. Letting HR review the record of their own
+  // actions defeats the point of keeping it. That is separation of
+  // duties, not a lack of trust in any one person.
+  "audit:view": [ROLE_MANAGEMENT],
 };
 
 export function can(user, permission) {

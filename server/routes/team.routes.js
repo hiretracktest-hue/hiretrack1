@@ -247,8 +247,11 @@ router.get(
     );
 
     res.json({
-      openPositions: Number(row.open_positions),
-      closedPositions: Number(row.closed_positions),
+      // Named vacancies to match every screen in the app. These said
+      // openPositions while the dashboard read openVacancies, so the
+      // Vacancies KPI tile showed 0 whatever was open.
+      openVacancies: Number(row.open_positions),
+      closedVacancies: Number(row.closed_positions),
       totalCandidates: Number(row.total_candidates),
       activeCandidates: Number(row.active_candidates),
       onHold: Number(row.on_hold),
@@ -270,12 +273,12 @@ router.get(
 
 // --- AUD-01: read the audit trail --------------------------------------
 //
-// Behind team:manage rather than a permission of its own: the log names
-// who did what, which is staff information, and HR is who administers
-// accounts. Management sees the numbers through Reports instead.
+// Management only (audit:view). The log largely records what HR does -
+// accounts created, roles changed, candidates deleted - so HR reviewing
+// it would be HR marking its own homework. See config.js.
 router.get(
   "/audit",
-  requirePermission("team:manage"),
+  requirePermission("audit:view"),
   asyncHandler(async (req, res) => {
     const entries = await audit.list({
       limit: req.query.limit,
@@ -283,6 +286,58 @@ router.get(
       actorId: req.query.actor ? v.id(req.query.actor, { field: "actor id" }) : null,
     });
     res.json({ entries, summary: await audit.counts() });
+  })
+);
+
+// --- AUD-01: download the audit trail ----------------------------------
+//
+// The whole log, not the latest page. An audit record that can only be
+// read one screen at a time inside the system that produced it is not
+// much of a record - it has to be able to leave and be kept.
+router.get(
+  "/audit.csv",
+  requirePermission("audit:view"),
+  asyncHandler(async (req, res) => {
+    const entries = await audit.list({ limit: 100000 });
+
+    const cell = (value) => {
+      const text = value === null || value === undefined ? "" : String(value);
+      // A leading =, +, - or @ makes a spreadsheet treat the cell as a
+      // formula. An attacker who can get text into the log - a crafted
+      // email typed into the sign-in form, say - could otherwise plant
+      // a formula that runs when management opens the file.
+      const safe = /^[=+\-@\t\r]/.test(text) ? "'" + text : text;
+      return /[",\n\r]/.test(safe) ? '"' + safe.replace(/"/g, '""') + '"' : safe;
+    };
+
+    const rows = [
+      ["When", "Action", "Who", "Email", "Subject", "Subject id", "Detail", "IP address"],
+      ...entries.map((e) => [
+        new Date(e.createdAt).toISOString(),
+        e.action,
+        e.actorName,
+        e.actorEmail,
+        e.subjectType,
+        e.subjectId ?? "",
+        e.detail,
+        e.ip,
+      ]),
+    ];
+
+    await audit.record(audit.ACTIONS.AUDIT_EXPORTED, {
+      actor: req.user,
+      detail: entries.length + " entries",
+      req,
+    });
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="audit-log-' + new Date().toISOString().slice(0, 10) + '.csv"'
+    );
+    // BOM so Excel reads the file as UTF-8 and a name like "Salgadu"
+    // with any accent in it does not come out as mojibake.
+    res.send("﻿" + rows.map((r) => r.map(cell).join(",")).join("\r\n"));
   })
 );
 
