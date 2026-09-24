@@ -3,6 +3,7 @@ import { NavLink, Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
 import { api } from "../api.js";
 import { initials } from "./ui.jsx";
+import Logo from "./Logo.jsx";
 import {
   IconBell,
   IconBriefcase,
@@ -172,11 +173,7 @@ export default function Layout({ children }) {
       <aside className="sidebar" aria-label="Main menu">
         <div className="sidebar-head">
           <Link to="/dashboard" className="brand brand-on-dark">
-            <span className="brand-mark">AL</span>
-            <span className="brand-text">
-              <strong>Altrium</strong>
-              <span>Recruitment</span>
-            </span>
+            <Logo size={34} />
           </Link>
         </div>
 

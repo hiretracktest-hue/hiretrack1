@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import GoldDust from "./GoldDust.jsx";
+import Logo from "./Logo.jsx";
 import ShakyText from "./ShakyText.jsx";
 
 /**
@@ -17,11 +18,7 @@ export default function AuthShell({ children }) {
         <GoldDust />
 
         <Link to="/signin" className="brand brand-on-dark">
-          <span className="brand-mark">AL</span>
-          <span className="brand-text">
-            <strong>Altrium</strong>
-            <span>Recruitment</span>
-          </span>
+          <Logo size={38} />
         </Link>
 
         <div className="auth-pitch">

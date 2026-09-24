@@ -195,38 +195,25 @@ td,
   text-decoration: none;
 }
 
-.brand-mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 11px;
-  display: grid;
-  place-items: center;
-  background: var(--brand-gradient);
-  color: var(--on-brand);
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 6px 18px rgba(251, 180, 1, 0.35);
-  flex: none;
-}
-
-.brand-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
-}
-.brand-text strong {
-  font-size: 1rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-}
-.brand-text span {
-  font-size: 0.74rem;
-  font-weight: 500;
-  opacity: 0.62;
-}
 .brand-on-dark {
   color: var(--shell-text);
+}
+
+/* The Altrium logo (Logo.jsx): the gold hexagon and the wordmark. The
+   letters take the text colour; the hexagon carries a soft gold light. */
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  line-height: 0;
+}
+.logo-mark {
+  flex: none;
+  filter: drop-shadow(0 4px 12px rgba(251, 180, 1, 0.35));
+}
+.logo-word {
+  display: block;
+  width: auto;
 }
 
 .side-nav {

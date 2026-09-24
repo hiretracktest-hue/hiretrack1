@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import Logo from "../components/Logo.jsx";
 import { useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { Alert, Field, JoinButton, Loading, formatDateTime } from "../components/ui.jsx";
@@ -180,8 +181,7 @@ function Head() {
   return (
     <div className="auth-head">
       <span className="brand">
-        <span className="brand-mark">AL</span>
-        Altrium
+        <Logo size={32} />
       </span>
     </div>
   );

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router-do
 import { useAuth } from "../AuthContext.jsx";
 import { Alert, Field, PasswordInput } from "../components/ui.jsx";
 import AuthShell from "../components/AuthShell.jsx";
+import Logo from "../components/Logo.jsx";
 
 const GOOGLE_ERRORS = {
   google_state: "That Google sign-in attempt expired. Please try again.",
@@ -46,8 +47,7 @@ export default function SignIn() {
     <AuthShell>
         <div className="auth-head">
           <span className="brand auth-brand-mobile">
-            <span className="brand-mark">AL</span>
-            Altrium
+            <Logo size={32} />
           </span>
           <h1>Welcome back</h1>
           <p>Sign in with your work email to pick up where you left off.</p>

@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { Alert, Field, PasswordInput } from "../components/ui.jsx";
 import AuthShell from "../components/AuthShell.jsx";
+import Logo from "../components/Logo.jsx";
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -41,8 +42,7 @@ export default function ResetPassword() {
     <AuthShell>
         <div className="auth-head">
           <span className="brand auth-brand-mobile">
-            <span className="brand-mark">AL</span>
-            Altrium
+            <Logo size={32} />
           </span>
           <h1>Choose a new password</h1>
           <p>This link works once and expires an hour after it was sent.</p>

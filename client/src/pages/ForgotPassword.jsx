@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api.js";
 import { Alert, Field } from "../components/ui.jsx";
 import AuthShell from "../components/AuthShell.jsx";
+import Logo from "../components/Logo.jsx";
 import { IconMail } from "../components/icons.jsx";
 
 /**
@@ -45,8 +46,7 @@ export default function ForgotPassword() {
       <AuthShell>
         <div className="auth-head">
           <span className="brand auth-brand-mobile">
-            <span className="brand-mark">AL</span>
-            Altrium
+            <Logo size={32} />
           </span>
           <span className="auth-sent-icon" aria-hidden="true">
             <IconMail size={26} />
@@ -91,8 +91,7 @@ export default function ForgotPassword() {
     <AuthShell>
       <div className="auth-head">
         <span className="brand auth-brand-mobile">
-          <span className="brand-mark">AL</span>
-          Altrium
+          <Logo size={32} />
         </span>
         <h1>Forgot your password?</h1>
         <p>Enter the email you sign in with and we will email you a link to choose a new one.</p>
