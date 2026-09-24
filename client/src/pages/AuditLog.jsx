@@ -23,6 +23,7 @@ const LABEL = {
   "user.reactivated": "Account reactivated",
   "user.password_changed": "Password changed",
   "user.password_reset_requested": "Password reset requested",
+  "user.contact_email_changed": "Real email changed",
   "candidate.deleted": "Candidate deleted",
   "job.deleted": "Vacancy deleted",
   "candidate.cv_downloaded": "CV downloaded",
@@ -34,6 +35,7 @@ const LABEL = {
 const WATCH = new Set([
   "user.sign_in_failed",
   "user.role_changed",
+  "user.contact_email_changed",
   "user.deactivated",
   "candidate.deleted",
   "job.deleted",

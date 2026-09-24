@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { config, permissionsFor, ROLE_LABELS } from "./config.js";
+import { deliveryAddress } from "./mail.js";
 import { one, run } from "../database/index.js";
 
 export const COOKIE_NAME = "hiretrack_token";
@@ -52,7 +53,7 @@ export function clearAuthCookie(res) {
 
 export function findUserById(id) {
   return one(
-    "SELECT id, name, email, role, job_title, avatar_url, google_id, created_at " +
+    "SELECT id, name, email, contact_email, role, job_title, avatar_url, google_id, created_at " +
       "FROM users WHERE id = $1 AND is_active",
     [id]
   );
@@ -72,6 +73,12 @@ export function publicUser(row) {
     // is convenience, not security.
     permissions: permissionsFor(row),
     avatarUrl: row.avatar_url || null,
+    // Where their email really goes. Only ever shown to the person
+    // themselves and to HR - the Team route strips it for everyone else.
+    contactEmail: row.contact_email || null,
+    // Where their email actually goes today, after the rules in
+    // deliveryAddress - so a page can say it rather than guess.
+    mailGoesTo: deliveryAddress(row) || null,
     signedInWithGoogle: Boolean(row.google_id),
     createdAt: row.created_at,
   };

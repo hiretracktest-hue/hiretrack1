@@ -1136,6 +1136,180 @@ describe("INT-01 - answering the invitation from the email link", () => {
   });
 });
 
+describe("AUTH-01 - everyone sets their own profile photo", () => {
+  // A real 1x1 PNG.
+  const PNG =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+  test("every role can upload a photo, and colleagues see it", async () => {
+    const people = [
+      ["hr@example.com"],
+      ["manager@example.com"],
+      ["interviewer@example.com"],
+      ["management@example.com", "Password456"],
+    ];
+    for (const [email, password] of people) {
+      await signIn(email, password);
+      const { status, data } = await call("PUT", "/api/team/me/photo", { image: PNG });
+      assert.equal(status, 200, email);
+      assert.match(data.user.avatarUrl, /^\/api\/team\/photo\/\d+\?v=\d+$/, email);
+    }
+
+    // HR opens the interviewer's photo: the real bytes, the right type.
+    await signIn("hr@example.com");
+    const id = await userId("interviewer@example.com");
+    const res = await fetch(baseUrl + "/api/team/photo/" + id, { headers: { Cookie: cookie } });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("content-type"), "image/png");
+    assert.equal(res.headers.get("x-content-type-options"), "nosniff");
+    const bytes = Buffer.from(await res.arrayBuffer());
+    assert.equal(bytes.subarray(1, 4).toString(), "PNG");
+
+    // ...and the Team page is given it.
+    const team = await call("GET", "/api/team");
+    const member = team.data.members.find((m) => m.id === id);
+    assert.match(member.avatarUrl, /^\/api\/team\/photo\//);
+  });
+
+  test("only real pictures get in - not SVG, not a renamed file, not a huge one", async () => {
+    await signIn("interviewer@example.com");
+
+    // SVG can carry script, so it is refused whatever it calls itself.
+    const svg =
+      "data:image/svg+xml;base64," +
+      Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>').toString("base64");
+    assert.equal((await call("PUT", "/api/team/me/photo", { image: svg })).status, 400);
+
+    // Claims to be a PNG, is not: the file's own bytes decide.
+    const fake = "data:image/png;base64," + Buffer.from("definitely not a picture").toString("base64");
+    const renamed = await call("PUT", "/api/team/me/photo", { image: fake });
+    assert.equal(renamed.status, 400);
+    assert.match(renamed.data.error, /JPG, PNG or WebP/);
+
+    const header = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const huge = "data:image/png;base64," + Buffer.concat([header, Buffer.alloc(500 * 1024)]).toString("base64");
+    const tooBig = await call("PUT", "/api/team/me/photo", { image: huge });
+    assert.equal(tooBig.status, 400);
+    assert.match(tooBig.data.error, /too large/);
+
+    assert.equal((await call("PUT", "/api/team/me/photo", {})).status, 400, "nothing chosen");
+  });
+
+  test("a photo can be removed, and nobody signed out can fetch one", async () => {
+    await signIn("interviewer@example.com");
+    const removed = await call("DELETE", "/api/team/me/photo");
+    assert.equal(removed.status, 200);
+    assert.equal(removed.data.user.avatarUrl, null);
+
+    const id = await userId("interviewer@example.com");
+    const gone = await fetch(baseUrl + "/api/team/photo/" + id, { headers: { Cookie: cookie } });
+    assert.equal(gone.status, 404);
+
+    const hr = await userId("hr@example.com");
+    assert.equal((await fetch(baseUrl + "/api/team/photo/" + hr)).status, 401);
+  });
+});
+
+describe("AUTH-01 and COM-02 - a real email on each account", () => {
+  test("a real email wins; then the company inbox for a staff address; then the address itself", async () => {
+    const { deliveryAddress } = await import("../mail.js");
+    const { config } = await import("../config.js");
+    const saved = config.staffMail;
+    config.staffMail = { domain: "hiretrack.lk", inbox: "hiretracktest@gmail.com" };
+    try {
+      assert.equal(
+        deliveryAddress({ email: "kevin@hiretrack.lk", contact_email: "kevin.real@gmail.com" }),
+        "kevin.real@gmail.com"
+      );
+      assert.equal(deliveryAddress({ email: "kevin@hiretrack.lk", contact_email: null }), "hiretracktest@gmail.com");
+      assert.equal(deliveryAddress({ email: "someone@gmail.com" }), "someone@gmail.com");
+    } finally {
+      config.staffMail = saved;
+    }
+  });
+
+  test("HR adds a real email to someone's account, and it is in the audit log", async () => {
+    await signIn("hr@example.com");
+    const id = await userId("interviewer@example.com");
+    const { status, data } = await call("PATCH", "/api/team/members/" + id, {
+      contactEmail: "test.interviewer.real@example.org",
+    });
+    assert.equal(status, 200);
+    assert.equal(data.member.contactEmail, "test.interviewer.real@example.org");
+    assert.equal(data.member.mailGoesTo, "test.interviewer.real@example.org");
+
+    const entry = await one(
+      "SELECT detail FROM audit_log WHERE action = 'user.contact_email_changed' ORDER BY id DESC LIMIT 1"
+    );
+    assert.match(entry.detail, /real email added/);
+    assert.doesNotMatch(entry.detail, /example\.org/, "the address itself is not logged");
+  });
+
+  test("a company sign-in address is refused as somebody's real email", async () => {
+    await signIn("hr@example.com");
+    const id = await userId("interviewer@example.com");
+    const refused = await call("PATCH", "/api/team/members/" + id, { contactEmail: "sara@hiretrack.lk" });
+    assert.equal(refused.status, 400);
+    assert.match(refused.data.error, /sign-in address/);
+  });
+
+  test("only HR sets other people's; anyone sets their own", async () => {
+    await signIn("manager@example.com");
+    const other = await userId("interviewer@example.com");
+    assert.equal(
+      (await call("PATCH", "/api/team/members/" + other, { contactEmail: "x@example.org" })).status,
+      403
+    );
+    const mine = await call("PATCH", "/api/team/me", { contactEmail: "test.manager.real@example.org" });
+    assert.equal(mine.status, 200);
+    assert.equal(mine.data.user.contactEmail, "test.manager.real@example.org");
+  });
+
+  test("colleagues see the sign-in address, not the real email", async () => {
+    await signIn("management@example.com", "Password456");
+    const team = (await call("GET", "/api/team")).data.members;
+    const interviewer = team.find((m) => m.email === "interviewer@example.com");
+    assert.equal(interviewer.contactEmail, undefined);
+    assert.equal(interviewer.mailGoesTo, undefined);
+
+    await signIn("hr@example.com");
+    const asHr = (await call("GET", "/api/team")).data.members.find(
+      (m) => m.email === "interviewer@example.com"
+    );
+    assert.equal(asHr.contactEmail, "test.interviewer.real@example.org");
+  });
+
+  test("forgot password works by the real email too", async () => {
+    const before = (
+      await one("SELECT COUNT(*)::int AS n FROM audit_log WHERE action = 'user.password_reset_requested'")
+    ).n;
+    const { status, data } = await call("POST", "/api/auth/forgot-password", {
+      email: "test.interviewer.real@example.org",
+    });
+    assert.equal(status, 200);
+    const after = (
+      await one("SELECT COUNT(*)::int AS n FROM audit_log WHERE action = 'user.password_reset_requested'")
+    ).n;
+    assert.equal(after - before, 1);
+    // No mail in the tests, so the link comes back - and it works.
+    const token = new URL(data.devResetUrl).searchParams.get("token");
+    assert.equal(
+      (await call("POST", "/api/auth/reset-password", { token, password: "Password123" })).status,
+      200
+    );
+  });
+
+  test("clearing the real email sends mail back the usual way", async () => {
+    await signIn("hr@example.com");
+    const id = await userId("interviewer@example.com");
+    const { data } = await call("PATCH", "/api/team/members/" + id, { contactEmail: "" });
+    assert.equal(data.member.contactEmail, null);
+    assert.equal(data.member.mailGoesTo, "interviewer@example.com");
+    await signIn("manager@example.com");
+    await call("PATCH", "/api/team/me", { contactEmail: "" });
+  });
+});
+
 describe("AUTH-01 and COM-01 - who logs in, what each role can do", () => {
   let jobId;
   let mayaId;

@@ -95,18 +95,22 @@ async function sendViaSmtp({ to, name, subject, text, html }) {
 }
 
 /**
- * The address a message meant for `email` is actually delivered to.
+ * The address a message for somebody is actually delivered to.
  *
- * Staff sign in on the company domain, which has no mailboxes of its own,
- * so their mail goes to the company's shared inbox (config.staffMail).
- * Everybody else - a candidate, or an account opened with a real address
- * - gets it at their own address.
+ * Pass a user row, or just an email address:
+ *   1. The real email on their account (users.contact_email), if HR or
+ *      they themselves have added one - it is the inbox they read.
+ *   2. Otherwise, a staff address on the company domain - which has no
+ *      mailboxes of its own - goes to the company's shared inbox.
+ *   3. Anybody else gets it at their own address.
  */
-export function deliveryAddress(email) {
+export function deliveryAddress(who) {
+  const person = typeof who === "string" ? { email: who } : who || {};
+  if (person.contact_email) return String(person.contact_email);
   const { domain, inbox } = config.staffMail;
-  const lower = String(email || "").toLowerCase();
+  const lower = String(person.email || "").toLowerCase();
   if (inbox && domain && lower.endsWith("@" + domain)) return inbox;
-  return email;
+  return person.email;
 }
 
 export async function sendMail({ to, name, subject, text, html }) {

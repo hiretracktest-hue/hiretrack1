@@ -1,12 +1,25 @@
 import { one, run, many } from "../database/index.js";
 import { config } from "./config.js";
-import { sendMail, mailEnabled, inviteUrl } from "./mail.js";
+import { sendMail, mailEnabled, inviteUrl, deliveryAddress } from "./mail.js";
 import {
   interviewInviteEmail,
   interviewAnswerEmail,
   candidateInviteEmail,
   plainEmail,
 } from "./mail-templates.js";
+
+/**
+ * Where a member of staff's email really goes: the real email on their
+ * account if one has been added, else the company inbox for a company
+ * sign-in address. The booking keeps the sign-in address it was made
+ * with, so the account is looked up at the moment of sending.
+ */
+async function staffInbox(userId, fallbackEmail) {
+  const person = userId
+    ? await one("SELECT email, contact_email FROM users WHERE id = $1", [userId])
+    : null;
+  return deliveryAddress(person || fallbackEmail);
+}
 
 /**
  * "How are candidates and interviewers told about a scheduled interview?"
@@ -171,8 +184,9 @@ export async function notifyInterviewScheduled({ interview, candidate, job, book
       when,
       url: inviteUrl(interview),
     });
+    const to = await staffInbox(interview.interviewer_id, interview.interviewer_email);
     const result = await sendMail({
-      to: interview.interviewer_email,
+      to,
       name: interview.interviewer_name,
       ...mail,
     });
@@ -180,12 +194,7 @@ export async function notifyInterviewScheduled({ interview, candidate, job, book
       // No mail server, or it refused us. The in-app notification above
       // still stands, so the booking is not lost - but say so plainly
       // rather than letting it look delivered.
-      console.warn(
-        "[notify] interview invite not emailed to " +
-          interview.interviewer_email +
-          ": " +
-          result.reason
-      );
+      console.warn("[notify] interview invite not emailed to " + to + ": " + result.reason);
     }
   }
 
@@ -246,7 +255,7 @@ export async function notifyInterviewResponse({ interview, candidate, job, respo
 
   // Their own copy, so the answer exists somewhere they can find it
   // again without signing in.
-  const to = interview.interviewer_email || responder?.email;
+  const to = await staffInbox(interview.interviewer_id, interview.interviewer_email || responder?.email);
   if (to) {
     await sendMail({
       to,

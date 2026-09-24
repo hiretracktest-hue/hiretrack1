@@ -116,18 +116,16 @@ router.post(
     const typed = String(emailValue).toLowerCase();
     const { inbox } = config.staffMail;
 
-    // Whose password can this reset? Normally the one account with that
-    // email. The company inbox is not an account itself, but every staff
-    // account's mail is delivered to it - so typing it offers a reset
-    // link for each of those accounts, and whoever reads it picks one.
-    const user = await findByEmail(emailValue);
-    let accounts = [];
-    if (user && user.is_active) {
-      accounts = [user];
-    } else if (!user && inbox && typed === inbox) {
-      accounts = (await many("SELECT * FROM users WHERE is_active ORDER BY id")).filter(
-        (u) => deliveryAddress(u.email) === inbox
-      );
+    // Whose password can this reset? The account that signs in with this
+    // address, and any account whose real email it is. The company inbox
+    // is not an account itself, but mail for staff addresses with no real
+    // email of their own comes to it - so typing it offers a reset link
+    // for each of those accounts, and whoever reads it picks one.
+    const same = (a, b) => String(a || "").toLowerCase() === b;
+    const everyone = await many("SELECT * FROM users WHERE is_active ORDER BY id");
+    let accounts = everyone.filter((u) => same(u.email, typed) || same(u.contact_email, typed));
+    if (!accounts.length && inbox && typed === inbox) {
+      accounts = everyone.filter((u) => same(deliveryAddress(u), inbox));
     }
 
     // The same answer whatever happened, so this form cannot be used to
@@ -137,9 +135,20 @@ router.post(
         "If that email belongs to an account, a reset link is on its way. Check the inbox - the link expires in 1 hour.",
     };
 
-    if (accounts.length) {
+    // Each link goes where that person's email really goes - the real
+    // email on their account, else the company inbox for a staff address,
+    // else the address itself. Accounts that share an inbox share one
+    // email, with a link for each.
+    const byInbox = new Map();
+    for (const account of accounts) {
+      const to = String(deliveryAddress(account));
+      byInbox.set(to, [...(byInbox.get(to) || []), account]);
+    }
+
+    let devLink = "";
+    for (const [to, group] of byInbox) {
       const links = [];
-      for (const account of accounts) {
+      for (const account of group) {
         const token = await createResetToken(account.id);
         links.push({
           name: account.name,
@@ -149,28 +158,19 @@ router.post(
         });
         await audit.record(audit.ACTIONS.PASSWORD_RESET_REQUESTED, {
           actor: account,
-          detail: accounts.length > 1 ? "requested from the company inbox" : "",
+          detail: group.length > 1 ? "requested from a shared inbox" : "",
           req,
         });
       }
 
-      // A staff address on the company domain has no mailbox of its own,
-      // so its mail goes to the shared inbox. Anyone else - an account HR
-      // opened with a real address - gets it at that address.
-      const to = accounts.length > 1 ? inbox : deliveryAddress(accounts[0].email);
-      const shared = accounts.length > 1 || to !== accounts[0].email;
-
-      const email = passwordResetEmail({ accounts: links, sharedInbox: shared });
       const result = await sendMail({
         to,
-        name: accounts.length > 1 ? config.companyName : accounts[0].name,
-        ...email,
+        name: group.length > 1 ? config.companyName : group[0].name,
+        ...passwordResetEmail({ accounts: links }),
       });
       console.log(
         "[password reset] for " +
           links.map((l) => l.email).join(", ") +
-          " -> " +
-          to +
           ": " +
           (result.sent ? "sent" : "NOT sent (" + result.reason + ")")
       );
@@ -178,10 +178,9 @@ router.post(
       // Working on a laptop with no mail set up, or with mail refusing:
       // show the link on screen so the flow can still be tried. Never on
       // the live site - there the email is the only way to the link.
-      if (!config.isProduction && !result.sent) {
-        payload.devResetUrl = links[0].link;
-      }
+      if (!config.isProduction && !result.sent && !devLink) devLink = links[0].link;
     }
+    if (devLink) payload.devResetUrl = devLink;
 
     res.json(payload);
   })

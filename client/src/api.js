@@ -129,6 +129,10 @@ export const api = {
   interviewers: () => request("/team/interviewers"),
   stats: () => request("/team/stats"),
   updateProfile: (body) => request("/team/me", { method: "PATCH", body }),
+  // The picture goes as a small data URL; the page has already cropped
+  // and shrunk it.
+  uploadPhoto: (image) => request("/team/me/photo", { method: "PUT", body: { image } }),
+  removePhoto: () => request("/team/me/photo", { method: "DELETE" }),
   addMember: (body) => request("/team/members", { method: "POST", body }),
   updateMember: (id, body) => request("/team/members/" + id, { method: "PATCH", body }),
 };

@@ -27,6 +27,7 @@ DROP TABLE IF EXISTS candidates CASCADE;
 DROP TABLE IF EXISTS job_stages CASCADE;
 DROP TABLE IF EXISTS jobs CASCADE;
 DROP TABLE IF EXISTS password_resets CASCADE;
+DROP TABLE IF EXISTS user_photos CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 
 DROP TYPE IF EXISTS user_role CASCADE;
@@ -70,12 +71,31 @@ CREATE TABLE users (
   job_title     TEXT        NOT NULL DEFAULT '',
   google_id     TEXT        UNIQUE,
   avatar_url    TEXT,
+  -- Where this person's email really goes. Staff sign in on the company
+  -- domain; this is the inbox they actually read. Empty means use the
+  -- sign-in address (or, for a staff address, the company inbox).
+  contact_email CITEXT,
   is_active     BOOLEAN     NOT NULL DEFAULT TRUE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_users_role ON users (role) WHERE is_active;
+
+-- -------------------------------------------------------------------
+-- user_photos - the picture each person chose for their account
+--
+-- Kept out of the users table so that listing people never drags the
+-- image bytes along; users.avatar_url points at the route that serves
+-- it. Stored in the database rather than on disk because the live site
+-- runs on servers that keep no files between requests.
+-- -------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_photos (
+  user_id    BIGINT      PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
+  mime       TEXT        NOT NULL,
+  data       BYTEA       NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 -- -------------------------------------------------------------------
 -- jobs - the open positions

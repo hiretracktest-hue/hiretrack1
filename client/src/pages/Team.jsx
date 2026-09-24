@@ -27,7 +27,11 @@ export default function Team() {
     role: "interviewer",
     jobTitle: "",
     password: "",
+    contactEmail: "",
   });
+  // HR editing one person's real email: which card, and what is typed.
+  const [editingContact, setEditingContact] = useState(null);
+  const [contactDraft, setContactDraft] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,7 +58,7 @@ export default function Team() {
     try {
       await api.addMember(form);
       setMessage(form.name + " can now sign in.");
-      setForm({ name: "", email: "", role: "interviewer", jobTitle: "", password: "" });
+      setForm({ name: "", email: "", role: "interviewer", jobTitle: "", password: "", contactEmail: "" });
       setShowAdd(false);
       await load();
     } catch (err) {
@@ -69,6 +73,26 @@ export default function Team() {
     setError("");
     try {
       await api.updateMember(id, { role });
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveContact(member) {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.updateMember(member.id, { contactEmail: contactDraft });
+      setMessage(
+        contactDraft.trim()
+          ? member.name + "'s email now goes to " + contactDraft.trim() + "."
+          : member.name + "'s email goes to the company inbox again."
+      );
+      setEditingContact(null);
       await load();
     } catch (err) {
       setError(err.message);
@@ -143,7 +167,7 @@ export default function Team() {
                   onChange={update("name")}
                 />
               </Field>
-              <Field label="Email" htmlFor="email">
+              <Field label="Sign-in email" htmlFor="email">
                 <input
                   id="email"
                   className="input"
@@ -169,6 +193,20 @@ export default function Team() {
                   placeholder="Senior Software Engineer"
                   value={form.jobTitle}
                   onChange={update("jobTitle")}
+                />
+              </Field>
+              <Field
+                label="Real email (optional)"
+                htmlFor="contactEmail"
+                hint="The inbox they actually read. Reset links and interview invitations go here."
+              >
+                <input
+                  id="contactEmail"
+                  className="input"
+                  type="email"
+                  placeholder="name@gmail.com"
+                  value={form.contactEmail}
+                  onChange={update("contactEmail")}
                 />
               </Field>
             </div>
@@ -218,9 +256,20 @@ export default function Team() {
 
             <div className="detail-grid mt-3">
               <div>
-                <div className="detail-label">Email</div>
+                <div className="detail-label">Signs in as</div>
                 <div className="detail-value small">{member.email}</div>
               </div>
+              {member.mailGoesTo !== undefined && (
+                <div>
+                  <div className="detail-label">Email goes to</div>
+                  <div className="detail-value small">
+                    {member.mailGoesTo}
+                    {!member.contactEmail && member.mailGoesTo !== member.email && (
+                      <span className="muted"> (company inbox)</span>
+                    )}
+                  </div>
+                </div>
+              )}
               <div>
                 <div className="detail-label">Vacancies opened</div>
                 <div className="detail-value">{member.vacanciesOpened}</div>
@@ -238,6 +287,41 @@ export default function Team() {
                 <div className="detail-value small">{formatDate(member.createdAt)}</div>
               </div>
             </div>
+
+            {canManage && editingContact === member.id && (
+              <form
+                className="contact-edit mt-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  saveContact(member);
+                }}
+              >
+                <label className="field-label" htmlFor={"contact-" + member.id}>
+                  Real email for {member.name}
+                </label>
+                <div className="input-with-button">
+                  <input
+                    id={"contact-" + member.id}
+                    className="input"
+                    type="email"
+                    placeholder="Leave empty for the company inbox"
+                    value={contactDraft}
+                    onChange={(event) => setContactDraft(event.target.value)}
+                    autoFocus
+                  />
+                  <button className="btn btn-primary btn-sm" disabled={busy}>
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setEditingContact(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
 
             {canManage && (
               <div className="btn-row mt-3">
@@ -261,6 +345,16 @@ export default function Team() {
                   disabled={busy}
                 >
                   {member.isActive ? "Deactivate" : "Reactivate"}
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => {
+                    setEditingContact(member.id);
+                    setContactDraft(member.contactEmail || "");
+                  }}
+                  disabled={busy}
+                >
+                  {member.contactEmail ? "Change real email" : "Add real email"}
                 </button>
               </div>
             )}

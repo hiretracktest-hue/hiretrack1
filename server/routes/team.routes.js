@@ -17,10 +17,41 @@ const memberRow = (row) => ({
   ...publicUser(row),
   roleDescription: ROLE_DESCRIPTIONS[row.role] || "",
   isActive: Boolean(row.is_active),
-  positionsOpened: Number(row.positions_opened ?? 0),
+  vacanciesOpened: Number(row.positions_opened ?? 0),
   interviewsBooked: Number(row.interviews_booked ?? 0),
   feedbackGiven: Number(row.feedback_given ?? 0),
 });
+
+/**
+ * The real email on an account: where that person's email is delivered.
+ * Empty clears it. A company sign-in address is refused - it has no
+ * mailbox, which is the whole reason this field exists.
+ */
+function contactEmailFrom(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const email = v.email(text, { field: "Real email" });
+  const domain = config.staffMail.domain;
+  if (domain && String(email).toLowerCase().endsWith("@" + domain)) {
+    throw httpError(400, "That is a sign-in address. Enter the inbox this person actually reads.");
+  }
+  return email;
+}
+
+// Changing where someone's email goes also changes where their password
+// reset links go, so it is worth a line in the audit log - without the
+// address itself, which is personal.
+function recordContactChange(req, target, next) {
+  const before = target.contact_email || null;
+  if (String(before || "").toLowerCase() === String(next || "").toLowerCase()) return null;
+  return audit.record(audit.ACTIONS.CONTACT_EMAIL_CHANGED, {
+    actor: req.user,
+    subjectType: "user",
+    subjectId: Number(target.id),
+    detail: target.name + ": real email " + (next ? (before ? "changed" : "added") : "removed"),
+    req,
+  });
+}
 
 const LIST_SQL =
   "SELECT u.*, " +
@@ -33,8 +64,14 @@ const LIST_SQL =
 router.get(
   "/",
   requirePermission("team:view"),
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     const rows = await many(LIST_SQL + "ORDER BY u.is_active DESC, u.name ASC");
+    // A person's real email is theirs: HR sees it to manage accounts,
+    // and everyone sees their own. Colleagues see the sign-in address.
+    const seesAll = Boolean(req.user?.permissions?.["team:manage"]);
+    const members = rows.map(memberRow).map((m) =>
+      seesAll || m.id === req.user.id ? m : { ...m, contactEmail: undefined, mailGoesTo: undefined }
+    );
 
     res.json({
       roles: ROLES.map((value) => ({
@@ -43,7 +80,7 @@ router.get(
         description: ROLE_DESCRIPTIONS[value],
       })),
       permissionMatrix: PERMISSIONS,
-      members: rows.map(memberRow),
+      members,
     });
   })
 );
@@ -66,6 +103,84 @@ router.get(
         roleLabel: ROLE_LABELS[row.role],
       })),
     });
+  })
+);
+
+// --- My profile photo ----------------------------------------------------
+// Anyone signed in - HR, hiring manager, interviewer, management - sets
+// their own picture. The page shrinks it to a small square before it is
+// sent, so what arrives is a few tens of kilobytes.
+//
+// The type is read from the file's own first bytes, never from its name
+// or from what the browser claims, and only three picture formats pass.
+// SVG is deliberately not one of them: it can carry script.
+const PHOTO_MAX_BYTES = 400 * 1024;
+const PHOTO_TYPES = [
+  { mime: "image/jpeg", is: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  { mime: "image/png", is: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
+  {
+    mime: "image/webp",
+    is: (b) => b.subarray(0, 4).toString("latin1") === "RIFF" && b.subarray(8, 12).toString("latin1") === "WEBP",
+  },
+];
+
+router.put(
+  "/me/photo",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const match = /^data:[\w/+.-]+;base64,([A-Za-z0-9+/=\s]+)$/.exec(String(req.body?.image || ""));
+    if (!match) throw httpError(400, "Choose a picture to upload.");
+
+    const bytes = Buffer.from(match[1], "base64");
+    if (bytes.length === 0) throw httpError(400, "That picture is empty.");
+    if (bytes.length > PHOTO_MAX_BYTES) {
+      throw httpError(400, "That picture is too large - it must be under 400 KB.");
+    }
+    const type = PHOTO_TYPES.find((t) => t.is(bytes));
+    if (!type) throw httpError(400, "Choose a JPG, PNG or WebP picture.");
+
+    await run(
+      "INSERT INTO user_photos (user_id, mime, data, updated_at) VALUES ($1, $2, $3, NOW()) " +
+        "ON CONFLICT (user_id) DO UPDATE SET mime = EXCLUDED.mime, data = EXCLUDED.data, updated_at = NOW()",
+      [req.user.id, type.mime, bytes]
+    );
+    // A new address for each new picture, so nobody is shown the old one
+    // out of their browser's cache.
+    await run("UPDATE users SET avatar_url = $1 WHERE id = $2", [
+      "/api/team/photo/" + req.user.id + "?v=" + Date.now(),
+      req.user.id,
+    ]);
+
+    const row = await one("SELECT * FROM users WHERE id = $1", [req.user.id]);
+    res.json({ user: publicUser(row) });
+  })
+);
+
+router.delete(
+  "/me/photo",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    await run("DELETE FROM user_photos WHERE user_id = $1", [req.user.id]);
+    await run("UPDATE users SET avatar_url = NULL WHERE id = $1", [req.user.id]);
+    const row = await one("SELECT * FROM users WHERE id = $1", [req.user.id]);
+    res.json({ user: publicUser(row) });
+  })
+);
+
+// The picture itself, for anyone signed in - colleagues see each other's
+// photos on the Team page and beside their names.
+router.get(
+  "/photo/:id",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const id = v.id(req.params.id, { field: "user id" });
+    const photo = await one("SELECT mime, data FROM user_photos WHERE user_id = $1", [id]);
+    if (!photo) throw httpError(404, "No photo.");
+    res.set("Content-Type", photo.mime);
+    res.set("X-Content-Type-Options", "nosniff");
+    // The address changes with every new picture, so this one never does.
+    res.set("Cache-Control", "private, max-age=31536000, immutable");
+    res.send(photo.data);
   })
 );
 
@@ -93,6 +208,12 @@ router.patch(
     if (req.body.jobTitle !== undefined) {
       push("job_title", v.str(req.body.jobTitle, { field: "Job title", max: 120 }));
     }
+    if (req.body.contactEmail !== undefined) {
+      const next = contactEmailFrom(req.body.contactEmail);
+      push("contact_email", next);
+      const me = await one("SELECT * FROM users WHERE id = $1", [req.user.id]);
+      await recordContactChange(req, me, next);
+    }
     if (!sets.length) throw httpError(400, "Nothing to update.");
 
     params.push(req.user.id);
@@ -113,15 +234,16 @@ router.post(
     const role = v.oneOf(req.body.role, ROLES, { field: "Role" });
     const jobTitle = v.str(req.body.jobTitle, { field: "Job title", max: 120 });
     const pw = v.password(req.body.password);
+    const contactEmail = contactEmailFrom(req.body.contactEmail);
 
     if (await one("SELECT id FROM users WHERE email = $1", [emailValue])) {
       throw httpError(409, "An account with this email already exists.");
     }
 
     const created = await one(
-      "INSERT INTO users (name, email, password_hash, role, job_title) " +
-        "VALUES ($1, $2, $3, $4, $5) RETURNING id",
-      [name, emailValue, await hashPassword(pw), role, jobTitle]
+      "INSERT INTO users (name, email, password_hash, role, job_title, contact_email) " +
+        "VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+      [name, emailValue, await hashPassword(pw), role, jobTitle, contactEmail]
     );
 
     await audit.record(audit.ACTIONS.USER_CREATED, {
@@ -202,6 +324,12 @@ router.patch(
           }
         );
       }
+    }
+
+    if (req.body.contactEmail !== undefined) {
+      const next = contactEmailFrom(req.body.contactEmail);
+      push("contact_email", next);
+      await recordContactChange(req, target, next);
     }
 
     if (!sets.length) throw httpError(400, "Nothing to update.");

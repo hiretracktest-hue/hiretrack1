@@ -195,20 +195,38 @@ one-time link, valid for an hour. The page answers the same way whatever is
 typed, so it cannot be used to find out who has an account. Asking for a link
 and using one are both written to the audit log.
 
-Staff sign in on the company domain (`kevin@hiretrack.lk`), and that domain has
-no mailboxes of its own. So **mail for a staff address goes to the company's
-shared inbox** instead - otherwise a reset link for a staff account could never
-arrive anywhere. The email says which account it is for. Typing the shared
-inbox itself sends one email with a reset link for each staff account, and
-whoever reads it picks the one they need.
+**Where each person's email goes.** Staff sign in on the company domain
+(`kevin@hiretrack.lk`), and that domain has no mailboxes of its own. So every
+account can also carry a **real email** - the inbox that person actually reads.
+Their email goes, in this order, to:
+
+1. their **real email**, if one has been added - by HR on the Team page, or by
+   the person themselves on their profile;
+2. otherwise, for a staff address, the company's **shared inbox**;
+3. otherwise the address they sign in with (an account HR opened with a Gmail,
+   say).
+
+That covers password reset links and interview invitations to interviewers.
+The demo logins keep their `@hiretrack.lk` addresses and, with no real email
+added, their mail comes to the company inbox. Typing either your sign-in address
+or your real email into **Forgot your password?** sends your link. Typing the
+shared inbox sends one email with a link for each account whose mail comes
+there, and whoever reads it picks one.
+
+A real email is shown only to HR and to the person themselves, a company
+sign-in address is refused as one (it has no mailbox), and adding, changing or
+removing one is written to the audit log, because it moves where reset links
+go.
 
 | Setting | Default | |
 | --- | --- | --- |
 | `STAFF_MAIL_DOMAIN` | `hiretrack.lk` | The company domain staff sign in on |
-| `STAFF_MAIL_INBOX` | `hiretracktest@gmail.com` | Where that domain's mail is delivered. Set it empty to send straight to each person's own address |
+| `STAFF_MAIL_INBOX` | `hiretracktest@gmail.com` | Where that domain's mail goes when there is no real email. Set it empty to send straight to each person's own address |
 
-An account HR opened with a real address - a Gmail, say - gets its link at that
-address as normal.
+**Delivering to any address needs a mail account that may send to anyone.**
+Resend on its free plan delivers only to the address that owns the account. Add
+a Gmail App Password (`SMTP_HOST=smtp.gmail.com`, `SMTP_USER`, `SMTP_PASS`) and
+SMTP carries whatever Resend refuses - see the table above.
 
 Links in emails start with the site's own address. On Vercel that is the
 project's production domain, which Vercel sets itself, so a link can never point
@@ -417,6 +435,12 @@ the hiring manager and nobody else - the other roles are not shown a card of
 dead buttons, and the API refuses them too. HR still sees which stage a
 candidate is on, because HR books the interviews stage by stage. This is
 deliberately stricter than the plan's `CAN-04`, which names the HR Recruiter.
+
+**Everyone can set a profile photo** - HR, hiring managers, interviewers and
+management alike - from their profile. The page crops it to a square and shrinks
+it before it is sent; the server accepts only real JPG, PNG or WebP files, read
+from the file's own bytes (SVG is refused, as it can carry script), and keeps it
+in the database, because the live site's servers keep no files.
 
 **HR does not write feedback.** HR runs the process and reads the verdicts; the
 people who sat in the interview give them.

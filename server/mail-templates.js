@@ -146,11 +146,11 @@ export function interviewAnswerEmail({ interview, candidate, job, when, accepted
  * "Choose a new password."
  *
  * One entry per account the link can reset. Normally that is one: the
- * person who asked. When somebody types the company's shared inbox - the
- * address every staff account's mail is delivered to - there is one link
- * per staff account, and they pick whose password they are changing.
+ * person who asked. When more than one account's email comes to the same
+ * inbox - the company's shared one, say - there is a link for each, and
+ * whoever reads it picks whose password they are changing.
  */
-export function passwordResetEmail({ accounts, sharedInbox }) {
+export function passwordResetEmail({ accounts }) {
   const many = accounts.length > 1;
   const heading = many ? "Choose the account to reset" : "Reset your password";
   const subject = many
@@ -158,17 +158,12 @@ export function passwordResetEmail({ accounts, sharedInbox }) {
     : "Reset your " + config.companyName + " password";
 
   const intro = many
-    ? "This inbox receives the email for every " +
+    ? "Email for more than one " +
       config.companyName +
-      " staff account. Choose whose password you want to change."
-    : "Someone asked to reset the password for this " +
+      " account comes to this address. Choose whose password you want to change."
+    : "Someone asked to reset the password for the " +
       config.companyName +
-      " account. If it was you, choose a new one below.";
-  const routed = !many && sharedInbox
-    ? "It was delivered to the company inbox because " +
-      accounts[0].email +
-      " is a staff address."
-    : "";
+      " account below. If it was you, choose a new one.";
   const small =
     "Each link works once and expires in 1 hour. If you did not ask for this, ignore this email - no password changes until a link is used.";
 
@@ -186,7 +181,6 @@ export function passwordResetEmail({ accounts, sharedInbox }) {
   const html = shell(
     heading,
     `<p style="margin:0 0 6px 0;">${esc(intro)}</p>` +
-      (routed ? `<p style="margin:0 0 6px 0;color:#aab0bc;font-size:13px;">${esc(routed)}</p>` : "") +
       blocks +
       `<p style="margin:10px 0 0 0;color:#aab0bc;font-size:12px;">${esc(small)}</p>`
   );
@@ -195,7 +189,6 @@ export function passwordResetEmail({ accounts, sharedInbox }) {
     heading,
     "",
     intro,
-    routed,
     "",
     ...accounts.flatMap((a) => [
       a.name + " (" + a.roleLabel + ") - signs in as " + a.email,

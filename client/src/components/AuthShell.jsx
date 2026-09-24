@@ -1,11 +1,11 @@
 import { Link } from "react-router-dom";
-import { IconFile, IconLayers, IconScale } from "./icons.jsx";
 import GoldDust from "./GoldDust.jsx";
+import ShakyText from "./ShakyText.jsx";
 
 /**
  * The frame round every signed-out screen - sign in, forgot password,
- * choose a new password. The product on the left, the form on the right;
- * on a phone the left half steps aside and the form has the screen.
+ * choose a new password. Altrium on the left, the form on the right; on
+ * a phone the left half steps aside and the form has the screen.
  */
 export default function AuthShell({ children }) {
   const year = new Date().getFullYear();
@@ -25,50 +25,12 @@ export default function AuthShell({ children }) {
         </Link>
 
         <div className="auth-pitch">
-          <span className="auth-eyebrow">Recruitment &amp; hiring</span>
-          <h2>
-            Every candidate, every interview, every decision -{" "}
-            <span className="auth-shine">in one place.</span>
-          </h2>
-
-          <ol className="auth-track" aria-label="A candidate's journey">
-            {["Applied", "Screening", "Interview", "Offer"].map((stage, i) => (
-              <li key={stage} style={{ "--i": i }}>
-                <span className="auth-track-dot" />
-                {stage}
-              </li>
-            ))}
-          </ol>
-
-          <ul className="auth-points">
-            <li>
-              <span className="auth-point-icon">
-                <IconLayers />
-              </span>
-              <span>
-                <strong>A pipeline for every vacancy</strong>
-                Each role runs its own interview stages.
-              </span>
-            </li>
-            <li>
-              <span className="auth-point-icon">
-                <IconFile />
-              </span>
-              <span>
-                <strong>Feedback that is never lost</strong>
-                A score and notes at every stage, from the people in the room.
-              </span>
-            </li>
-            <li>
-              <span className="auth-point-icon">
-                <IconScale />
-              </span>
-              <span>
-                <strong>Decisions on the evidence</strong>
-                Candidates side by side, then hire.
-              </span>
-            </li>
-          </ul>
+          <span className="auth-eyebrow">For the Altrium team</span>
+          <ShakyText lead="Hire with" accent="care." />
+          <p className="auth-lede">
+            This is where the Altrium team runs its hiring, from the first CV to the signed offer.
+          </p>
+          <p className="auth-note">Accounts are opened by HR. If you need one, ask them.</p>
         </div>
 
         <p className="auth-legal">© {year} Altrium. All rights reserved.</p>
