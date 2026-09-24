@@ -108,25 +108,27 @@ and the menu always in reach.
 | Dashboard welcome | Different for each role: its own greeting, what the role is there to do, its own shortcuts, and its own accent colour. |
 | Sign-in screens | Split: what Altrium does on the left, the form on the right. |
 
-**Colour.** Indigo is the one brand colour; violet, sky, teal, emerald and rose
-are its matching accents, used for icons, glows and charts - never for body
-text. Each role has its own accent: indigo for HR, violet for the hiring
-manager, teal for interviewers, sky for management.
+**Colour.** Altrium's rich gold is the brand colour - taken from
+[altrium.io](https://www.altrium.io/) - warmed by amber and orange, on the dark
+frame. Lime, emerald, sky and rose are the accents for icons and charts, never
+for body text. Each role has its own accent: gold for HR, orange for the hiring
+manager, lime for interviewers, bright yellow for management.
 
 | Token | Value | |
 | --- | --- | --- |
-| Brand | `#4f46e5` | Buttons, links, the current stage. Carries **white** text at 6.3:1 |
-| Brand as text | `#3730a3` | 9.9:1 on white |
+| Brand gold | `#fbb401` | Buttons, the current stage, the logo. Carries **near-black** text at 9.5:1 - never white, which would be 1.8:1 |
+| Gold as text | `#8a6300` | Links and gold labels, 5.4:1 on white |
+| Focus | `#b45309` | Focus rings and focused fields on light surfaces, 5.0:1 - gold itself is too light to outline anything on white |
 | Ink / muted text | `#14161b` / `#5f6675` | 18.1:1 / 5.8:1 on white |
 | Frame | `#0c0d11` | The sidebar and the signed-out brand panel |
 | Typeface | Geist | |
 
-**Checked, not eyeballed.** Every text colour in the new palette was measured
-against its background, and all pass WCAG AA (4.5:1). Field borders reach 3.1:1,
-so an input's edge is visible, and focus rings are drawn in a pale indigo on the
-dark surfaces. The chart colours - indigo, emerald and an indigo ramp for the CV
-bands - were run through a palette validator for colour-blind separation
-(ΔE 26.4 for deuteranopia; 8 is the target) and contrast against white.
+**Checked, not eyeballed.** Every text colour was measured against its
+background, and all pass WCAG AA (4.5:1). Field borders reach 3.1:1, so an
+input's edge is visible, and focus rings are bright gold (13:1) on the dark
+surfaces. The chart colours - gold stepped down to `#c08400`, emerald, and a gold
+ramp for the CV bands - were run through a palette validator for colour-blind
+separation (ΔE 10.2 for protanopia; 8 is the target) and contrast against white.
 
 ### Responsive, and how it moves
 

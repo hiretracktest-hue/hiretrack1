@@ -178,7 +178,7 @@ export default function Dashboard() {
             label="My upcoming interviews"
             value={stats?.myUpcomingInterviews ?? 0}
             icon={IconCalendar}
-            tone="blue"
+            tone="sky"
           />
           <Stat
             label="Feedback I still owe"
@@ -191,22 +191,22 @@ export default function Dashboard() {
 
       <div className="grid grid-4">
         <Stat label="Vacancies" value={stats?.openVacancies ?? 0} icon={IconBriefcase} />
-        <Stat label="Candidates" value={stats?.totalCandidates ?? 0} icon={IconUsers} tone="blue" />
-        <Stat label="In progress" value={stats?.activeCandidates ?? 0} icon={IconLayers} tone="violet" />
+        <Stat label="Candidates" value={stats?.totalCandidates ?? 0} icon={IconUsers} tone="orange" />
+        <Stat label="In progress" value={stats?.activeCandidates ?? 0} icon={IconLayers} tone="lime" />
         <Stat
           label="Upcoming interviews"
           value={stats?.upcomingInterviews ?? 0}
           icon={IconCalendar}
-          tone="green"
+          tone="sky"
         />
       </div>
 
       {p["candidate:band"] && (
         <div className="grid grid-4 mt-2">
           <Stat label="CVs to screen" value={stats?.awaitingScreening ?? 0} icon={IconFile} tone="rose" />
-          <Stat label="On hold" value={stats?.onHold ?? 0} icon={IconClock} tone="violet" />
+          <Stat label="On hold" value={stats?.onHold ?? 0} icon={IconClock} tone="orange" />
           <Stat label="Hired" value={stats?.hired ?? 0} icon={IconCheck} tone="green" />
-          <Stat label="Emails to send" value={stats?.pendingEmails ?? 0} icon={IconMail} tone="blue" />
+          <Stat label="Emails to send" value={stats?.pendingEmails ?? 0} icon={IconMail} tone="sky" />
         </div>
       )}
 

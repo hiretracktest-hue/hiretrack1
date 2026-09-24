@@ -20,7 +20,7 @@ import { config } from "./config.js";
  * nothing has to be bundled and the file works on any reader.
  */
 
-const BRAND = "#4f46e5";
+const BRAND = "#fbb401";
 const INK = "#1e2228";
 const SLATE = "#343f52";
 const BODY = "#60697b";

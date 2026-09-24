@@ -57,6 +57,10 @@ export function createApp({ log = true } = {}) {
         ok: true,
         database: info.name,
         server: info.version.split(",")[0],
+        // Where links in our emails point - a reset link that opens
+        // somewhere else is the first thing to rule out, and this says
+        // so without anyone having to dig through an inbox.
+        linksPointTo: config.clientUrl,
         time: new Date().toISOString(),
       });
     } catch (err) {

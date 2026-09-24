@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { IconFile, IconLayers, IconScale } from "./icons.jsx";
+import GoldDust from "./GoldDust.jsx";
 
 /**
  * The frame round every signed-out screen - sign in, forgot password,
@@ -13,6 +14,7 @@ export default function AuthShell({ children }) {
     <div className="auth-split">
       <aside className="auth-brand">
         <div className="auth-glow" aria-hidden="true" />
+        <GoldDust />
 
         <Link to="/signin" className="brand brand-on-dark">
           <span className="brand-mark">AL</span>
@@ -24,7 +26,10 @@ export default function AuthShell({ children }) {
 
         <div className="auth-pitch">
           <span className="auth-eyebrow">Recruitment &amp; hiring</span>
-          <h2>Every candidate, every interview, every decision - in one place.</h2>
+          <h2>
+            Every candidate, every interview, every decision -{" "}
+            <span className="auth-shine">in one place.</span>
+          </h2>
 
           <ol className="auth-track" aria-label="A candidate's journey">
             {["Applied", "Screening", "Interview", "Offer"].map((stage, i) => (

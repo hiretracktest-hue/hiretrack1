@@ -4,22 +4,26 @@
    easy to explain and change.
 
    The look: a dark frame - the sidebar - holding a light, rounded
-   workspace, the pattern of modern SaaS dashboards. Indigo is the one
-   brand colour; violet, sky, teal, emerald and rose are its matching
-   accents, used for icons, glows and charts - never for body text.
+   workspace, the pattern of modern SaaS dashboards. Altrium's rich gold
+   is the brand colour, warmed by amber and orange; lime, emerald, sky
+   and rose are the accents for icons and charts - never for body text.
    =================================================================== */
 
 :root {
-  /* Indigo carries WHITE text (6.3:1 at --brand-500). --brand-700 is the
-     deep indigo used when the brand has to appear as text on white. */
-  --brand-50: #eef0ff;
-  --brand-100: #e0e3ff;
-  --brand-200: #c5caff;
-  --brand-500: #4f46e5;
-  --brand-600: #4338ca;
-  --brand-700: #3730a3;
-  --on-brand: #ffffff;
-  --brand-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 52%, #d946ef 100%);
+  /* Altrium gold. It is a FILL colour: it carries near-black text, never
+     white (white on gold is 1.8:1 - unreadable). --brand-700 is the deep
+     gold used when the brand has to appear as text on white. */
+  --brand-50: #fff9e6;
+  --brand-100: #fff0c2;
+  --brand-200: #ffe08a;
+  --brand-500: #fbb401;
+  --brand-600: #eaa600;
+  --brand-700: #8a6300;
+  --on-brand: #1a1b1f;
+  --brand-gradient: linear-gradient(135deg, #ffd84d 0%, #fbb401 55%, #f59e0b 100%);
+  /* Gold is too light to outline anything on white, so a focus ring or
+     a focused field is drawn in deep amber there. */
+  --focus: #b45309;
 
   --ink: #14161b;
   --ink-soft: #2f3541;
@@ -50,17 +54,17 @@
   --red-fg: #b3243a;
   --blue-bg: #e6f3fd;
   --blue-fg: #0b5a8a;
-  --violet-bg: #f1ecff;
-  --violet-fg: #5b2bb5;
+  --orange-bg: #ffedd9;
+  --orange-fg: #9a3412;
+  --lime-bg: #eef9d6;
+  --lime-fg: #3f6212;
   --rose-bg: #fdebf3;
   --rose-fg: #9d1b54;
-  --teal-bg: #e2f6f3;
-  --teal-fg: #0f5f58;
 
   /* Each role's own accent - decoration only (the welcome glow, the
      marker on the active menu item), so readability never rests on it. */
-  --role: #818cf8;
-  --role-glow: rgba(99, 102, 241, 0.5);
+  --role: #fbbf24;
+  --role-glow: rgba(251, 180, 1, 0.55);
 
   --radius: 12px;
   --radius-lg: 18px;
@@ -73,16 +77,16 @@
 }
 
 .shell[data-role="hiring_manager"] {
-  --role: #c084fc;
-  --role-glow: rgba(168, 85, 247, 0.5);
+  --role: #fb923c;
+  --role-glow: rgba(249, 115, 22, 0.5);
 }
 .shell[data-role="interviewer"] {
-  --role: #2dd4bf;
-  --role-glow: rgba(20, 184, 166, 0.45);
+  --role: #a3e635;
+  --role-glow: rgba(132, 204, 22, 0.45);
 }
 .shell[data-role="management"] {
-  --role: #38bdf8;
-  --role-glow: rgba(14, 165, 233, 0.45);
+  --role: #fde047;
+  --role-glow: rgba(250, 204, 21, 0.5);
 }
 
 * {
@@ -107,8 +111,8 @@ body {
 }
 
 ::selection {
-  background: var(--brand-100);
-  color: var(--brand-700);
+  background: var(--brand-200);
+  color: var(--on-brand);
 }
 
 h1,
@@ -198,11 +202,11 @@ td,
   display: grid;
   place-items: center;
   background: var(--brand-gradient);
-  color: #ffffff;
+  color: var(--on-brand);
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.02em;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 6px 18px rgba(99, 102, 241, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 6px 18px rgba(251, 180, 1, 0.35);
   flex: none;
 }
 
@@ -315,7 +319,7 @@ td,
 }
 .side-user .avatar {
   background: var(--brand-gradient);
-  color: #ffffff;
+  color: var(--on-brand);
 }
 .side-user-meta {
   display: flex;
@@ -431,8 +435,8 @@ td,
   transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 .topbar-search:focus-within {
-  border-color: var(--brand-500);
-  box-shadow: 0 0 0 4px var(--brand-100);
+  border-color: var(--focus);
+  box-shadow: 0 0 0 4px rgba(251, 180, 1, 0.3);
 }
 .topbar-search input {
   flex: 1;
@@ -480,7 +484,7 @@ td,
 }
 .topbar-avatar {
   background: var(--brand-gradient);
-  color: #ffffff;
+  color: var(--on-brand);
   box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--line);
 }
 .topbar-avatar:hover {
@@ -629,12 +633,11 @@ td,
   line-height: 1.1;
 }
 .stat-brand { --tone-bg: var(--brand-50); --tone-fg: var(--brand-700); }
-.stat-blue { --tone-bg: var(--blue-bg); --tone-fg: var(--blue-fg); }
-.stat-violet { --tone-bg: var(--violet-bg); --tone-fg: var(--violet-fg); }
+.stat-orange { --tone-bg: var(--orange-bg); --tone-fg: var(--orange-fg); }
+.stat-lime { --tone-bg: var(--lime-bg); --tone-fg: var(--lime-fg); }
 .stat-green { --tone-bg: var(--green-bg); --tone-fg: var(--green-fg); }
+.stat-sky { --tone-bg: var(--blue-bg); --tone-fg: var(--blue-fg); }
 .stat-rose { --tone-bg: var(--rose-bg); --tone-fg: var(--rose-fg); }
-.stat-teal { --tone-bg: var(--teal-bg); --tone-fg: var(--teal-fg); }
-.stat-amber { --tone-bg: var(--amber-bg); --tone-fg: var(--amber-fg); }
 
 /* --- buttons ------------------------------------------------------- */
 .btn {
@@ -660,10 +663,10 @@ td,
 }
 
 .btn-primary {
-  background: linear-gradient(180deg, #5a52ea 0%, var(--brand-500) 100%);
+  background: linear-gradient(180deg, #ffcb2f 0%, var(--brand-500) 100%);
   border-color: var(--brand-600);
   color: var(--on-brand);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 1px 2px rgba(16, 18, 24, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 1px 2px rgba(16, 18, 24, 0.12);
 }
 .btn-primary:hover:not(:disabled) {
   background: linear-gradient(180deg, var(--brand-500) 0%, var(--brand-600) 100%);
@@ -789,8 +792,8 @@ td,
 .select:focus,
 .textarea:focus {
   outline: none;
-  border-color: var(--brand-500);
-  box-shadow: 0 0 0 4px var(--brand-100);
+  border-color: var(--focus);
+  box-shadow: 0 0 0 4px rgba(251, 180, 1, 0.3);
 }
 
 .textarea {
@@ -1077,12 +1080,45 @@ tbody tr:hover {
   gap: 40px;
   padding: 36px 48px;
   color: var(--shell-text);
-  background:
-    radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px) 0 0 / 22px 22px,
-    var(--shell);
+  background: var(--shell);
 }
 .auth-brand > * {
   position: relative;
+}
+
+/* ...and onto a layer of its own that drifts, one cell at a time, so the
+   loop never shows a seam. It fades out towards the edges. */
+.auth-brand::before {
+  content: "";
+  position: absolute;
+  inset: -24px;
+  pointer-events: none;
+  background: radial-gradient(rgba(255, 214, 102, 0.13) 1.1px, transparent 1.6px) 0 0 / 24px 24px;
+  -webkit-mask-image: radial-gradient(ellipse 75% 70% at 30% 50%, #000 15%, transparent 75%);
+  mask-image: radial-gradient(ellipse 75% 70% at 30% 50%, #000 15%, transparent 75%);
+  animation: grid-drift 26s linear infinite;
+}
+
+/* The gold dust (GoldDust.jsx) fills the panel, behind the words. */
+.auth-brand > .gold-dust {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* The last words of the headline catch the light. */
+.auth-shine {
+  color: #fbbf24;
+}
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .auth-shine {
+    background: linear-gradient(100deg, #f59e0b 0%, #fbbf24 30%, #fff3c4 48%, #fbbf24 66%, #f59e0b 100%);
+    background-size: 260% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: shine 7s ease-in-out infinite;
+  }
 }
 
 /* Slow-moving light: indigo, violet and sky, drifting. */
@@ -1091,9 +1127,9 @@ tbody tr:hover {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(40% 45% at 18% 88%, rgba(99, 102, 241, 0.55) 0%, transparent 70%),
-    radial-gradient(35% 40% at 82% 18%, rgba(168, 85, 247, 0.4) 0%, transparent 70%),
-    radial-gradient(30% 35% at 70% 78%, rgba(14, 165, 233, 0.3) 0%, transparent 70%);
+    radial-gradient(40% 45% at 18% 88%, rgba(251, 180, 1, 0.5) 0%, transparent 70%),
+    radial-gradient(35% 40% at 82% 18%, rgba(249, 115, 22, 0.32) 0%, transparent 70%),
+    radial-gradient(30% 35% at 70% 78%, rgba(253, 224, 71, 0.22) 0%, transparent 70%);
   filter: blur(8px);
   animation: aurora 16s ease-in-out infinite alternate;
 }
@@ -1111,9 +1147,9 @@ tbody tr:hover {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #c7cbff;
-  background: rgba(99, 102, 241, 0.14);
-  border: 1px solid rgba(129, 140, 248, 0.28);
+  color: #ffe08a;
+  background: rgba(251, 180, 1, 0.12);
+  border: 1px solid rgba(251, 180, 1, 0.3);
 }
 .auth-pitch h2 {
   margin-top: 18px;
@@ -1142,18 +1178,60 @@ tbody tr:hover {
   border: 1px solid var(--shell-line);
   font-size: 0.8rem;
   color: #cdd0d8;
-  animation: rise 0.5s var(--ease) both;
-  animation-delay: calc(0.2s + var(--i) * 0.14s);
+  animation: rise 0.5s var(--ease) both, stage-chip 4.8s ease-in-out infinite;
+  animation-delay: calc(0.2s + var(--i) * 0.14s), calc(1s + var(--i) * 1.2s);
 }
 .auth-track-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: #4a4f5c;
+  animation: stage-dot 4.8s ease-in-out infinite;
+  animation-delay: calc(1s + var(--i) * 1.2s);
 }
+/* The offer is where it ends: it lights green, not gold. */
 .auth-track li:last-child .auth-track-dot {
-  background: #34d399;
-  box-shadow: 0 0 10px rgba(52, 211, 153, 0.9);
+  animation-name: stage-dot-offer;
+}
+
+@keyframes stage-dot {
+  0%,
+  27%,
+  100% {
+    background: #4a4f5c;
+    box-shadow: none;
+  }
+  4%,
+  21% {
+    background: #fbbf24;
+    box-shadow: 0 0 12px rgba(251, 191, 36, 0.95);
+  }
+}
+@keyframes stage-dot-offer {
+  0%,
+  27% {
+    background: #4a4f5c;
+    box-shadow: none;
+  }
+  4%,
+  21%,
+  100% {
+    background: #34d399;
+    box-shadow: 0 0 12px rgba(52, 211, 153, 0.9);
+  }
+}
+@keyframes stage-chip {
+  0%,
+  27%,
+  100% {
+    border-color: var(--shell-line);
+    color: #cdd0d8;
+  }
+  4%,
+  21% {
+    border-color: rgba(251, 191, 36, 0.45);
+    color: #ffffff;
+  }
 }
 
 .auth-points {
@@ -1175,9 +1253,9 @@ tbody tr:hover {
   border-radius: 11px;
   display: grid;
   place-items: center;
-  color: #c7cbff;
-  background: rgba(99, 102, 241, 0.14);
-  border: 1px solid rgba(129, 140, 248, 0.25);
+  color: #fcd34d;
+  background: rgba(251, 180, 1, 0.12);
+  border: 1px solid rgba(251, 180, 1, 0.26);
 }
 .auth-points li > span:last-child {
   color: var(--shell-muted);
@@ -1227,9 +1305,9 @@ tbody tr:hover {
   display: inline-grid;
   place-items: center;
   margin-bottom: 16px;
-  color: #ffffff;
+  color: var(--on-brand);
   background: var(--brand-gradient);
-  box-shadow: 0 10px 26px rgba(99, 102, 241, 0.35);
+  box-shadow: 0 10px 26px rgba(251, 180, 1, 0.4);
 }
 
 /* The invitation page, and anything else still on the single-card
@@ -1240,8 +1318,8 @@ tbody tr:hover {
   place-items: center;
   padding: 32px 20px;
   background:
-    radial-gradient(circle at 12% 12%, rgba(99, 102, 241, 0.16) 0%, transparent 42%),
-    radial-gradient(circle at 88% 85%, rgba(14, 165, 233, 0.14) 0%, transparent 42%),
+    radial-gradient(circle at 12% 12%, rgba(251, 180, 1, 0.2) 0%, transparent 42%),
+    radial-gradient(circle at 88% 85%, rgba(249, 115, 22, 0.1) 0%, transparent 42%),
     var(--canvas);
 }
 
@@ -1329,11 +1407,11 @@ tbody tr:hover {
   animation: blink 1s ease-in-out infinite;
 }
 .loading-dots i:nth-child(2) {
-  background: #8b5cf6;
+  background: #f59e0b;
   animation-delay: 0.15s;
 }
 .loading-dots i:nth-child(3) {
-  background: #0ea5e9;
+  background: #ea580c;
   animation-delay: 0.3s;
 }
 
@@ -1380,8 +1458,8 @@ tbody tr:hover {
   display: flex;
   flex-direction: column;
   background:
-    radial-gradient(circle at 12% 0%, rgba(99, 102, 241, 0.14) 0%, transparent 42%),
-    radial-gradient(circle at 88% 8%, rgba(14, 165, 233, 0.12) 0%, transparent 40%),
+    radial-gradient(circle at 12% 0%, rgba(251, 180, 1, 0.18) 0%, transparent 42%),
+    radial-gradient(circle at 88% 8%, rgba(249, 115, 22, 0.1) 0%, transparent 40%),
     var(--canvas);
 }
 .public-bar {
@@ -1472,8 +1550,8 @@ tbody tr:hover {
   height: 19px;
   padding: 0 5px;
   border-radius: 999px;
-  background: linear-gradient(135deg, #ec4899, #8b5cf6);
-  color: #ffffff;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: var(--on-brand);
   font-size: 0.68rem;
   font-weight: 700;
   line-height: 15px;
@@ -1751,7 +1829,7 @@ tbody tr:hover {
   transform: translateY(1px);
 }
 .btn-primary:hover:not(:disabled) {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 6px 18px rgba(79, 70, 229, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 6px 18px rgba(251, 180, 1, 0.45);
 }
 
 /* Rows lift very slightly under the cursor so it is obvious which one
@@ -1778,7 +1856,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid var(--brand-500);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
   border-radius: 6px;
 }
@@ -1961,8 +2039,8 @@ textarea:focus-visible,
     min-height: 100vh;
     border-radius: 0;
     background:
-      radial-gradient(circle at 10% 0%, rgba(99, 102, 241, 0.16) 0%, transparent 45%),
-      radial-gradient(circle at 95% 100%, rgba(14, 165, 233, 0.12) 0%, transparent 45%),
+      radial-gradient(circle at 10% 0%, rgba(251, 180, 1, 0.2) 0%, transparent 45%),
+      radial-gradient(circle at 95% 100%, rgba(249, 115, 22, 0.1) 0%, transparent 45%),
       var(--canvas);
   }
   .auth-brand-mobile {
@@ -2604,7 +2682,7 @@ tr.is-selected td {
   pointer-events: none;
   background:
     radial-gradient(45% 80% at 88% 0%, var(--role-glow) 0%, transparent 70%),
-    radial-gradient(35% 70% at 62% 120%, rgba(99, 102, 241, 0.35) 0%, transparent 70%);
+    radial-gradient(35% 70% at 62% 120%, rgba(251, 180, 1, 0.3) 0%, transparent 70%);
   animation: aurora 18s ease-in-out infinite alternate;
 }
 .hero-body {
@@ -2715,7 +2793,7 @@ tr.is-selected td {
   padding: 10px 16px;
   border-radius: 12px;
   background: var(--brand-500);
-  color: #ffffff;
+  color: var(--on-brand);
   font-weight: 600;
   transform: translateY(-160%);
   transition: transform 0.18s var(--ease);
@@ -2728,10 +2806,25 @@ tr.is-selected td {
   outline: none;
 }
 
-/* On the dark surfaces the indigo ring is too close to the background,
-   so there it is drawn in a pale indigo - 11:1 instead of 3:1. */
+/* On the dark surfaces the ring is drawn in bright gold instead. */
 .sidebar :focus-visible,
 .hero :focus-visible,
 .auth-brand :focus-visible {
-  outline-color: #a5b4fc;
+  outline-color: #fcd34d;
+}
+
+@keyframes grid-drift {
+  to {
+    transform: translate3d(24px, 24px, 0);
+  }
+}
+
+@keyframes shine {
+  0%,
+  100% {
+    background-position: 100% 0;
+  }
+  50% {
+    background-position: 0 0;
+  }
 }

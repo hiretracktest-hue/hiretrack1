@@ -9,11 +9,11 @@ import { config } from "./config.js";
  * because some people read mail as text and a blank email is worse than
  * a plain one.
  *
- * Colours are Altrium's, matching the app: indigo carrying white text,
- * which measures 6.3:1 - comfortably readable.
+ * Colours are Altrium's, matching the app. The gold carries near-black
+ * text - white on #fbb401 is unreadable.
  */
 
-const BRAND = "#4f46e5";
+const BRAND = "#fbb401";
 const INK = "#1e2228";
 const BODY = "#60697b";
 const LINE = "#edf0f5";
@@ -30,7 +30,7 @@ function shell(heading, inner) {
   return `<div style="margin:0;padding:24px 12px;background:${CANVAS};font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:${BODY};line-height:1.55;">
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="max-width:560px;width:100%;background:#ffffff;border:1px solid ${LINE};border-radius:14px;">
     <tr><td style="padding:22px 26px 0 26px;">
-      <span style="display:inline-block;background:${BRAND};color:#ffffff;font-weight:700;font-size:13px;padding:5px 10px;border-radius:8px;">AL</span>
+      <span style="display:inline-block;background:${BRAND};color:${INK};font-weight:700;font-size:13px;padding:5px 10px;border-radius:8px;">AL</span>
       <span style="font-weight:700;color:${INK};font-size:16px;margin-left:8px;">${esc(config.companyName)}</span>
     </td></tr>
     <tr><td style="padding:16px 26px 0 26px;">
@@ -61,7 +61,7 @@ function detailRows(rows) {
 
 function button(href, label, filled = true) {
   const style = filled
-    ? `background:${BRAND};color:#ffffff;border:1px solid ${BRAND};`
+    ? `background:${BRAND};color:${INK};border:1px solid ${BRAND};`
     : `background:#ffffff;color:${BODY};border:1px solid ${LINE};`;
   return `<a href="${esc(href)}" style="${style}display:inline-block;padding:11px 22px;border-radius:999px;font-weight:700;font-size:14px;text-decoration:none;margin:0 6px 8px 0;">${esc(label)}</a>`;
 }

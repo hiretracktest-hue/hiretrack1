@@ -7,28 +7,29 @@ import { useState } from "react";
  * charts do not justify 200kB of dependency, and every value here can be
  * explained in a viva, which a library's defaults cannot.
  *
- * COLOURS. Indigo, the app's own colour, and emerald. The pair clears
- * the lightness band, the chroma floor and 3:1 contrast against white,
- * and is ΔE 26.4 apart for deuteranopia (8 is the target). The CV bands
- * are one indigo hue stepped light to dark, each step clearly apart and
- * the lightest still visible on white. All were checked with a
- * validator, not by eye.
+ * COLOURS. Altrium's gold, stepped down to #c08400 so that as a mark on
+ * white it clears 3:1 (the brand gold itself measures 1.8:1), and
+ * emerald. The pair clears the lightness band and the chroma floor and
+ * is ΔE 10.2 apart for protanopia (8 is the target). The CV bands are
+ * one gold hue stepped light to dark, each step clearly apart and the
+ * lightest still visible on white. All were checked with a validator,
+ * not by eye.
  *
  * Nothing here is identified by colour alone: every bar is labelled with
  * its own name and number, two-series charts carry a legend, and each
  * chart can be switched to a table.
  */
 
-const INDIGO = "#4f46e5";
+const GOLD = "#c08400";
 const GREEN = "#0f7a45";
 
 // CV bands are ordered, not unrelated categories, so they take one hue
 // from dark to light. Unrated is deliberately outside the ramp - "not
 // looked at yet" is an absence, not a rung on the scale.
 const BAND_COLOR = {
-  HIGH: "#3a2fb8",
-  MEDIUM: "#5b52e8",
-  LOW: "#8b8ff5",
+  HIGH: "#7a5000",
+  MEDIUM: "#b07a00",
+  LOW: "#dca21c",
   UNRATED: "#b9bfc9",
 };
 const BAND_LABEL = { HIGH: "High", MEDIUM: "Medium", LOW: "Low", UNRATED: "Not screened" };
@@ -170,7 +171,7 @@ export function PipelineChart({ byStage }) {
             rows={byStage
               .filter((r) => r.jobTitle === job)
               .map((r) => ({ label: r.stage, value: r.total }))}
-            color={INDIGO}
+            color={GOLD}
             max={max}
           />
         </div>
@@ -248,7 +249,7 @@ export function InterviewerChart({ interviewerActivity }) {
       <Legend
         items={[
           { label: "Feedback given", color: GREEN },
-          { label: "Still outstanding", color: INDIGO },
+          { label: "Still outstanding", color: GOLD },
         ]}
       />
       {rows.map((person) => (
@@ -264,7 +265,7 @@ export function InterviewerChart({ interviewerActivity }) {
               { label: "Given", value: person.feedback },
               { label: "Outstanding", value: person.outstanding },
             ]}
-            color={(r) => (r.label === "Given" ? GREEN : INDIGO)}
+            color={(r) => (r.label === "Given" ? GREEN : GOLD)}
             max={max}
           />
         </div>

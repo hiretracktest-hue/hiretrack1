@@ -85,8 +85,8 @@ export default function Reports() {
 
       <div className="grid grid-4">
         <Stat label="Vacancies" value={summary.openVacancies} icon={IconBriefcase} />
-        <Stat label="Candidates" value={summary.totalCandidates} icon={IconUsers} tone="blue" />
-        <Stat label="In progress" value={summary.activeCandidates} icon={IconLayers} tone="violet" />
+        <Stat label="Candidates" value={summary.totalCandidates} icon={IconUsers} tone="orange" />
+        <Stat label="In progress" value={summary.activeCandidates} icon={IconLayers} tone="lime" />
         <Stat label="Hired" value={summary.hired} icon={IconCheck} tone="green" />
       </div>
 
@@ -96,12 +96,12 @@ export default function Reports() {
           label="Upcoming interviews"
           value={summary.upcomingInterviews}
           icon={IconCalendar}
-          tone="green"
+          tone="sky"
         />
-        <Stat label="Feedback submitted" value={summary.feedbackSubmitted} icon={IconFile} tone="blue" />
+        <Stat label="Feedback submitted" value={summary.feedbackSubmitted} icon={IconFile} />
         <Stat
           icon={IconClock}
-          tone="violet"
+          tone="orange"
           label="Avg days to decision"
           value={summary.averageDaysToDecision ?? "—"}
         />
