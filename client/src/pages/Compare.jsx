@@ -323,7 +323,11 @@ function SideBySide({ candidates, stages, onRemove }) {
               {candidates.map((c) => (
                 <td
                   key={c.id}
-                  className={c.averageRating === overallBest ? "compare-best" : ""}
+                  // No leader is null, and so is "not scored yet" - the
+                  // two must not be read as a match.
+                  className={
+                    overallBest !== null && c.averageRating === overallBest ? "compare-best" : ""
+                  }
                 >
                   <Stars value={c.averageRating} />
                   <div className="cell-sub">

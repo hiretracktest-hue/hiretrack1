@@ -7,35 +7,35 @@ import { useState } from "react";
  * charts do not justify 200kB of dependency, and every value here can be
  * explained in a viva, which a library's defaults cannot.
  *
- * COLOURS. The brand amber #fbb401 is a fill for large areas carrying
- * dark text - as a small mark on white it measures 1.81:1, which is
- * unreadable. The chart colours are the amber and green stepped down
- * until they pass: #c08400 and #0f7a45 clear the lightness band, the
- * chroma floor, contrast against white, and a colour-blind separation of
- * ΔE 10.2 for protanopia. They were checked with a validator, not by eye.
+ * COLOURS. Indigo, the app's own colour, and emerald. The pair clears
+ * the lightness band, the chroma floor and 3:1 contrast against white,
+ * and is ΔE 26.4 apart for deuteranopia (8 is the target). The CV bands
+ * are one indigo hue stepped light to dark, each step clearly apart and
+ * the lightest still visible on white. All were checked with a
+ * validator, not by eye.
  *
  * Nothing here is identified by colour alone: every bar is labelled with
  * its own name and number, two-series charts carry a legend, and each
  * chart can be switched to a table.
  */
 
-const AMBER = "#c08400";
+const INDIGO = "#4f46e5";
 const GREEN = "#0f7a45";
 
 // CV bands are ordered, not unrelated categories, so they take one hue
 // from dark to light. Unrated is deliberately outside the ramp - "not
 // looked at yet" is an absence, not a rung on the scale.
 const BAND_COLOR = {
-  HIGH: "#8a5a00",
-  MEDIUM: "#c08400",
-  LOW: "#e8b13d",
+  HIGH: "#3a2fb8",
+  MEDIUM: "#5b52e8",
+  LOW: "#8b8ff5",
   UNRATED: "#b9bfc9",
 };
 const BAND_LABEL = { HIGH: "High", MEDIUM: "Medium", LOW: "Low", UNRATED: "Not screened" };
 
-const INK = "#1e2228";
-const MUTED = "#60697b";
-const GRID = "#edf0f5";
+const INK = "#14161b";
+const MUTED = "#5f6675";
+const GRID = "#e8ebf0";
 
 /** A chart card: title, an optional table toggle, and the figure. */
 function Figure({ title, note, table, children }) {
@@ -170,7 +170,7 @@ export function PipelineChart({ byStage }) {
             rows={byStage
               .filter((r) => r.jobTitle === job)
               .map((r) => ({ label: r.stage, value: r.total }))}
-            color={AMBER}
+            color={INDIGO}
             max={max}
           />
         </div>
@@ -248,7 +248,7 @@ export function InterviewerChart({ interviewerActivity }) {
       <Legend
         items={[
           { label: "Feedback given", color: GREEN },
-          { label: "Still outstanding", color: AMBER },
+          { label: "Still outstanding", color: INDIGO },
         ]}
       />
       {rows.map((person) => (
@@ -264,7 +264,7 @@ export function InterviewerChart({ interviewerActivity }) {
               { label: "Given", value: person.feedback },
               { label: "Outstanding", value: person.outstanding },
             ]}
-            color={(r) => (r.label === "Given" ? GREEN : AMBER)}
+            color={(r) => (r.label === "Given" ? GREEN : INDIGO)}
             max={max}
           />
         </div>

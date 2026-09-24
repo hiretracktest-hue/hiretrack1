@@ -4,6 +4,15 @@ import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
 import { Alert, Empty, Loading, Stars, Stat, formatDate } from "../components/ui.jsx";
 import { PipelineChart, ScreeningChart, InterviewerChart } from "../components/charts.jsx";
+import {
+  IconBriefcase,
+  IconCalendar,
+  IconCheck,
+  IconClock,
+  IconFile,
+  IconLayers,
+  IconUsers,
+} from "../components/icons.jsx";
 
 /**
  * "What reports would management want to export?"
@@ -75,17 +84,24 @@ export default function Reports() {
       </Alert>
 
       <div className="grid grid-4">
-        <Stat label="Vacancies" value={summary.openVacancies} />
-        <Stat label="Candidates" value={summary.totalCandidates} />
-        <Stat label="In progress" value={summary.activeCandidates} />
-        <Stat label="Hired" value={summary.hired} />
+        <Stat label="Vacancies" value={summary.openVacancies} icon={IconBriefcase} />
+        <Stat label="Candidates" value={summary.totalCandidates} icon={IconUsers} tone="blue" />
+        <Stat label="In progress" value={summary.activeCandidates} icon={IconLayers} tone="violet" />
+        <Stat label="Hired" value={summary.hired} icon={IconCheck} tone="green" />
       </div>
 
       <div className="grid grid-4 mt-2">
-        <Stat label="CVs to screen" value={summary.awaitingScreening} />
-        <Stat label="Upcoming interviews" value={summary.upcomingInterviews} />
-        <Stat label="Feedback submitted" value={summary.feedbackSubmitted} />
+        <Stat label="CVs to screen" value={summary.awaitingScreening} icon={IconFile} tone="rose" />
         <Stat
+          label="Upcoming interviews"
+          value={summary.upcomingInterviews}
+          icon={IconCalendar}
+          tone="green"
+        />
+        <Stat label="Feedback submitted" value={summary.feedbackSubmitted} icon={IconFile} tone="blue" />
+        <Stat
+          icon={IconClock}
+          tone="violet"
           label="Avg days to decision"
           value={summary.averageDaysToDecision ?? "—"}
         />

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { Alert, Field, PasswordInput } from "../components/ui.jsx";
+import AuthShell from "../components/AuthShell.jsx";
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -37,15 +38,14 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="auth-screen">
-      <div className="auth-card">
+    <AuthShell>
         <div className="auth-head">
-          <span className="brand">
+          <span className="brand auth-brand-mobile">
             <span className="brand-mark">AL</span>
             Altrium
           </span>
           <h1>Choose a new password</h1>
-          <p>This link can only be used once.</p>
+          <p>This link works once and expires an hour after it was sent.</p>
         </div>
 
         <Alert kind="error">{error}</Alert>
@@ -91,7 +91,6 @@ export default function ResetPassword() {
         <p className="auth-foot">
           <Link to="/forgot-password">Request a new link</Link> · <Link to="/signin">Sign in</Link>
         </p>
-      </div>
-    </div>
+    </AuthShell>
   );
 }

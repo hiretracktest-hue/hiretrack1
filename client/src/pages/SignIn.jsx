@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
 import { Alert, Field, PasswordInput } from "../components/ui.jsx";
+import AuthShell from "../components/AuthShell.jsx";
 
 const GOOGLE_ERRORS = {
   google_state: "That Google sign-in attempt expired. Please try again.",
@@ -42,15 +43,14 @@ export default function SignIn() {
   }
 
   return (
-    <div className="auth-screen">
-      <div className="auth-card">
+    <AuthShell>
         <div className="auth-head">
-          <span className="brand">
+          <span className="brand auth-brand-mobile">
             <span className="brand-mark">AL</span>
             Altrium
           </span>
           <h1>Welcome back</h1>
-          <p>Sign in to manage vacancies and candidates.</p>
+          <p>Sign in with your work email to pick up where you left off.</p>
         </div>
 
         {justReset && <Alert kind="success">Password updated. Sign in with your new password.</Alert>}
@@ -64,7 +64,7 @@ export default function SignIn() {
               type="email"
               required
               autoComplete="email"
-              placeholder="you@gmail.com"
+              placeholder="you@hiretrack.lk"
               value={form.email}
               onChange={update("email")}
             />
@@ -103,8 +103,7 @@ export default function SignIn() {
             </a>
           </>
         )}
-      </div>
-    </div>
+    </AuthShell>
   );
 }
 

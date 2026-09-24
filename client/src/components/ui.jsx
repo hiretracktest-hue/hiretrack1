@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 /** Small building blocks reused by every page. */
 
@@ -173,17 +173,77 @@ export function Stars({ value, max = 5 }) {
   );
 }
 
-export function Stat({ label, value }) {
+/**
+ * A figure with its label. The number counts up when it first appears -
+ * it reads as the figure being worked out, which it just was. A screen
+ * reader is given the final number only, never the numbers in between.
+ */
+export function Stat({ label, value, icon: Icon, tone = "brand" }) {
+  const shown = useCountUp(value);
   return (
-    <div className="stat">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value}</div>
+    <div className={"stat stat-" + tone}>
+      <div className="stat-top">
+        <div className="stat-label">{label}</div>
+        {Icon && (
+          <span className="stat-icon">
+            <Icon size={16} />
+          </span>
+        )}
+      </div>
+      <div className="stat-value">
+        <span aria-hidden="true">{shown}</span>
+        <span className="sr-only">{value}</span>
+      </div>
     </div>
   );
 }
 
+/** Whole numbers climb from zero to their value in about half a second;
+ *  anything else - and everything, for people who asked for less motion -
+ *  simply appears. */
+function useCountUp(value) {
+  const target = typeof value === "number" && Number.isInteger(value) ? value : null;
+  const [shown, setShown] = useState(target === null ? value : 0);
+
+  useEffect(() => {
+    if (target === null) {
+      setShown(value);
+      return undefined;
+    }
+    const still =
+      typeof window === "undefined" ||
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (still || target === 0) {
+      setShown(target);
+      return undefined;
+    }
+    let frame;
+    const start = performance.now();
+    const duration = 650;
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setShown(Math.round(target * eased));
+      if (t < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [target, value]);
+
+  return shown;
+}
+
 export function Loading({ what = "data" }) {
-  return <div className="loading">Loading {what}…</div>;
+  return (
+    <div className="loading" role="status">
+      <span className="loading-dots" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </span>
+      Loading {what}…
+    </div>
+  );
 }
 
 export function Empty({ title, children }) {

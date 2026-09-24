@@ -1,37 +1,83 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
 import { api } from "../api.js";
 import { initials } from "./ui.jsx";
+import {
+  IconBell,
+  IconBriefcase,
+  IconCalendar,
+  IconChart,
+  IconDashboard,
+  IconLogout,
+  IconMail,
+  IconSearch,
+  IconShield,
+  IconTeam,
+  IconUsers,
+} from "./icons.jsx";
 
 /**
  * "Who logs in, and what can each role see and do?" - the menu is built
  * from the permissions the server sent with the user, so an interviewer
- * never sees a page they cannot use.
+ * never sees a page they cannot use. A group with nothing in it for this
+ * person is left out altogether.
  */
-const LINKS = [
-  { to: "/dashboard", label: "Dashboard" },
-  { to: "/vacancies", label: "Vacancies", need: "position:view" },
-  { to: "/candidates", label: "Candidates", need: "candidate:view" },
-  { to: "/interviews", label: "Interviews", need: "interview:view" },
-  { to: "/outbox", label: "Outbox", need: "outbox:view" },
-  { to: "/reports", label: "Reports", need: "report:view" },
-  { to: "/team", label: "Team", need: "team:view" },
-  { to: "/audit", label: "Audit log", need: "audit:view" },
+const GROUPS = [
+  {
+    label: "Workspace",
+    links: [
+      { to: "/dashboard", label: "Dashboard", icon: IconDashboard },
+      { to: "/vacancies", label: "Vacancies", icon: IconBriefcase, need: "position:view" },
+      { to: "/candidates", label: "Candidates", icon: IconUsers, need: "candidate:view" },
+      { to: "/interviews", label: "Interviews", icon: IconCalendar, need: "interview:view" },
+      { to: "/outbox", label: "Outbox", icon: IconMail, need: "outbox:view" },
+    ],
+  },
+  {
+    label: "Insights",
+    links: [
+      { to: "/reports", label: "Reports", icon: IconChart, need: "report:view" },
+      { to: "/audit", label: "Audit log", icon: IconShield, need: "audit:view" },
+    ],
+  },
+  {
+    label: "Organisation",
+    links: [{ to: "/team", label: "Team", icon: IconTeam, need: "team:view" }],
+  },
 ];
+
+// The name of the section in the top bar, from the first part of the path.
+const SECTION = {
+  dashboard: "Dashboard",
+  vacancies: "Vacancies",
+  candidates: "Candidates",
+  interviews: "Interviews",
+  outbox: "Outbox",
+  reports: "Reports",
+  audit: "Audit log",
+  team: "Team",
+  profile: "Your profile",
+};
 
 export default function Layout({ children }) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [notifications, setNotifications] = useState([]);
   const [unread, setUnread] = useState(0);
   const [bellOpen, setBellOpen] = useState(false);
-  // On a phone there is no room for seven links, so they collapse
-  // behind a button. On a wide screen the button is hidden and the
-  // links are always shown - see the media query in styles.css.
+  // On a wide screen the sidebar is always there. On a phone or tablet
+  // it slides in over the page from the menu button.
   const [menuOpen, setMenuOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchRef = useRef(null);
 
-  const links = LINKS.filter((link) => !link.need || user?.permissions?.[link.need]);
+  const can = (need) => !need || user?.permissions?.[need];
+  const groups = GROUPS.map((group) => ({
+    ...group,
+    links: group.links.filter((link) => can(link.need)),
+  })).filter((group) => group.links.length > 0);
 
   // Every role has a bell, and every role sees a different list in it -
   // the API only ever returns the notifications addressed to this user.
@@ -63,11 +109,27 @@ export default function Layout({ children }) {
     return () => document.removeEventListener("click", close);
   }, [bellOpen]);
 
-  // Following a link should close the menu behind you.
-  const location = useLocation();
+  // Following a link closes the menu behind you.
   useEffect(() => {
     setMenuOpen(false);
   }, [location.pathname]);
+
+  // Ctrl+K (Cmd+K on a Mac) jumps to the search box from anywhere, and
+  // Escape closes whatever is open.
+  useEffect(() => {
+    const onKey = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchRef.current?.focus();
+      }
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        setBellOpen(false);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   async function markAllRead() {
     await api.markAllNotificationsRead().catch(() => {});
@@ -79,15 +141,83 @@ export default function Layout({ children }) {
     navigate("/signin", { replace: true });
   }
 
-  return (
-    <div className="app">
-      <header className="navbar">
-        <div className="navbar-inner">
-          <Link to="/dashboard" className="brand">
-            <span className="brand-mark">AL</span>
-            Altrium
-          </Link>
+  // The search lands on the Candidates page with what was typed. It goes
+  // as navigation state as well as ?q=, so the page can tell a new search
+  // from its own address-bar updates while someone is typing there.
+  function search(event) {
+    event.preventDefault();
+    const term = query.trim();
+    navigate("/candidates" + (term ? "?q=" + encodeURIComponent(term) : ""), {
+      state: { search: term, at: Date.now() },
+    });
+    setQuery("");
+    searchRef.current?.blur();
+  }
 
+  const section = SECTION[location.pathname.split("/")[1]] || "Altrium";
+  const year = new Date().getFullYear();
+
+  return (
+    <div className={"shell" + (menuOpen ? " menu-open" : "")} data-role={user?.role}>
+      {/* The first thing a keyboard reaches: straight past the menu. */}
+      <a className="skip-link" href="#content">
+        Skip to content
+      </a>
+
+      <aside className="sidebar" aria-label="Main menu">
+        <div className="sidebar-head">
+          <Link to="/dashboard" className="brand brand-on-dark">
+            <span className="brand-mark">AL</span>
+            <span className="brand-text">
+              <strong>Altrium</strong>
+              <span>Recruitment</span>
+            </span>
+          </Link>
+        </div>
+
+        <nav className="side-nav">
+          {groups.map((group) => (
+            <div className="side-group" key={group.label}>
+              <div className="side-group-label">{group.label}</div>
+              {group.links.map(({ to, label, icon: Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) => "side-link" + (isActive ? " active" : "")}
+                >
+                  <Icon />
+                  <span>{label}</span>
+                </NavLink>
+              ))}
+            </div>
+          ))}
+        </nav>
+
+        <div className="sidebar-foot">
+          <Link to="/profile" className="side-user" title="Your profile">
+            {user?.avatarUrl ? (
+              <img className="avatar" src={user.avatarUrl} alt="" />
+            ) : (
+              <span className="avatar">{initials(user?.name)}</span>
+            )}
+            <span className="side-user-meta">
+              <strong>{user?.name}</strong>
+              <span>{user?.roleLabel || user?.role}</span>
+            </span>
+          </Link>
+          <button type="button" className="side-signout" onClick={handleSignOut}>
+            <IconLogout size={17} />
+            Sign out
+          </button>
+          <p className="sidebar-legal">© {year} Altrium. All rights reserved.</p>
+        </div>
+      </aside>
+
+      {/* Tapping the dimmed page closes the menu on a phone. */}
+      <div className="sidebar-scrim" onClick={() => setMenuOpen(false)} aria-hidden="true" />
+
+      <div className="main">
+        <header className="topbar">
           <button
             type="button"
             className="nav-toggle"
@@ -98,19 +228,30 @@ export default function Layout({ children }) {
             <MenuIcon open={menuOpen} />
           </button>
 
-          <nav className={"nav-links" + (menuOpen ? " is-open" : "")}>
-            {links.map((link) => (
-              <NavLink
-                key={link.to}
-                to={link.to}
-                className={({ isActive }) => "nav-link" + (isActive ? " active" : "")}
-              >
-                {link.label}
-              </NavLink>
-            ))}
-          </nav>
+          <div className="topbar-title">
+            <span className="crumb">Altrium</span>
+            <span className="crumb-sep" aria-hidden="true">
+              /
+            </span>
+            <span>{section}</span>
+          </div>
 
-          <div className="nav-user">
+          {can("candidate:view") && (
+            <form className="topbar-search" role="search" onSubmit={search}>
+              <IconSearch size={16} />
+              <input
+                ref={searchRef}
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search candidates…"
+                aria-label="Search candidates by name or email"
+              />
+              <kbd>Ctrl K</kbd>
+            </form>
+          )}
+
+          <div className="topbar-actions">
             <div className="bell">
               <button
                 type="button"
@@ -119,7 +260,7 @@ export default function Layout({ children }) {
                 aria-expanded={bellOpen}
                 onClick={() => setBellOpen((open) => !open)}
               >
-                <BellIcon />
+                <IconBell />
                 {unread > 0 && <span className="nav-dot">{unread}</span>}
               </button>
 
@@ -161,44 +302,25 @@ export default function Layout({ children }) {
               )}
             </div>
 
-            <Link to="/profile" className="avatar" title="Your profile">
+            <Link to="/profile" className="avatar topbar-avatar" title="Your profile">
               {user?.avatarUrl ? (
                 <img className="avatar" src={user.avatarUrl} alt="" />
               ) : (
                 initials(user?.name)
               )}
             </Link>
-            <div className="nav-user-meta">
-              <strong>{user?.name}</strong>
-              <span>{user?.roleLabel || user?.role}</span>
-            </div>
-            <button className="btn btn-secondary btn-sm" onClick={handleSignOut}>
-              Sign out
-            </button>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {children}
+        <main className="content" id="content" tabIndex={-1}>
+          {children}
+        </main>
 
-      <footer className="footer">
-        © {new Date().getFullYear()} Altrium. All rights reserved.
-      </footer>
+        {/* On a wide screen this line sits at the foot of the sidebar;
+            on a phone the sidebar is tucked away, so it shows here. */}
+        <footer className="footer">© {year} Altrium. All rights reserved.</footer>
+      </div>
     </div>
-  );
-}
-
-function BellIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M12 3a6 6 0 0 0-6 6v3.6l-1.3 2.6A.8.8 0 0 0 5.4 16h13.2a.8.8 0 0 0 .7-1.2L18 12.6V9a6 6 0 0 0-6-6Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinejoin="round"
-      />
-      <path d="M9.5 19a2.5 2.5 0 0 0 5 0" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
   );
 }
 

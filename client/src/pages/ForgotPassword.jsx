@@ -2,9 +2,19 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api.js";
 import { Alert, Field } from "../components/ui.jsx";
+import AuthShell from "../components/AuthShell.jsx";
+import { IconMail } from "../components/icons.jsx";
 
+/**
+ * "Forgot your password?" - asks for the email, and the server emails a
+ * one-time link to choose a new one.
+ *
+ * The answer is the same whether or not the address has an account, so
+ * the form cannot be used to find out who works here.
+ */
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
+  const [sentTo, setSentTo] = useState("");
   const [message, setMessage] = useState("");
   const [devLink, setDevLink] = useState("");
   const [error, setError] = useState("");
@@ -13,14 +23,15 @@ export default function ForgotPassword() {
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
-    setMessage("");
     setDevLink("");
     setBusy(true);
     try {
       const result = await api.forgotPassword({ email });
       setMessage(result.message);
-      // The project has no mail server, so in development the API hands
-      // the link straight back and we show it here.
+      setSentTo(email);
+      // Only on a computer with no email set up: the link comes back to
+      // the page so the flow can still be tried. The live site never
+      // does this - there the email is the only way to the link.
       if (result.devResetUrl) setDevLink(result.devResetUrl);
     } catch (err) {
       setError(err.message);
@@ -29,56 +40,88 @@ export default function ForgotPassword() {
     }
   }
 
-  return (
-    <div className="auth-screen">
-      <div className="auth-card">
+  if (sentTo) {
+    return (
+      <AuthShell>
         <div className="auth-head">
-          <span className="brand">
+          <span className="brand auth-brand-mobile">
             <span className="brand-mark">AL</span>
             Altrium
           </span>
-          <h1>Forgot your password?</h1>
-          <p>Enter your email and we will create a reset link for you.</p>
+          <span className="auth-sent-icon" aria-hidden="true">
+            <IconMail size={26} />
+          </span>
+          <h1>Check your inbox</h1>
+          <p>
+            We sent the request for <strong>{sentTo}</strong>. {message}
+          </p>
         </div>
-
-        <Alert kind="error">{error}</Alert>
-        <Alert kind="success">{message}</Alert>
 
         {devLink && (
           <div className="alert alert-info">
-            <strong>Development mode:</strong> no email server is configured, so use this link
-            directly.
+            <strong>No email could be sent from this computer</strong>, so here is the link:
             <div className="mt-1">
-              <Link className="break" to={devLink.replace(window.location.origin, "")}>
+              <Link className="break" to={devLink.replace(/^https?:\/\/[^/]+/, "")}>
                 {devLink}
               </Link>
             </div>
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
-          <Field label="Email address" htmlFor="email">
-            <input
-              id="email"
-              className="input"
-              type="email"
-              required
-              autoComplete="email"
-              placeholder="you@gmail.com"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </Field>
-
-          <button className="btn btn-primary btn-block" disabled={busy}>
-            {busy ? "Working…" : "Send reset link"}
-          </button>
-        </form>
+        <button
+          type="button"
+          className="btn btn-secondary btn-block"
+          onClick={() => {
+            setSentTo("");
+            setMessage("");
+            setDevLink("");
+          }}
+        >
+          Use a different email
+        </button>
 
         <p className="auth-foot">
           Remembered it? <Link to="/signin">Back to sign in</Link>
         </p>
+      </AuthShell>
+    );
+  }
+
+  return (
+    <AuthShell>
+      <div className="auth-head">
+        <span className="brand auth-brand-mobile">
+          <span className="brand-mark">AL</span>
+          Altrium
+        </span>
+        <h1>Forgot your password?</h1>
+        <p>Enter the email you sign in with and we will email you a link to choose a new one.</p>
       </div>
-    </div>
+
+      <Alert kind="error">{error}</Alert>
+
+      <form onSubmit={handleSubmit}>
+        <Field label="Email address" htmlFor="email">
+          <input
+            id="email"
+            className="input"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="you@hiretrack.lk"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </Field>
+
+        <button className="btn btn-primary btn-block" disabled={busy}>
+          {busy ? "Sending…" : "Email me a reset link"}
+        </button>
+      </form>
+
+      <p className="auth-foot">
+        Remembered it? <Link to="/signin">Back to sign in</Link>
+      </p>
+    </AuthShell>
   );
 }

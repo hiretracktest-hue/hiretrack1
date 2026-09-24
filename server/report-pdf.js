@@ -20,7 +20,7 @@ import { config } from "./config.js";
  * nothing has to be bundled and the file works on any reader.
  */
 
-const AMBER = "#c08400";
+const BRAND = "#4f46e5";
 const INK = "#1e2228";
 const SLATE = "#343f52";
 const BODY = "#60697b";
@@ -31,7 +31,7 @@ const MARGIN = 44;
 
 function header(doc, title, subtitle) {
   // The brand bar, so a printed page is identifiably ours.
-  doc.rect(0, 0, doc.page.width, 6).fill(AMBER);
+  doc.rect(0, 0, doc.page.width, 6).fill(BRAND);
 
   doc
     .fillColor(INK)

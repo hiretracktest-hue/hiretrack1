@@ -12,6 +12,63 @@ import {
   StatusBadge,
   formatDateTime,
 } from "../components/ui.jsx";
+import {
+  IconArrowRight,
+  IconBriefcase,
+  IconCalendar,
+  IconCheck,
+  IconClock,
+  IconFile,
+  IconLayers,
+  IconMail,
+  IconUsers,
+} from "../components/icons.jsx";
+
+/**
+ * Each role opens on its own welcome: what it is here to do, and the
+ * shortcuts it actually uses. Only pages the role can open are offered -
+ * every shortcut is checked against the same permissions as the menu.
+ */
+const WELCOME = {
+  hr: {
+    line: "Open roles, bring candidates in, and keep every interview booked.",
+    actions: [
+      { to: "/vacancies/new", label: "New vacancy", need: "position:create", primary: true },
+      { to: "/candidates", label: "Candidates", need: "candidate:view" },
+      { to: "/interviews", label: "Interviews", need: "interview:view" },
+    ],
+  },
+  hiring_manager: {
+    line: "Read the evidence, compare candidates side by side, and make the call.",
+    actions: [
+      { to: "/candidates", label: "Review candidates", need: "candidate:view", primary: true },
+      { to: "/reports", label: "Reports", need: "report:view" },
+      { to: "/interviews", label: "Interviews", need: "interview:view" },
+    ],
+  },
+  interviewer: {
+    line: "Your interviews, and the feedback you still owe, come first.",
+    actions: [
+      { to: "/interviews", label: "My interviews", need: "interview:view", primary: true },
+      { to: "/candidates?mine=1", label: "My candidates", need: "candidate:view" },
+    ],
+  },
+  management: {
+    line: "The whole hiring picture at a glance - every vacancy, every stage.",
+    actions: [
+      { to: "/reports", label: "Open reports", need: "report:view", primary: true },
+      { to: "/audit", label: "Audit log", need: "audit:view" },
+      { to: "/candidates", label: "Candidates", need: "candidate:view" },
+    ],
+  },
+};
+
+function greeting(date = new Date()) {
+  const hour = date.getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
 
 /**
  * The "live view" the brief asks for: where every candidate is and how
@@ -70,30 +127,45 @@ export default function Dashboard() {
   // interviewer: shown "My next interviews", a "Feedback I still owe"
   // tile, and an interview list filtered down to their own (none).
   const isInterviewer = user?.role === "interviewer";
+  const welcome = WELCOME[user?.role] || WELCOME.management;
+  const shortcuts = welcome.actions.filter((action) => p[action.need]);
 
   return (
     <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Hello, {user?.name?.split(" ")[0]} 👋</h1>
-          <p className="subtitle">
+      <section className="hero" aria-label="Welcome">
+        <div className="hero-glow" aria-hidden="true" />
+        <div className="hero-body">
+          <span className="hero-role">
             {user?.roleLabel}
-            {user?.jobTitle ? " · " + user.jobTitle : ""} — here is where hiring stands today.
-          </p>
+            {user?.jobTitle ? " · " + user.jobTitle : ""}
+          </span>
+          <h1>
+            {greeting()}, {user?.name?.split(" ")[0]}
+          </h1>
+          <p>{welcome.line}</p>
         </div>
-        <div className="btn-row">
-          {p["candidate:view"] && (
-            <Link className="btn btn-secondary" to="/candidates">
-              All candidates
-            </Link>
-          )}
-          {p["position:create"] && (
-            <Link className="btn btn-primary" to="/vacancies/new">
-              + New vacancy
-            </Link>
-          )}
+        <div className="hero-side">
+          <span className="hero-date">
+            {new Date().toLocaleDateString(undefined, {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            })}
+          </span>
+          <div className="hero-actions">
+            {shortcuts.map((action) => (
+              <Link
+                key={action.to}
+                className={"btn " + (action.primary ? "btn-primary" : "btn-glass")}
+                to={action.to}
+              >
+                {action.label}
+                {action.primary && <IconArrowRight size={16} />}
+              </Link>
+            ))}
+          </div>
         </div>
-      </div>
+      </section>
 
       <Alert kind="error" onDismiss={() => setError("")}>
         {error}
@@ -102,24 +174,39 @@ export default function Dashboard() {
       {/* An interviewer cares about their own work first. */}
       {isInterviewer && (
         <div className="grid grid-2 mb-2">
-          <Stat label="My upcoming interviews" value={stats?.myUpcomingInterviews ?? 0} />
-          <Stat label="Feedback I still owe" value={stats?.myOutstandingFeedback ?? 0} />
+          <Stat
+            label="My upcoming interviews"
+            value={stats?.myUpcomingInterviews ?? 0}
+            icon={IconCalendar}
+            tone="blue"
+          />
+          <Stat
+            label="Feedback I still owe"
+            value={stats?.myOutstandingFeedback ?? 0}
+            icon={IconFile}
+            tone="rose"
+          />
         </div>
       )}
 
       <div className="grid grid-4">
-        <Stat label="Vacancies" value={stats?.openVacancies ?? 0} />
-        <Stat label="Candidates" value={stats?.totalCandidates ?? 0} />
-        <Stat label="In progress" value={stats?.activeCandidates ?? 0} />
-        <Stat label="Upcoming interviews" value={stats?.upcomingInterviews ?? 0} />
+        <Stat label="Vacancies" value={stats?.openVacancies ?? 0} icon={IconBriefcase} />
+        <Stat label="Candidates" value={stats?.totalCandidates ?? 0} icon={IconUsers} tone="blue" />
+        <Stat label="In progress" value={stats?.activeCandidates ?? 0} icon={IconLayers} tone="violet" />
+        <Stat
+          label="Upcoming interviews"
+          value={stats?.upcomingInterviews ?? 0}
+          icon={IconCalendar}
+          tone="green"
+        />
       </div>
 
       {p["candidate:band"] && (
         <div className="grid grid-4 mt-2">
-          <Stat label="CVs to screen" value={stats?.awaitingScreening ?? 0} />
-          <Stat label="On hold" value={stats?.onHold ?? 0} />
-          <Stat label="Hired" value={stats?.hired ?? 0} />
-          <Stat label="Emails to send" value={stats?.pendingEmails ?? 0} />
+          <Stat label="CVs to screen" value={stats?.awaitingScreening ?? 0} icon={IconFile} tone="rose" />
+          <Stat label="On hold" value={stats?.onHold ?? 0} icon={IconClock} tone="violet" />
+          <Stat label="Hired" value={stats?.hired ?? 0} icon={IconCheck} tone="green" />
+          <Stat label="Emails to send" value={stats?.pendingEmails ?? 0} icon={IconMail} tone="blue" />
         </div>
       )}
 

@@ -96,53 +96,53 @@ trail worthless — you can see what was done but never who did it.
 
 ## 1b. Visual design
 
-The system is built for Altrium, so it is styled to look like something
-Altrium would run rather than a generic template. The palette and typeface are
-taken from [altrium.io](https://www.altrium.io/):
+The layout follows the pattern of current SaaS dashboards (the reference was
+[Watermelon UI](https://ui.watermelon.sh/home)): a **dark frame** - the sidebar -
+holding a **light, rounded workspace** that scrolls on its own, with the top bar
+and the menu always in reach.
 
-| Token | Value | Where it is used |
+| Part | What it does |
+| --- | --- |
+| Sidebar | Menu in groups (Workspace, Insights, Organisation), each item with an icon. Built from the signed-in person's permissions, so nobody sees a page they cannot open, and an empty group is left out. At the foot: who is signed in, **Sign out**, and "© Altrium. All rights reserved." |
+| Top bar | Breadcrumb, a **candidate search** (Ctrl+K from anywhere, Enter opens the results), the notification bell and the profile. |
+| Dashboard welcome | Different for each role: its own greeting, what the role is there to do, its own shortcuts, and its own accent colour. |
+| Sign-in screens | Split: what Altrium does on the left, the form on the right. |
+
+**Colour.** Indigo is the one brand colour; violet, sky, teal, emerald and rose
+are its matching accents, used for icons, glows and charts - never for body
+text. Each role has its own accent: indigo for HR, violet for the hiring
+manager, teal for interviewers, sky for management.
+
+| Token | Value | |
 | --- | --- | --- |
-| Accent | `#fbb401` | Primary buttons, the current pipeline stage, unread counts |
-| Text on accent | `#1e2228` | Never white — see the note below |
-| Headings | `#1e2228` | |
-| Body text | `#60697b` | |
-| Page background | `#f6f7f9` | |
-| Surface / cards | `#ffffff` | |
-| Borders | `#edf0f5` | |
-| Dark accent | `#8a6300` | The accent when it has to be *text* rather than a fill |
-| Typeface | Cabin | |
+| Brand | `#4f46e5` | Buttons, links, the current stage. Carries **white** text at 6.3:1 |
+| Brand as text | `#3730a3` | 9.9:1 on white |
+| Ink / muted text | `#14161b` / `#5f6675` | 18.1:1 / 5.8:1 on white |
+| Frame | `#0c0d11` | The sidebar and the signed-out brand panel |
+| Typeface | Geist | |
 
-Buttons are full pills at weight 700, which is how altrium.io draws them.
-
-**Why the accent never carries white text.** White on `#fbb401` has a contrast
-ratio of 1.8:1, far below the 4.5:1 WCAG AA needs — it is close to unreadable.
-Altrium themselves put black on the amber, and so do we: `#1e2228` on `#fbb401`
-gives 8.9:1. For the same reason the accent is never used as text at full
-strength; `#8a6300` is used instead, which reaches 5.4:1 on white.
+**Checked, not eyeballed.** Every text colour in the new palette was measured
+against its background, and all pass WCAG AA (4.5:1). Field borders reach 3.1:1,
+so an input's edge is visible, and focus rings are drawn in a pale indigo on the
+dark surfaces. The chart colours - indigo, emerald and an indigo ramp for the CV
+bands - were run through a palette validator for colour-blind separation
+(ΔE 26.4 for deuteranopia; 8 is the target) and contrast against white.
 
 ### Responsive, and how it moves
 
-One stylesheet, four breakpoints, tested at each width rather than assumed:
-
 | Width | What changes |
 | --- | --- |
-| 1024px | Tighter bar and page padding |
-| 820px | The seven nav links collapse behind a menu button; the name beside the avatar goes; stat tiles drop to two across; tables scroll sideways instead of crushing their columns |
-| 560px | Stat tiles go to one; buttons in a row go full width and stack, so they stay tappable |
-| `pointer: coarse` | Small buttons and nav links get bigger targets on a touch screen |
+| over 1024px | Sidebar always shown; the workspace sits inset in the frame |
+| 1024px and under | The sidebar becomes a drawer behind a 44px menu button; while closed it is out of the Tab order too, not just off the screen |
+| 820px | Stat tiles two across; tables scroll sideways rather than crushing their columns; the sign-in brand panel steps aside |
+| 640px | The breadcrumb gives way so the search, the bell and the profile always fit |
+| `pointer: coarse` | Menu items, the bell and small buttons grow to finger-sized targets |
 
-Checked at 375px, 768px and 1440px with no horizontal overflow at any of them —
-a page that scrolls sideways on a phone is the usual giveaway that "responsive"
-was only ever claimed.
-
-Movement is used to explain a change, never for decoration: a screen rises into
-place, stat tiles arrive one after another because the row really is being
-filled in, buttons go down when pressed, and the notification panel grows out of
-the bell that opened it.
-
-**All of it is switched off under `prefers-reduced-motion`.** That is not
-politeness — for people with vestibular disorders, motion they did not ask for
-causes real nausea. Focus outlines are visible for keyboard users too.
+Movement explains a change, never decorates: a screen rises into place, figures
+count up as they arrive, the light behind the welcome and the sign-in panel
+drifts slowly, and panels grow from the control that opened them. **All of it is
+switched off under `prefers-reduced-motion`**, and a **Skip to content** link is
+the first thing a keyboard reaches.
 
 ### Sending to real candidates
 

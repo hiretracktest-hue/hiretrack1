@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
 import {
@@ -75,6 +75,17 @@ export default function Candidates() {
   const [jobs, setJobs] = useState([]);
 
   const [search, setSearch] = useState(searchParams.get("q") || "");
+
+  // The search box in the top bar lands here with what was typed, as
+  // navigation state. Only that is picked up - not this page's own
+  // address-bar updates, which trail a moment behind the typing and
+  // would otherwise snatch letters back out of the box.
+  const location = useLocation();
+  const fromTopBar = location.state?.at;
+  useEffect(() => {
+    if (fromTopBar) setSearch(location.state.search || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromTopBar]);
   const [job, setJob] = useState(searchParams.get("job") || "");
   const [outcome, setOutcome] = useState(searchParams.get("outcome") || "");
   const [band, setBand] = useState(searchParams.get("cvBand") || "");

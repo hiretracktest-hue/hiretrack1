@@ -1,45 +1,88 @@
 /* ===================================================================
-   HireTrack - single stylesheet for the whole React app.
+   Altrium - single stylesheet for the whole React app.
    Plain CSS with custom properties (no framework), so every value is
    easy to explain and change.
+
+   The look: a dark frame - the sidebar - holding a light, rounded
+   workspace, the pattern of modern SaaS dashboards. Indigo is the one
+   brand colour; violet, sky, teal, emerald and rose are its matching
+   accents, used for icons, glows and charts - never for body text.
    =================================================================== */
 
 :root {
-  /* Palette taken from altrium.io - amber accent on a cool grey base.
-     Amber is a FILL colour only: it carries near-black text, never
-     white, because white on #fbb401 is unreadable. --brand-700 is the
-     dark amber used when the brand has to appear as text. */
-  --brand-50: #fff8e8;
-  --brand-100: #fdeec6;
-  --brand-200: #f8dc92;
-  --brand-500: #fbb401;
-  --brand-600: #e0a000;
-  --brand-700: #8a6300;
-  --on-brand: #1e2228;
+  /* Indigo carries WHITE text (6.3:1 at --brand-500). --brand-700 is the
+     deep indigo used when the brand has to appear as text on white. */
+  --brand-50: #eef0ff;
+  --brand-100: #e0e3ff;
+  --brand-200: #c5caff;
+  --brand-500: #4f46e5;
+  --brand-600: #4338ca;
+  --brand-700: #3730a3;
+  --on-brand: #ffffff;
+  --brand-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 52%, #d946ef 100%);
 
-  --ink: #1e2228;
-  --ink-soft: #343f52;
-  --muted: #60697b;
-  --faint: #aab0bc;
-  --line: #edf0f5;
+  --ink: #14161b;
+  --ink-soft: #2f3541;
+  --muted: #5f6675;
+  --faint: #a3aab7;
+  --line: #e8ebf0;
+  --line-strong: #d7dbe3;
+  --input-border: #8b929f;
   --surface: #ffffff;
-  --canvas: #f6f7f9;
+  --canvas: #f5f6f8;
+  --tint: #fafbfc;
 
-  --green-bg: #eaf3ef;
-  --green-fg: #2f6b4f;
-  --amber-bg: #fef3e4;
-  --amber-fg: #8a5a00;
-  --red-bg: #fae6e7;
-  --red-fg: #b03a43;
-  --blue-bg: #eaeef5;
-  --blue-fg: #34506e;
+  /* The frame: the sidebar and everything round the workspace. */
+  --shell: #0c0d11;
+  --shell-raised: #171922;
+  --shell-hover: #1c1f29;
+  --shell-line: rgba(255, 255, 255, 0.07);
+  --shell-text: #eceef4;
+  --shell-muted: #8e94a3;
+  --shell-label: #7d8391;
+
+  /* Status colours - meaning, not decoration. */
+  --green-bg: #e7f6ee;
+  --green-fg: #166a45;
+  --amber-bg: #fdf1e3;
+  --amber-fg: #8a4b00;
+  --red-bg: #fde8ea;
+  --red-fg: #b3243a;
+  --blue-bg: #e6f3fd;
+  --blue-fg: #0b5a8a;
+  --violet-bg: #f1ecff;
+  --violet-fg: #5b2bb5;
+  --rose-bg: #fdebf3;
+  --rose-fg: #9d1b54;
+  --teal-bg: #e2f6f3;
+  --teal-fg: #0f5f58;
+
+  /* Each role's own accent - decoration only (the welcome glow, the
+     marker on the active menu item), so readability never rests on it. */
+  --role: #818cf8;
+  --role-glow: rgba(99, 102, 241, 0.5);
 
   --radius: 12px;
-  --radius-lg: 16px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
   --radius-pill: 999px;
-  --shadow-sm: 0 1px 2px rgba(30, 34, 40, 0.06);
-  --shadow: 0 4px 16px rgba(30, 34, 40, 0.08);
-  --shadow-lg: 0 12px 40px rgba(30, 34, 40, 0.12);
+  --shadow-sm: 0 1px 2px rgba(16, 18, 24, 0.05);
+  --shadow: 0 1px 2px rgba(16, 18, 24, 0.04), 0 8px 24px rgba(16, 18, 24, 0.06);
+  --shadow-lg: 0 2px 6px rgba(16, 18, 24, 0.05), 0 24px 56px rgba(16, 18, 24, 0.16);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.shell[data-role="hiring_manager"] {
+  --role: #c084fc;
+  --role-glow: rgba(168, 85, 247, 0.5);
+}
+.shell[data-role="interviewer"] {
+  --role: #2dd4bf;
+  --role-glow: rgba(20, 184, 166, 0.45);
+}
+.shell[data-role="management"] {
+  --role: #38bdf8;
+  --role-glow: rgba(14, 165, 233, 0.45);
 }
 
 * {
@@ -56,10 +99,16 @@ body {
   margin: 0;
   background: var(--canvas);
   color: var(--ink);
-  font-family: Cabin, "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-family: Geist, Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
   font-size: 15px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--brand-100);
+  color: var(--brand-700);
 }
 
 h1,
@@ -67,17 +116,18 @@ h2,
 h3,
 h4 {
   margin: 0;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 
 h1 {
-  font-size: 1.75rem;
-  font-weight: 700;
+  font-size: 1.85rem;
+  font-weight: 650;
 }
 h2 {
-  font-size: 1.25rem;
-  font-weight: 650;
+  font-size: 1.12rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
 }
 h3 {
   font-size: 1rem;
@@ -96,37 +146,45 @@ a:hover {
   text-decoration: underline;
 }
 
-/* --- layout ------------------------------------------------------- */
-.app {
-  display: flex;
-  min-height: 100%;
-  flex-direction: column;
+/* Figures line up in columns. */
+td,
+.stat-value,
+.cell-sub {
+  font-variant-numeric: tabular-nums;
 }
 
-.navbar {
+/* --- the frame: sidebar and workspace -------------------------------- */
+.shell {
+  display: grid;
+  grid-template-columns: 256px minmax(0, 1fr);
+  min-height: 100vh;
+  background: var(--shell);
+}
+
+.sidebar {
   position: sticky;
   top: 0;
-  z-index: 20;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 18px 12px 14px;
+  color: var(--shell-text);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #2b2f3a transparent;
 }
 
-.navbar-inner {
-  max-width: 1160px;
-  margin: 0 auto;
-  padding: 0 24px;
-  height: 62px;
-  display: flex;
-  align-items: center;
-  gap: 28px;
+.sidebar-head {
+  padding: 2px 6px;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   font-weight: 700;
-  font-size: 1.05rem;
+  font-size: 1.02rem;
   color: var(--ink);
 }
 .brand:hover {
@@ -134,46 +192,277 @@ a:hover {
 }
 
 .brand-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, var(--brand-500), #fdc93b);
-  color: var(--on-brand);
-  font-size: 0.85rem;
-  font-weight: 700;
+  background: var(--brand-gradient);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 6px 18px rgba(99, 102, 241, 0.35);
+  flex: none;
 }
 
-.nav-links {
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.brand-text strong {
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.brand-text span {
+  font-size: 0.74rem;
+  font-weight: 500;
+  opacity: 0.62;
+}
+.brand-on-dark {
+  color: var(--shell-text);
+}
+
+.side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  flex: 1;
+}
+.side-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.side-group-label {
+  padding: 0 10px 6px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--shell-label);
+}
+
+.side-link {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
-  flex: 1;
-  flex-wrap: wrap;
-}
-
-.nav-link {
-  padding: 7px 12px;
-  border-radius: 8px;
-  color: var(--ink-soft);
+  gap: 11px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  color: #b9bdc8;
+  font-size: 0.9rem;
   font-weight: 500;
-  font-size: 0.92rem;
+  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
 }
-.nav-link:hover {
-  background: var(--brand-50);
-  color: var(--brand-700);
+.side-link svg {
+  flex: none;
+  opacity: 0.85;
+  transition: color 0.16s ease, opacity 0.16s ease;
+}
+.side-link:hover {
+  background: var(--shell-hover);
+  color: var(--shell-text);
   text-decoration: none;
 }
-.nav-link.active {
-  background: var(--brand-100);
-  color: var(--brand-700);
+.side-link:hover svg {
+  opacity: 1;
+}
+.side-link.active {
+  background: var(--shell-raised);
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px var(--shell-line);
+}
+.side-link.active svg {
+  color: var(--role);
+  opacity: 1;
+}
+/* A lit edge on the page you are on, in the colour of your role. */
+.side-link.active::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--role);
+  box-shadow: 0 0 14px var(--role-glow);
 }
 
-.nav-user {
+.sidebar-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--shell-line);
+}
+
+.side-user {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 12px;
+  color: var(--shell-text);
+  min-width: 0;
+}
+.side-user:hover {
+  background: var(--shell-hover);
+  text-decoration: none;
+}
+.side-user .avatar {
+  background: var(--brand-gradient);
+  color: #ffffff;
+}
+.side-user-meta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  min-width: 0;
+}
+.side-user-meta strong {
+  font-size: 0.86rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.side-user-meta span {
+  font-size: 0.74rem;
+  color: var(--shell-muted);
+}
+
+.side-signout {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--shell-line);
+  background: transparent;
+  color: #b9bdc8;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+.side-signout:hover {
+  background: var(--shell-hover);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.sidebar-legal {
+  padding: 4px 8px 0;
+  font-size: 0.7rem;
+  color: var(--shell-label);
+}
+
+.sidebar-scrim {
+  display: none;
+}
+
+/* The workspace: a light panel set into the frame, scrolling on its own
+   so the frame and the top bar stay put. */
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: calc(100vh - 20px);
+  margin: 10px 10px 10px 0;
+  overflow-y: auto;
+  background: var(--canvas);
+  border-radius: 22px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 62px;
+  padding: 10px 24px;
+  background: rgba(245, 246, 248, 0.82);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  backdrop-filter: saturate(160%) blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar-title {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.topbar-title .crumb {
+  color: var(--muted);
+  font-weight: 500;
+}
+.topbar-title .crumb-sep {
+  color: var(--faint);
+}
+
+.topbar-search {
+  flex: 0 1 380px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 8px 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--muted);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+.topbar-search:focus-within {
+  border-color: var(--brand-500);
+  box-shadow: 0 0 0 4px var(--brand-100);
+}
+.topbar-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 0.88rem;
+  color: var(--ink);
+}
+.topbar-search input::placeholder {
+  color: var(--muted);
+}
+.topbar-search kbd {
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .avatar {
@@ -189,25 +478,24 @@ a:hover {
   object-fit: cover;
   flex: none;
 }
+.topbar-avatar {
+  background: var(--brand-gradient);
+  color: #ffffff;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--line);
+}
+.topbar-avatar:hover {
+  text-decoration: none;
+}
 
-.nav-user-meta {
-  line-height: 1.2;
-}
-.nav-user-meta strong {
-  display: block;
-  font-size: 0.86rem;
-  font-weight: 600;
-}
-.nav-user-meta span {
-  font-size: 0.74rem;
-  color: var(--muted);
+.content {
+  flex: 1;
 }
 
 .page {
-  max-width: 1160px;
+  max-width: 1200px;
   width: 100%;
   margin: 0 auto;
-  padding: 32px 24px 72px;
+  padding: 30px 28px 64px;
   flex: 1;
 }
 
@@ -217,22 +505,22 @@ a:hover {
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  margin-bottom: 22px;
+  margin-bottom: 24px;
 }
 
 .page-head .subtitle {
   color: var(--muted);
-  margin-top: 4px;
-  font-size: 0.94rem;
+  margin-top: 6px;
+  font-size: 0.95rem;
 }
 
+/* On a wide screen the legal line sits at the foot of the sidebar. */
 .footer {
-  border-top: 1px solid var(--line);
-  background: var(--surface);
-  padding: 18px 24px;
+  display: none;
+  padding: 18px 24px 22px;
   text-align: center;
   color: var(--muted);
-  font-size: 0.83rem;
+  font-size: 0.8rem;
 }
 
 /* --- cards and panels --------------------------------------------- */
@@ -286,25 +574,67 @@ a:hover {
 
 /* --- stat tiles ---------------------------------------------------- */
 .stat {
+  --tone-bg: var(--brand-50);
+  --tone-fg: var(--brand-700);
+  position: relative;
+  overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 16px 18px;
+  border-radius: var(--radius-lg);
+  padding: 16px 18px 18px;
   box-shadow: var(--shadow-sm);
 }
+/* A soft light in the tile's own colour, top right. */
+.stat::after {
+  content: "";
+  position: absolute;
+  right: -46px;
+  top: -46px;
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--tone-bg) 0%, transparent 70%);
+  pointer-events: none;
+}
+.stat-top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
 .stat-label {
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: 0.82rem;
+  font-weight: 500;
   color: var(--muted);
-  font-weight: 600;
+}
+.stat-icon {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--tone-bg);
+  color: var(--tone-fg);
 }
 .stat-value {
-  font-size: 1.9rem;
-  font-weight: 700;
-  margin-top: 4px;
-  letter-spacing: -0.02em;
+  position: relative;
+  z-index: 1;
+  font-size: 2rem;
+  font-weight: 650;
+  margin-top: 10px;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
 }
+.stat-brand { --tone-bg: var(--brand-50); --tone-fg: var(--brand-700); }
+.stat-blue { --tone-bg: var(--blue-bg); --tone-fg: var(--blue-fg); }
+.stat-violet { --tone-bg: var(--violet-bg); --tone-fg: var(--violet-fg); }
+.stat-green { --tone-bg: var(--green-bg); --tone-fg: var(--green-fg); }
+.stat-rose { --tone-bg: var(--rose-bg); --tone-fg: var(--rose-fg); }
+.stat-teal { --tone-bg: var(--teal-bg); --tone-fg: var(--teal-fg); }
+.stat-amber { --tone-bg: var(--amber-bg); --tone-fg: var(--amber-fg); }
 
 /* --- buttons ------------------------------------------------------- */
 .btn {
@@ -317,9 +647,8 @@ a:hover {
   padding: 9px 18px;
   font: inherit;
   font-size: 0.9rem;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
   white-space: nowrap;
 }
 .btn:disabled {
@@ -331,17 +660,20 @@ a:hover {
 }
 
 .btn-primary {
-  background: var(--brand-500);
+  background: linear-gradient(180deg, #5a52ea 0%, var(--brand-500) 100%);
+  border-color: var(--brand-600);
   color: var(--on-brand);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 1px 2px rgba(16, 18, 24, 0.12);
 }
 .btn-primary:hover:not(:disabled) {
-  background: var(--brand-600);
+  background: linear-gradient(180deg, var(--brand-500) 0%, var(--brand-600) 100%);
 }
 
 .btn-secondary {
   background: var(--surface);
-  border-color: var(--line);
+  border-color: var(--line-strong);
   color: var(--ink-soft);
+  box-shadow: var(--shadow-sm);
 }
 .btn-secondary:hover:not(:disabled) {
   border-color: var(--brand-200);
@@ -354,7 +686,7 @@ a:hover {
   color: var(--red-fg);
 }
 .btn-danger:hover:not(:disabled) {
-  background: #f5d7d9;
+  background: #fbd9dd;
 }
 
 .btn-ghost {
@@ -364,6 +696,20 @@ a:hover {
 .btn-ghost:hover:not(:disabled) {
   background: var(--brand-50);
   color: var(--brand-700);
+}
+
+/* On the dark welcome panel: frosted, not white. */
+.btn-glass {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.btn-glass:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.26);
+  color: #ffffff;
 }
 
 .btn-block {
@@ -376,7 +722,7 @@ a:hover {
 
 .btn-google {
   background: var(--surface);
-  border-color: var(--line);
+  border-color: var(--line-strong);
   color: var(--ink);
   width: 100%;
 }
@@ -429,8 +775,8 @@ a:hover {
 .select,
 .textarea {
   width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: 1px solid var(--input-border);
+  border-radius: 11px;
   padding: 10px 12px;
   font: inherit;
   font-size: 0.92rem;
@@ -444,7 +790,7 @@ a:hover {
 .textarea:focus {
   outline: none;
   border-color: var(--brand-500);
-  box-shadow: 0 0 0 3px var(--brand-100);
+  box-shadow: 0 0 0 4px var(--brand-100);
 }
 
 .textarea {
@@ -581,15 +927,15 @@ thead th {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
-  font-weight: 650;
-  padding: 12px 18px;
+  font-weight: 600;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--line);
-  background: #fafbfc;
+  background: var(--tint);
   white-space: nowrap;
 }
 
 tbody td {
-  padding: 14px 18px;
+  padding: 13px 14px;
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
 }
@@ -712,15 +1058,190 @@ tbody tr:hover {
   border-bottom: none;
 }
 
-/* --- auth screens ---------------------------------------------------- */
+/* --- signed-out screens -------------------------------------------- */
+/* Sign in, forgot password, new password: the product on the left, the
+   form on the right. */
+.auth-split {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  background: var(--shell);
+}
+
+.auth-brand {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 40px;
+  padding: 36px 48px;
+  color: var(--shell-text);
+  background:
+    radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px) 0 0 / 22px 22px,
+    var(--shell);
+}
+.auth-brand > * {
+  position: relative;
+}
+
+/* Slow-moving light: indigo, violet and sky, drifting. */
+.auth-glow {
+  position: absolute !important;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(40% 45% at 18% 88%, rgba(99, 102, 241, 0.55) 0%, transparent 70%),
+    radial-gradient(35% 40% at 82% 18%, rgba(168, 85, 247, 0.4) 0%, transparent 70%),
+    radial-gradient(30% 35% at 70% 78%, rgba(14, 165, 233, 0.3) 0%, transparent 70%);
+  filter: blur(8px);
+  animation: aurora 16s ease-in-out infinite alternate;
+}
+
+.auth-pitch {
+  max-width: 470px;
+}
+.auth-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #c7cbff;
+  background: rgba(99, 102, 241, 0.14);
+  border: 1px solid rgba(129, 140, 248, 0.28);
+}
+.auth-pitch h2 {
+  margin-top: 18px;
+  font-size: clamp(1.7rem, 2.6vw, 2.35rem);
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+  font-weight: 650;
+  color: #ffffff;
+}
+
+.auth-track {
+  list-style: none;
+  padding: 0;
+  margin: 28px 0 0;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.auth-track li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--shell-line);
+  font-size: 0.8rem;
+  color: #cdd0d8;
+  animation: rise 0.5s var(--ease) both;
+  animation-delay: calc(0.2s + var(--i) * 0.14s);
+}
+.auth-track-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4a4f5c;
+}
+.auth-track li:last-child .auth-track-dot {
+  background: #34d399;
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.9);
+}
+
+.auth-points {
+  list-style: none;
+  padding: 0;
+  margin: 30px 0 0;
+  display: grid;
+  gap: 18px;
+}
+.auth-points li {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.auth-point-icon {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  color: #c7cbff;
+  background: rgba(99, 102, 241, 0.14);
+  border: 1px solid rgba(129, 140, 248, 0.25);
+}
+.auth-points li > span:last-child {
+  color: var(--shell-muted);
+  font-size: 0.89rem;
+  line-height: 1.5;
+}
+.auth-points strong {
+  display: block;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 0.96rem;
+  margin-bottom: 2px;
+}
+
+.auth-legal {
+  font-size: 0.74rem;
+  color: var(--shell-label);
+}
+.auth-legal-mobile {
+  display: none;
+}
+
+.auth-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 40px 24px;
+  background: var(--canvas);
+  border-radius: 28px 0 0 28px;
+}
+.auth-split .auth-card {
+  max-width: 420px;
+}
+.auth-split .auth-head {
+  text-align: left;
+}
+.auth-brand-mobile {
+  display: none;
+}
+
+.auth-sent-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: inline-grid;
+  place-items: center;
+  margin-bottom: 16px;
+  color: #ffffff;
+  background: var(--brand-gradient);
+  box-shadow: 0 10px 26px rgba(99, 102, 241, 0.35);
+}
+
+/* The invitation page, and anything else still on the single-card
+   layout: the card centred on a soft wash of the brand colours. */
 .auth-screen {
   min-height: 100vh;
   display: grid;
   place-items: center;
   padding: 32px 20px;
   background:
-    radial-gradient(circle at 15% 15%, #fdf0d3 0%, transparent 45%),
-    radial-gradient(circle at 85% 80%, #e9edf3 0%, transparent 45%),
+    radial-gradient(circle at 12% 12%, rgba(99, 102, 241, 0.16) 0%, transparent 42%),
+    radial-gradient(circle at 88% 85%, rgba(14, 165, 233, 0.14) 0%, transparent 42%),
     var(--canvas);
 }
 
@@ -729,7 +1250,7 @@ tbody tr:hover {
   max-width: 430px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: var(--radius-xl);
   padding: 34px;
   box-shadow: var(--shadow-lg);
 }
@@ -738,14 +1259,17 @@ tbody tr:hover {
   text-align: center;
   margin-bottom: 26px;
 }
+.auth-head h1 {
+  font-size: 1.65rem;
+}
 .auth-head .brand {
   justify-content: center;
   margin-bottom: 14px;
 }
 .auth-head p {
   color: var(--muted);
-  margin-top: 6px;
-  font-size: 0.92rem;
+  margin-top: 8px;
+  font-size: 0.93rem;
 }
 
 .auth-foot {
@@ -785,9 +1309,32 @@ tbody tr:hover {
 }
 
 .loading {
-  padding: 46px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 20px;
   color: var(--muted);
+  font-size: 0.92rem;
+}
+.loading-dots {
+  display: inline-flex;
+  gap: 5px;
+}
+.loading-dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--brand-500);
+  animation: blink 1s ease-in-out infinite;
+}
+.loading-dots i:nth-child(2) {
+  background: #8b5cf6;
+  animation-delay: 0.15s;
+}
+.loading-dots i:nth-child(3) {
+  background: #0ea5e9;
+  animation-delay: 0.3s;
 }
 
 .muted {
@@ -833,8 +1380,8 @@ tbody tr:hover {
   display: flex;
   flex-direction: column;
   background:
-    radial-gradient(circle at 12% 0%, #fdf0d3 0%, transparent 42%),
-    radial-gradient(circle at 88% 8%, #e9edf3 0%, transparent 40%),
+    radial-gradient(circle at 12% 0%, rgba(99, 102, 241, 0.14) 0%, transparent 42%),
+    radial-gradient(circle at 88% 8%, rgba(14, 165, 233, 0.12) 0%, transparent 40%),
     var(--canvas);
 }
 .public-bar {
@@ -918,17 +1465,20 @@ tbody tr:hover {
 }
 
 .nav-dot {
-  display: inline-block;
-  min-width: 18px;
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 19px;
+  height: 19px;
   padding: 0 5px;
-  margin-left: 6px;
   border-radius: 999px;
-  background: var(--brand-500);
-  color: var(--on-brand);
-  font-size: 0.7rem;
+  background: linear-gradient(135deg, #ec4899, #8b5cf6);
+  color: #ffffff;
+  font-size: 0.68rem;
   font-weight: 700;
+  line-height: 15px;
   text-align: center;
-  line-height: 18px;
+  border: 2px solid var(--canvas);
 }
 
 .unread-dot {
@@ -1007,15 +1557,18 @@ tbody tr:hover {
   position: relative;
 }
 .bell-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-pill);
-  padding: 6px 8px;
-  color: var(--muted);
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink-soft);
   cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
 }
 .bell-button:hover,
 .bell-button[aria-expanded="true"] {
@@ -1026,11 +1579,11 @@ tbody tr:hover {
 .bell-panel {
   position: absolute;
   right: 0;
-  top: calc(100% + 8px);
-  width: min(360px, calc(100vw - 32px));
+  top: calc(100% + 10px);
+  width: min(380px, calc(100vw - 32px));
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   z-index: 40;
   overflow: hidden;
@@ -1184,9 +1737,9 @@ tbody tr:hover {
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
 .stat:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   box-shadow: var(--shadow);
-  border-color: var(--brand-200);
+  border-color: var(--line-strong);
 }
 
 /* A button should feel like it went down when you pressed it. */
@@ -1198,7 +1751,7 @@ tbody tr:hover {
   transform: translateY(1px);
 }
 .btn-primary:hover:not(:disabled) {
-  box-shadow: 0 4px 14px rgba(251, 180, 1, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 6px 18px rgba(79, 70, 229, 0.35);
 }
 
 /* Rows lift very slightly under the cursor so it is obvious which one
@@ -1207,9 +1760,6 @@ tbody tr {
   transition: background 0.14s ease;
 }
 
-.nav-link {
-  transition: background 0.15s ease, color 0.15s ease;
-}
 
 /* The bell panel grows out of the bell. */
 .bell-panel {
@@ -1242,10 +1792,15 @@ textarea:focus-visible,
 
 .nav-toggle {
   display: none;
-  background: transparent;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 8px 9px;
+  border-radius: 12px;
+  padding: 0;
   cursor: pointer;
   color: var(--ink);
   line-height: 0;
@@ -1290,73 +1845,76 @@ textarea:focus-visible,
    Screens narrower than a laptop
    =================================================================== */
 
-/* Tablets and small laptops. */
+/* Tablets and small laptops: the sidebar tucks away behind the menu
+   button and slides in over the page when asked for. */
 @media (max-width: 1024px) {
-  .navbar-inner {
-    padding: 0 16px;
-    gap: 16px;
+  .shell {
+    display: block;
+    background: var(--canvas);
+  }
+
+  .sidebar {
+    position: fixed;
+    z-index: 60;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 276px;
+    height: 100%;
+    background: var(--shell);
+    transform: translateX(-102%);
+    visibility: hidden;
+    transition: transform 0.3s var(--ease), visibility 0s linear 0.3s;
+    box-shadow: 0 0 48px rgba(0, 0, 0, 0.4);
+  }
+  .shell.menu-open .sidebar {
+    transform: none;
+    visibility: visible;
+    transition: transform 0.3s var(--ease);
+  }
+
+  .sidebar-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(8, 9, 12, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  .shell.menu-open .sidebar-scrim {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* The workspace fills the screen and the page scrolls normally. */
+  .main {
+    margin: 0;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .nav-toggle {
+    display: inline-flex;
+  }
+  .topbar {
+    padding: 10px 16px;
+    gap: 10px;
+  }
+  .footer {
+    display: block;
   }
   .page {
-    padding: 26px 16px 60px;
-  }
-  .nav-link {
-    padding: 7px 9px;
-    font-size: 0.88rem;
+    padding: 24px 18px 52px;
   }
 }
 
-/* Phones and small tablets: the nav collapses. */
+/* Phones and small tablets. */
 @media (max-width: 820px) {
-  .nav-toggle {
-    display: inline-flex;
-    order: 3;
-  }
-
-  .navbar-inner {
-    flex-wrap: wrap;
-    height: auto;
-    min-height: 58px;
-    padding: 9px 14px;
-    gap: 10px;
-  }
-
-  .brand {
-    order: 1;
-    margin-right: auto;
-  }
-  .nav-user {
-    order: 2;
-    gap: 8px;
-  }
-
-  /* The links become a full-width panel under the bar. */
-  .nav-links {
-    order: 4;
-    flex-basis: 100%;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 2px;
-    display: none;
-    padding: 6px 0 4px;
-    border-top: 1px solid var(--line);
-    margin-top: 4px;
-  }
-  .nav-links.is-open {
-    display: flex;
-    animation: rise 0.2s ease-out both;
-  }
-  .nav-link {
-    padding: 11px 12px;
-    font-size: 0.95rem;
-    border-radius: 10px;
-  }
-
-  /* The name beside the avatar is the first thing to go - the avatar
-     and the bell still say who you are and what is waiting. */
-  .nav-user-meta {
-    display: none;
-  }
-
   .page-head {
     flex-direction: column;
     align-items: stretch;
@@ -1369,7 +1927,7 @@ textarea:focus-visible,
     padding: 17px;
   }
   .stat-value {
-    font-size: 1.55rem;
+    font-size: 1.6rem;
   }
 
   /* Two tiles across reads better than one tall column of eight. */
@@ -1379,14 +1937,56 @@ textarea:focus-visible,
     gap: 12px;
   }
 
+  .topbar-search kbd {
+    display: none;
+  }
+
   .bell-panel {
-    /* Anchored to the right edge of the screen, not the button, or it
-       hangs off the side on a narrow phone. */
+    /* Anchored to the screen, not the button, or it hangs off the side
+       of a narrow phone. */
     position: fixed;
-    top: 62px;
+    top: 66px;
     right: 10px;
     left: 10px;
     width: auto;
+  }
+
+  .auth-split {
+    grid-template-columns: 1fr;
+  }
+  .auth-brand {
+    display: none;
+  }
+  .auth-main {
+    min-height: 100vh;
+    border-radius: 0;
+    background:
+      radial-gradient(circle at 10% 0%, rgba(99, 102, 241, 0.16) 0%, transparent 45%),
+      radial-gradient(circle at 95% 100%, rgba(14, 165, 233, 0.12) 0%, transparent 45%),
+      var(--canvas);
+  }
+  .auth-brand-mobile {
+    display: flex;
+    justify-content: flex-start !important;
+  }
+  .auth-legal-mobile {
+    display: block;
+    color: var(--muted);
+  }
+}
+
+/* The search box needs the room more than the page name does. */
+@media (max-width: 640px) {
+  .topbar-title {
+    display: none;
+  }
+  /* Grow into the free space, but give way before the bell and the
+     avatar do - they must always fit. */
+  .topbar-search {
+    flex: 1 1 0;
+  }
+  .topbar-actions {
+    flex: none;
   }
 }
 
@@ -1450,8 +2050,17 @@ textarea:focus-visible,
   .btn-sm {
     padding: 9px 14px;
   }
-  .nav-link {
+  .side-link {
+    min-height: 44px;
     padding: 11px 12px;
+  }
+  .bell-button {
+    width: 44px;
+    height: 44px;
+  }
+  .topbar-avatar {
+    width: 40px;
+    height: 40px;
   }
 }
 
@@ -1960,4 +2569,169 @@ tr.is-selected td {
   .stage-dot:not(:last-child)::after {
     display: none;
   }
+}
+
+/* ===================================================================
+   The dashboard welcome
+   -------------------------------------------------------------------
+   Every role opens on its own: a dark panel lit in that role's colour,
+   what the role is here to do, and its shortcuts.
+   =================================================================== */
+.hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 30px 32px;
+  margin-bottom: 22px;
+  border-radius: var(--radius-xl);
+  color: #ffffff;
+  background:
+    radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px) 0 0 / 20px 20px,
+    linear-gradient(135deg, #0f1118 0%, #171a24 100%);
+  box-shadow: var(--shadow);
+  animation: rise 0.45s var(--ease) both;
+}
+.hero > * {
+  position: relative;
+}
+.hero-glow {
+  position: absolute !important;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(45% 80% at 88% 0%, var(--role-glow) 0%, transparent 70%),
+    radial-gradient(35% 70% at 62% 120%, rgba(99, 102, 241, 0.35) 0%, transparent 70%);
+  animation: aurora 18s ease-in-out infinite alternate;
+}
+.hero-body {
+  max-width: 640px;
+}
+.hero-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #dfe2ea;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.hero-role::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--role);
+  box-shadow: 0 0 10px var(--role-glow);
+}
+.hero h1 {
+  margin-top: 14px;
+  font-size: clamp(1.6rem, 2.4vw, 2.1rem);
+  color: #ffffff;
+}
+.hero p {
+  margin-top: 8px;
+  color: #b7bcc8;
+  font-size: 0.98rem;
+}
+.hero-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 14px;
+}
+.hero-date {
+  font-size: 0.82rem;
+  color: #9ea4b1;
+}
+.hero-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 820px) {
+  .hero {
+    padding: 22px 20px;
+  }
+  .hero-side {
+    align-items: flex-start;
+  }
+  .hero-actions {
+    justify-content: flex-start;
+  }
+}
+
+@keyframes aurora {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.85;
+  }
+  to {
+    transform: translate3d(-4%, 3%, 0) scale(1.08);
+    opacity: 1;
+  }
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+/* Cards settle in one after another rather than all at once. */
+.grid > .card,
+.grid-sidebar > div > .card {
+  animation: rise 0.4s var(--ease) both;
+}
+.grid > .card:nth-child(2),
+.grid-sidebar > div > .card:nth-child(2) {
+  animation-delay: 0.06s;
+}
+
+/* ===================================================================
+   Keyboard
+   =================================================================== */
+
+/* Hidden until a keyboard lands on it, then it is the first thing seen. */
+.skip-link {
+  position: fixed;
+  left: 16px;
+  top: 12px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: var(--brand-500);
+  color: #ffffff;
+  font-weight: 600;
+  transform: translateY(-160%);
+  transition: transform 0.18s var(--ease);
+}
+.skip-link:focus {
+  transform: none;
+  text-decoration: none;
+}
+.content:focus {
+  outline: none;
+}
+
+/* On the dark surfaces the indigo ring is too close to the background,
+   so there it is drawn in a pale indigo - 11:1 instead of 3:1. */
+.sidebar :focus-visible,
+.hero :focus-visible,
+.auth-brand :focus-visible {
+  outline-color: #a5b4fc;
 }
