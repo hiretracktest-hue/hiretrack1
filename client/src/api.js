@@ -108,6 +108,7 @@ export const api = {
   notifications: () => request("/notifications"),
   markNotificationRead: (id) => request("/notifications/" + id + "/read", { method: "POST" }),
   markAllNotificationsRead: () => request("/notifications/read-all", { method: "POST" }),
+  clearNotifications: () => request("/notifications", { method: "DELETE" }),
   outbox: (params = {}) => request("/notifications/outbox" + query(params)),
   markEmailSent: (id) => request("/notifications/outbox/" + id + "/sent", { method: "POST" }),
   // Really send it, when a mail server is configured.

@@ -93,6 +93,22 @@ router.post(
   })
 );
 
+// --- Clear my notifications ---------------------------------------------
+// Empties the list behind the bell - the caller's own, and in-app ones
+// only. The candidate email outbox is a record HR works from, and
+// somebody else's notifications are theirs; neither is touched here.
+router.delete(
+  "/",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const cleared = await run(
+      "DELETE FROM notifications WHERE channel = 'IN_APP' AND user_id = $1",
+      [req.user.id]
+    );
+    res.json({ ok: true, cleared });
+  })
+);
+
 // --- The candidate email outbox -----------------------------------------
 router.get(
   "/outbox",

@@ -25,3 +25,6 @@ Thumbs.db
 *.rar
 *.zip
 *.7z
+
+# secrets kept on this computer only - never pushed
+smtpkey.txt

@@ -1310,6 +1310,36 @@ describe("AUTH-01 and COM-02 - a real email on each account", () => {
   });
 });
 
+describe("COM-02 - clearing the notification list", () => {
+  test("Clear all empties my own list - nobody else's, and never the email outbox", async () => {
+    const me = await userId("interviewer@example.com");
+    const count = async (sql, params = []) => (await one(sql, params)).n;
+    const mine = () =>
+      count("SELECT COUNT(*)::int AS n FROM notifications WHERE channel = 'IN_APP' AND user_id = $1", [me]);
+    const others = () =>
+      count("SELECT COUNT(*)::int AS n FROM notifications WHERE channel = 'IN_APP' AND user_id <> $1", [me]);
+    const outbox = () => count("SELECT COUNT(*)::int AS n FROM notifications WHERE channel <> 'IN_APP'");
+
+    assert.ok((await mine()) > 0, "the interviewer has bookings to be told about by now");
+    const othersBefore = await others();
+    const outboxBefore = await outbox();
+
+    await signIn("interviewer@example.com");
+    assert.equal((await call("DELETE", "/api/notifications")).status, 200);
+    const after = await call("GET", "/api/notifications");
+    assert.equal(after.data.notifications.length, 0);
+    assert.equal(after.data.unread, 0);
+
+    assert.equal(await others(), othersBefore, "nobody else's list changed");
+    assert.equal(await outbox(), outboxBefore, "the candidate email outbox is untouched");
+  });
+
+  test("clearing needs a sign-in", async () => {
+    cookie = "";
+    assert.equal((await call("DELETE", "/api/notifications")).status, 401);
+  });
+});
+
 describe("AUTH-01 and COM-01 - who logs in, what each role can do", () => {
   let jobId;
   let mayaId;

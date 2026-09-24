@@ -1577,6 +1577,11 @@ tbody tr:hover {
   padding: 10px 14px;
   border-bottom: 1px solid var(--line);
 }
+.bell-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
 .bell-empty {
   margin: 0;
   padding: 18px 14px;

@@ -136,6 +136,11 @@ export default function Layout({ children }) {
     await loadNotifications();
   }
 
+  async function clearAll() {
+    await api.clearNotifications().catch(() => {});
+    await loadNotifications();
+  }
+
   async function handleSignOut() {
     await signOut();
     navigate("/signin", { replace: true });
@@ -268,11 +273,18 @@ export default function Layout({ children }) {
                 <div className="bell-panel">
                   <div className="bell-head">
                     <strong>Notifications</strong>
-                    {unread > 0 && (
-                      <button className="btn btn-ghost btn-sm" onClick={markAllRead}>
-                        Mark all read
-                      </button>
-                    )}
+                    <div className="bell-actions">
+                      {unread > 0 && (
+                        <button className="btn btn-ghost btn-sm" onClick={markAllRead}>
+                          Mark all read
+                        </button>
+                      )}
+                      {notifications.length > 0 && (
+                        <button className="btn btn-ghost btn-sm" onClick={clearAll}>
+                          Clear all
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {notifications.length === 0 ? (

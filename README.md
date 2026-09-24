@@ -15,7 +15,7 @@ Built for our second year, second semester group project.
 | Back end | Node.js + Express (REST API) |
 | Database | **PostgreSQL on Supabase**, accessed with `pg` (node-postgres) — 9 tables |
 | Auth | Email + password (bcrypt), JWT in an httpOnly cookie, optional Google sign-in |
-| Tests | Node's built-in test runner — 178 API tests |
+| Tests | Node's built-in test runner — 190 API tests |
 
 > **This is an internal system.** The people who log in are HR, hiring managers,
 > interviewers and management. **Job candidates do not have accounts** — HR adds
@@ -88,7 +88,7 @@ trail worthless — you can see what was done but never who did it.
 | `npm run dev` | Run the API and the React dev server together |
 | `npm run build` | Build the React app into `client/dist` |
 | `npm start` | Run the API, serving the built React app too |
-| `npm test` | Run the 178 automated API tests |
+| `npm test` | Run the 190 automated API tests |
 | `npm run seed` | Add any missing demo data (safe to re-run) |
 | `npm run seed:reset` | Empty every table, then seed from scratch |
 
@@ -512,7 +512,7 @@ our web/
 │   │   ├── notifications.routes.js in-app notifications + candidate outbox
 │   │   ├── reports.routes.js       management reports + CSV export
 │   │   └── team.routes.js          who logs in, roles, dashboard counts
-│   └── tests/api.test.js   178 automated tests
+│   └── tests/api.test.js   190 automated tests
 │
 └── client/                 React front end
     ├── index.html
@@ -600,20 +600,20 @@ checklist against the plan, and a failing test names the story it breaks.
 
 | Sprint 1 | Tests | Sprint 2 | Tests |
 | --- | --: | --- | --: |
-| `AUTH-01` Log in securely | 23 | `JOB-03` Close a job opening | 5 |
+| `AUTH-01` Log in securely | 33 | `JOB-03` Close a job opening | 5 |
 | `JOB-01` Create a job position | 4 | `CAN-05` Reuse a profile and CV on a second position | 4 |
 | `JOB-02` Edit or close a job position | 5 | `WF-02` Blocked until the stage's feedback is in | 16 |
 | `CAN-01` Add candidate information | 21 | `FB-02` Interviewer sees Hired / Rejected / On hold | 4 |
 | `CAN-02` Upload a candidate's CV | 21 | `FB-03` All feedback, compared side by side | 9 |
 | `CAN-03` Search and filter candidates | 12 | `COM-01` Hire-confirmation email | 10 |
-| `WF-01` Configure interview stages | 4 | `COM-02` Interviewer notified when assigned | 25 |
+| `WF-01` Configure interview stages | 4 | `COM-02` Interviewer notified when assigned | 34 |
 | `INT-01` Schedule interviews | 38 | `RPT-01` Dashboard with KPIs | 13 |
 | `CAN-04` Move on or reject | 10 | `RPT-02` Export as CSV and PDF | 11 |
 | `FB-01` Structured feedback, score per stage | 18 | `AUD-01` Audit log | 7 |
 
 **20 of 20 stories have automated evidence.** A test can count towards more than
 one story when it proves both — the audit test that deletes a candidate is
-evidence for `AUD-01`, not a second test of deleting. 178 tests in total.
+evidence for `AUD-01`, not a second test of deleting. 190 tests in total.
 
 ## 8. Testing
 
@@ -627,6 +627,23 @@ are never touched. They are grouped by the questions in
 the brief: per-position stages, the feedback gate before advancing, fair
 comparison, interview notifications, the four roles, CV screening, and the
 reports (including a test that the totals are not double-counted).
+
+### Browser tests (Selenium)
+
+Four scripts in the project root drive a real Chrome window through the live
+site, as a person would:
+
+| Script | What it does |
+| --- | --- |
+| `test_login.py` | HR signs in and lands on the dashboard |
+| `test_vacancy.py` | HR opens a new vacancy with a unique title and finds it in the list |
+| `test_vacancydelete.py` | HR deletes one of those automated vacancies, accepting the confirmation |
+| `test_downloadcsv.py` | The hiring manager downloads the candidates CSV from Reports |
+
+They need Python and Selenium (`pip install selenium`) with Chrome installed,
+and run one at a time: `python test_login.py`. They work against the live site
+at `https://hiretrack1-xi.vercel.app`, so `test_vacancy.py` really creates a
+vacancy - run `test_vacancydelete.py` afterwards to remove it.
 
 ### The Sprint 1 test cases
 
