@@ -26,6 +26,7 @@ export const ACTIONS = {
   USER_DEACTIVATED: "user.deactivated",
   USER_REACTIVATED: "user.reactivated",
   PASSWORD_CHANGED: "user.password_changed",
+  PASSWORD_RESET_REQUESTED: "user.password_reset_requested",
   CANDIDATE_DELETED: "candidate.deleted",
   JOB_DELETED: "job.deleted",
   CV_DOWNLOADED: "candidate.cv_downloaded",

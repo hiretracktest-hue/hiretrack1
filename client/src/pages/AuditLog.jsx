@@ -22,6 +22,7 @@ const LABEL = {
   "user.deactivated": "Account deactivated",
   "user.reactivated": "Account reactivated",
   "user.password_changed": "Password changed",
+  "user.password_reset_requested": "Password reset requested",
   "candidate.deleted": "Candidate deleted",
   "job.deleted": "Vacancy deleted",
   "candidate.cv_downloaded": "CV downloaded",

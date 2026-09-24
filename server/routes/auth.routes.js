@@ -1,10 +1,12 @@
 import express from "express";
 import crypto from "node:crypto";
-import { one, run } from "../../database/index.js";
+import { one, many, run } from "../../database/index.js";
 import { config, ROLES, ROLE_LABELS } from "../config.js";
 import { asyncHandler, requireAuth, httpError } from "../middleware.js";
 import * as v from "../validate.js";
 import * as audit from "../audit.js";
+import { sendMail, deliveryAddress } from "../mail.js";
+import { passwordResetEmail } from "../mail-templates.js";
 import {
   hashPassword,
   checkPassword,
@@ -94,30 +96,90 @@ router.post(
       await hashPassword(next),
       req.user.id,
     ]);
+    await audit.record(audit.ACTIONS.PASSWORD_CHANGED, {
+      actor: row,
+      detail: "from their profile",
+      req,
+    });
     res.json({ ok: true });
   })
 );
 
 // --- Forgot password -------------------------------------------------
-// Always answers 200 so the form cannot be used to discover which
-// emails are registered. In development we also hand back the link,
-// because this project has no mail server configured.
+// Emails a one-time link, valid for an hour. Always answers 200 with the
+// same message, so the form cannot be used to discover which emails are
+// registered.
 router.post(
   "/forgot-password",
   asyncHandler(async (req, res) => {
     const emailValue = v.email(req.body.email);
-    const user = await findByEmail(emailValue);
+    const typed = String(emailValue).toLowerCase();
+    const { inbox } = config.staffMail;
 
+    // Whose password can this reset? Normally the one account with that
+    // email. The company inbox is not an account itself, but every staff
+    // account's mail is delivered to it - so typing it offers a reset
+    // link for each of those accounts, and whoever reads it picks one.
+    const user = await findByEmail(emailValue);
+    let accounts = [];
+    if (user && user.is_active) {
+      accounts = [user];
+    } else if (!user && inbox && typed === inbox) {
+      accounts = (await many("SELECT * FROM users WHERE is_active ORDER BY id")).filter(
+        (u) => deliveryAddress(u.email) === inbox
+      );
+    }
+
+    // The same answer whatever happened, so this form cannot be used to
+    // find out which addresses have accounts.
     const payload = {
-      message: "If that email is registered, a password reset link has been created.",
+      message:
+        "If that email belongs to an account, a reset link is on its way. Check the inbox - the link expires in 1 hour.",
     };
 
-    if (user && user.is_active) {
-      const token = await createResetToken(user.id);
-      const link = config.clientUrl + "/reset-password?token=" + token;
-      console.log("\n[password reset] " + user.email + "\n[password reset] " + link + "\n");
-      if (!config.isProduction) {
-        payload.devResetUrl = link; // shown on screen so the flow can be demonstrated
+    if (accounts.length) {
+      const links = [];
+      for (const account of accounts) {
+        const token = await createResetToken(account.id);
+        links.push({
+          name: account.name,
+          email: account.email,
+          roleLabel: ROLE_LABELS[account.role] || account.role,
+          link: config.clientUrl + "/reset-password?token=" + token,
+        });
+        await audit.record(audit.ACTIONS.PASSWORD_RESET_REQUESTED, {
+          actor: account,
+          detail: accounts.length > 1 ? "requested from the company inbox" : "",
+          req,
+        });
+      }
+
+      // A staff address on the company domain has no mailbox of its own,
+      // so its mail goes to the shared inbox. Anyone else - an account HR
+      // opened with a real address - gets it at that address.
+      const to = accounts.length > 1 ? inbox : deliveryAddress(accounts[0].email);
+      const shared = accounts.length > 1 || to !== accounts[0].email;
+
+      const email = passwordResetEmail({ accounts: links, sharedInbox: shared });
+      const result = await sendMail({
+        to,
+        name: accounts.length > 1 ? config.companyName : accounts[0].name,
+        ...email,
+      });
+      console.log(
+        "[password reset] for " +
+          links.map((l) => l.email).join(", ") +
+          " -> " +
+          to +
+          ": " +
+          (result.sent ? "sent" : "NOT sent (" + result.reason + ")")
+      );
+
+      // Working on a laptop with no mail set up, or with mail refusing:
+      // show the link on screen so the flow can still be tried. Never on
+      // the live site - there the email is the only way to the link.
+      if (!config.isProduction && !result.sent) {
+        payload.devResetUrl = links[0].link;
       }
     }
 
@@ -140,6 +202,11 @@ router.post(
       result.userId,
     ]);
     await markResetUsed(result.resetId);
+    await audit.record(audit.ACTIONS.PASSWORD_CHANGED, {
+      actor: await findById(result.userId),
+      detail: "with an emailed reset link",
+      req,
+    });
 
     res.json({ ok: true, message: "Password updated. You can sign in now." });
   })

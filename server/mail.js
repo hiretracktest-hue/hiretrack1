@@ -94,6 +94,21 @@ async function sendViaSmtp({ to, name, subject, text, html }) {
   }
 }
 
+/**
+ * The address a message meant for `email` is actually delivered to.
+ *
+ * Staff sign in on the company domain, which has no mailboxes of its own,
+ * so their mail goes to the company's shared inbox (config.staffMail).
+ * Everybody else - a candidate, or an account opened with a real address
+ * - gets it at their own address.
+ */
+export function deliveryAddress(email) {
+  const { domain, inbox } = config.staffMail;
+  const lower = String(email || "").toLowerCase();
+  if (inbox && domain && lower.endsWith("@" + domain)) return inbox;
+  return email;
+}
+
 export async function sendMail({ to, name, subject, text, html }) {
   if (!to) return { sent: false, reason: "no email address on file" };
   if (!mailEnabled()) {

@@ -30,7 +30,24 @@ export const config = {
   logSlowQueries: process.env.LOG_SLOW_QUERIES === "true",
   jwtSecret: process.env.JWT_SECRET || DEV_SECRET,
   jwtExpiresIn: Number(process.env.JWT_EXPIRES_IN) || 60 * 60 * 24 * 7, // 7 days
-  clientUrl: process.env.CLIENT_URL || "http://localhost:5173",
+  // Where people open the site - the start of every link we email. On
+  // Vercel it is the project's own production address, which Vercel sets
+  // itself: it cannot drift away from where the site really is, and it is
+  // never taken from the request, where it could be forged to send a
+  // password reset link somewhere else.
+  clientUrl: process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? "https://" + process.env.VERCEL_PROJECT_PRODUCTION_URL
+    : process.env.CLIENT_URL || "http://localhost:5173",
+
+  // Staff sign in on the company domain - kevin@hiretrack.lk. That domain
+  // has no mailboxes of its own, so mail for it goes to the company's
+  // shared inbox instead; otherwise a password reset for a staff account
+  // could never arrive anywhere. Set STAFF_MAIL_INBOX to an empty value
+  // to send straight to each person's own address.
+  staffMail: {
+    domain: (process.env.STAFF_MAIL_DOMAIN ?? "hiretrack.lk").toLowerCase(),
+    inbox: (process.env.STAFF_MAIL_INBOX ?? "hiretracktest@gmail.com").toLowerCase(),
+  },
   companyName: process.env.COMPANY_NAME || "Altrium",
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID || "",
@@ -195,12 +212,14 @@ export const PERMISSIONS = {
   // People and reporting
   "team:view": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_INTERVIEWER, ROLE_MANAGEMENT],
   "team:manage": [ROLE_HR],
-  "report:view": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_MANAGEMENT],
-  // RPT-02 names the Hiring Manager as the person who wants exports:
-  // "As a Hiring Manager, I want pipeline reports exportable in CSV and
-  // PDF". They were left out of this list, so the one role the story is
-  // written for was the one that could not do it.
-  "report:export": [ROLE_HR, ROLE_HIRING_MANAGER, ROLE_MANAGEMENT],
+  // RPT-01 and RPT-02 are both written for the Hiring Manager - "a
+  // dashboard with KPIs ... so that leadership has rapid access", and
+  // "pipeline reports exportable in CSV and PDF". So the Reports page,
+  // and its exports, belong to the hiring manager and to management.
+  // HR's own figures are on its dashboard, which does not depend on
+  // these permissions.
+  "report:view": [ROLE_HIRING_MANAGER, ROLE_MANAGEMENT],
+  "report:export": [ROLE_HIRING_MANAGER, ROLE_MANAGEMENT],
 
   // AUD-01. Management only - and deliberately not HR. The log exists
   // largely to watch what HR does: creating accounts, changing roles,

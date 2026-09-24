@@ -143,6 +143,74 @@ export function interviewAnswerEmail({ interview, candidate, job, when, accepted
 }
 
 /** A candidate-facing message, sent from the outbox by HR. */
+/**
+ * "Choose a new password."
+ *
+ * One entry per account the link can reset. Normally that is one: the
+ * person who asked. When somebody types the company's shared inbox - the
+ * address every staff account's mail is delivered to - there is one link
+ * per staff account, and they pick whose password they are changing.
+ */
+export function passwordResetEmail({ accounts, sharedInbox }) {
+  const many = accounts.length > 1;
+  const heading = many ? "Choose the account to reset" : "Reset your password";
+  const subject = many
+    ? "Reset a staff password - " + config.companyName
+    : "Reset your " + config.companyName + " password";
+
+  const intro = many
+    ? "This inbox receives the email for every " +
+      config.companyName +
+      " staff account. Choose whose password you want to change."
+    : "Someone asked to reset the password for this " +
+      config.companyName +
+      " account. If it was you, choose a new one below.";
+  const routed = !many && sharedInbox
+    ? "It was delivered to the company inbox because " +
+      accounts[0].email +
+      " is a staff address."
+    : "";
+  const small =
+    "Each link works once and expires in 1 hour. If you did not ask for this, ignore this email - no password changes until a link is used.";
+
+  const blocks = accounts
+    .map(
+      (account) =>
+        detailRows([
+          ["Account", account.name],
+          ["Signs in as", account.email],
+          ["Role", account.roleLabel],
+        ]) + button(account.link, many ? "Reset " + account.name.split(" ")[0] + "'s password" : "Choose a new password")
+    )
+    .join("");
+
+  const html = shell(
+    heading,
+    `<p style="margin:0 0 6px 0;">${esc(intro)}</p>` +
+      (routed ? `<p style="margin:0 0 6px 0;color:#aab0bc;font-size:13px;">${esc(routed)}</p>` : "") +
+      blocks +
+      `<p style="margin:10px 0 0 0;color:#aab0bc;font-size:12px;">${esc(small)}</p>`
+  );
+
+  const text = [
+    heading,
+    "",
+    intro,
+    routed,
+    "",
+    ...accounts.flatMap((a) => [
+      a.name + " (" + a.roleLabel + ") - signs in as " + a.email,
+      a.link,
+      "",
+    ]),
+    small,
+  ]
+    .filter((line, i, all) => !(line === "" && all[i - 1] === ""))
+    .join("\n");
+
+  return { subject, html, text };
+}
+
 export function plainEmail({ subject, body }) {
   return {
     subject,

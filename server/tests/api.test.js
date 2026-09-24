@@ -209,7 +209,9 @@ describe("AUTH-01 - signing in securely", () => {
     const { data } = await call("GET", "/api/auth/me");
     assert.equal(data.user.roleLabel, "HR Recruiter");
     assert.equal(data.user.permissions["position:create"], true);
-    assert.equal(data.user.permissions["report:export"], true);
+    // Reports are the hiring manager's and management's (RPT-01, RPT-02).
+    assert.equal(data.user.permissions["report:view"], false);
+    assert.equal(data.user.permissions["report:export"], false);
   });
 
   test("email matching is case-insensitive (citext)", async () => {
@@ -240,6 +242,79 @@ describe("AUTH-01 - signing in securely", () => {
       (await call("POST", "/api/auth/reset-password", { token, password: "Password789" })).status,
       400
     );
+  });
+
+  test("a staff address's reset goes to the company inbox; anyone else's goes to them", async () => {
+    // Staff sign in on hiretrack.lk, which has no mailboxes - without
+    // this a staff password reset could never arrive anywhere.
+    const { deliveryAddress } = await import("../mail.js");
+    const { config } = await import("../config.js");
+    const saved = config.staffMail;
+    config.staffMail = { domain: "hiretrack.lk", inbox: "hiretracktest@gmail.com" };
+    try {
+      assert.equal(deliveryAddress("kevin@hiretrack.lk"), "hiretracktest@gmail.com");
+      assert.equal(deliveryAddress("KEVIN@HireTrack.lk"), "hiretracktest@gmail.com", "any case");
+      assert.equal(deliveryAddress("someone@gmail.com"), "someone@gmail.com");
+      assert.equal(
+        deliveryAddress("kevin@hiretrack.lk.example.com"),
+        "kevin@hiretrack.lk.example.com",
+        "the company domain has to be the whole domain, not a prefix of another"
+      );
+      config.staffMail = { domain: "hiretrack.lk", inbox: "" };
+      assert.equal(deliveryAddress("kevin@hiretrack.lk"), "kevin@hiretrack.lk", "no inbox set");
+    } finally {
+      config.staffMail = saved;
+    }
+  });
+
+  test("typing the company inbox offers a reset link for every staff account", async () => {
+    const { config } = await import("../config.js");
+    const saved = config.staffMail;
+    // The test accounts are @example.com, so that is the staff domain here.
+    config.staffMail = { domain: "example.com", inbox: "team-inbox@example.org" };
+    const requests = async () =>
+      (
+        await one(
+          "SELECT COUNT(*)::int AS n FROM audit_log WHERE action = 'user.password_reset_requested'"
+        )
+      ).n;
+    try {
+      const staff = (
+        await one(
+          "SELECT COUNT(*)::int AS n FROM users WHERE is_active AND email::text LIKE '%@example.com'"
+        )
+      ).n;
+      const before = await requests();
+
+      const typedInbox = await call("POST", "/api/auth/forgot-password", {
+        email: "team-inbox@example.org",
+      });
+      assert.equal(typedInbox.status, 200);
+      assert.equal((await requests()) - before, staff, "one link per staff account");
+      assert.ok(typedInbox.data.devResetUrl, "no mail in the tests, so the link is handed back");
+
+      const nobody = await call("POST", "/api/auth/forgot-password", { email: "nobody@example.org" });
+      assert.equal(typedInbox.data.message, nobody.data.message, "the answer gives nothing away");
+      assert.equal(nobody.data.devResetUrl, undefined);
+    } finally {
+      config.staffMail = saved;
+    }
+  });
+
+  test("using the emailed link changes the password, and the audit log says so", async () => {
+    const { data } = await call("POST", "/api/auth/forgot-password", {
+      email: "interviewer@example.com",
+    });
+    const token = new URL(data.devResetUrl).searchParams.get("token");
+    const done = await call("POST", "/api/auth/reset-password", { token, password: "Password123" });
+    assert.equal(done.status, 200);
+
+    const row = await one(
+      "SELECT actor_email, detail FROM audit_log WHERE action = 'user.password_changed' " +
+        "ORDER BY id DESC LIMIT 1"
+    );
+    assert.equal(row.actor_email, "interviewer@example.com");
+    assert.match(row.detail, /reset link/);
   });
 });
 
@@ -2024,6 +2099,19 @@ describe("RPT-01 and RPT-02 - the dashboard data and the PDF export", () => {
     await signIn("interviewer@example.com");
     assert.equal((await call("GET", "/api/reports/export.pdf?report=vacancies")).status, 403);
     assert.equal((await call("GET", "/api/reports/export.csv?report=candidates")).status, 403);
+  });
+
+  test("HR has no Reports page and no exports - they are for the manager and management", async () => {
+    // Both reporting stories are written "As a Hiring Manager", for
+    // leadership to read. HR's own numbers stay on its dashboard.
+    await signIn("hr@example.com");
+    assert.equal((await call("GET", "/api/reports")).status, 403);
+    assert.equal((await call("GET", "/api/reports/export.csv?report=candidates")).status, 403);
+    assert.equal((await call("GET", "/api/reports/export.pdf?report=vacancies")).status, 403);
+
+    // ...and HR's dashboard, which reads its own figures, still works.
+    const stats = await call("GET", "/api/team/stats");
+    assert.equal(stats.status, 200);
   });
 
   test("an unknown report name falls back instead of failing", async () => {

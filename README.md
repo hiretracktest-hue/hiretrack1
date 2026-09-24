@@ -15,7 +15,7 @@ Built for our second year, second semester group project.
 | Back end | Node.js + Express (REST API) |
 | Database | **PostgreSQL on Supabase**, accessed with `pg` (node-postgres) — 9 tables |
 | Auth | Email + password (bcrypt), JWT in an httpOnly cookie, optional Google sign-in |
-| Tests | Node's built-in test runner — 174 API tests |
+| Tests | Node's built-in test runner — 178 API tests |
 
 > **This is an internal system.** The people who log in are HR, hiring managers,
 > interviewers and management. **Job candidates do not have accounts** — HR adds
@@ -88,7 +88,7 @@ trail worthless — you can see what was done but never who did it.
 | `npm run dev` | Run the API and the React dev server together |
 | `npm run build` | Build the React app into `client/dist` |
 | `npm start` | Run the API, serving the built React app too |
-| `npm test` | Run the 174 automated API tests |
+| `npm test` | Run the 178 automated API tests |
 | `npm run seed` | Add any missing demo data (safe to re-run) |
 | `npm run seed:reset` | Empty every table, then seed from scratch |
 
@@ -185,6 +185,32 @@ press **Send now**, or send it by hand and mark it sent.
 or **Reject** on the candidate page answers *"The offer letter was emailed to …"*,
 or *"The email to … was NOT sent"* with the provider's reason, and points at the
 Outbox where it is waiting.
+
+### Forgot password
+
+**Forgot your password?** on the sign-in page asks for an email and sends a
+one-time link, valid for an hour. The page answers the same way whatever is
+typed, so it cannot be used to find out who has an account. Asking for a link
+and using one are both written to the audit log.
+
+Staff sign in on the company domain (`kevin@hiretrack.lk`), and that domain has
+no mailboxes of its own. So **mail for a staff address goes to the company's
+shared inbox** instead - otherwise a reset link for a staff account could never
+arrive anywhere. The email says which account it is for. Typing the shared
+inbox itself sends one email with a reset link for each staff account, and
+whoever reads it picks the one they need.
+
+| Setting | Default | |
+| --- | --- | --- |
+| `STAFF_MAIL_DOMAIN` | `hiretrack.lk` | The company domain staff sign in on |
+| `STAFF_MAIL_INBOX` | `hiretracktest@gmail.com` | Where that domain's mail is delivered. Set it empty to send straight to each person's own address |
+
+An account HR opened with a real address - a Gmail, say - gets its link at that
+address as normal.
+
+Links in emails start with the site's own address. On Vercel that is the
+project's production domain, which Vercel sets itself, so a link can never point
+at `localhost` or at an old copy of the site.
 
 The automated tests run with **no** mail provider and **no** Storage bucket,
 whatever is in `.env`. Otherwise `npm test` would fire real messages at real
@@ -369,8 +395,8 @@ Four roles with genuinely different permissions, all defined in one place
 | Compare candidates side by side | ✅ | ✅ | — | ✅ |
 | Schedule an interview | ✅ | ✅ | — | — |
 | Candidate email outbox | ✅ | ✅ | — | — |
-| View reports | ✅ | ✅ | — | ✅ |
-| Export reports as CSV or PDF | ✅ | ✅ | — | ✅ |
+| View reports | — | ✅ | — | ✅ |
+| Export reports as CSV or PDF | — | ✅ | — | ✅ |
 | Read and download the audit log | — | — | — | ✅ |
 | Create accounts, set roles | ✅ | — | — | — |
 
@@ -460,7 +486,7 @@ our web/
 │   │   ├── notifications.routes.js in-app notifications + candidate outbox
 │   │   ├── reports.routes.js       management reports + CSV export
 │   │   └── team.routes.js          who logs in, roles, dashboard counts
-│   └── tests/api.test.js   174 automated tests
+│   └── tests/api.test.js   178 automated tests
 │
 └── client/                 React front end
     ├── index.html
@@ -548,20 +574,20 @@ checklist against the plan, and a failing test names the story it breaks.
 
 | Sprint 1 | Tests | Sprint 2 | Tests |
 | --- | --: | --- | --: |
-| `AUTH-01` Log in securely | 20 | `JOB-03` Close a job opening | 5 |
+| `AUTH-01` Log in securely | 23 | `JOB-03` Close a job opening | 5 |
 | `JOB-01` Create a job position | 4 | `CAN-05` Reuse a profile and CV on a second position | 4 |
 | `JOB-02` Edit or close a job position | 5 | `WF-02` Blocked until the stage's feedback is in | 16 |
 | `CAN-01` Add candidate information | 21 | `FB-02` Interviewer sees Hired / Rejected / On hold | 4 |
 | `CAN-02` Upload a candidate's CV | 21 | `FB-03` All feedback, compared side by side | 9 |
 | `CAN-03` Search and filter candidates | 12 | `COM-01` Hire-confirmation email | 10 |
 | `WF-01` Configure interview stages | 4 | `COM-02` Interviewer notified when assigned | 25 |
-| `INT-01` Schedule interviews | 38 | `RPT-01` Dashboard with KPIs | 12 |
-| `CAN-04` Move on or reject | 10 | `RPT-02` Export as CSV and PDF | 10 |
+| `INT-01` Schedule interviews | 38 | `RPT-01` Dashboard with KPIs | 13 |
+| `CAN-04` Move on or reject | 10 | `RPT-02` Export as CSV and PDF | 11 |
 | `FB-01` Structured feedback, score per stage | 18 | `AUD-01` Audit log | 7 |
 
 **20 of 20 stories have automated evidence.** A test can count towards more than
 one story when it proves both — the audit test that deletes a candidate is
-evidence for `AUD-01`, not a second test of deleting. 174 tests in total.
+evidence for `AUD-01`, not a second test of deleting. 178 tests in total.
 
 ## 8. Testing
 

@@ -182,7 +182,7 @@ export default function Layout({ children }) {
       {children}
 
       <footer className="footer">
-        Altrium — recruitment &amp; hiring tracker. Group project by Isuru, Fazl, Thariq and Ahmed.
+        © {new Date().getFullYear()} Altrium. All rights reserved.
       </footer>
     </div>
   );
